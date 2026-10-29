@@ -32,6 +32,9 @@ var (
 )
 
 func TestMain(m *testing.M) {
+	if os.Getenv(hardenChildEnv) == "1" {
+		os.Exit(hardenChild())
+	}
 	dir, err := os.MkdirTemp("", "sshelf-e2e-")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -49,12 +52,20 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+// Stamped into the test binary the way the release build does it (T-026).
+const (
+	e2eVersion = "v0.0.0-e2e"
+	e2eCommit  = "e2ecommit0123"
+	e2eDate    = "2026-01-02T03:04:05Z"
+)
+
 // sshelfBinary builds cmd/sshelf once per test run.
 func sshelfBinary(t *testing.T) string {
 	t.Helper()
 	buildOnce.Do(func() {
 		binPath = filepath.Join(binDir, "sshelf")
-		out, err := exec.Command("go", "build", "-o", binPath, ".").CombinedOutput() //nolint:gosec // test builds into its own temp dir
+		ldflags := "-X main.version=" + e2eVersion + " -X main.commit=" + e2eCommit + " -X main.date=" + e2eDate
+		out, err := exec.Command("go", "build", "-ldflags", ldflags, "-o", binPath, ".").CombinedOutput() //nolint:gosec // test builds into its own temp dir
 		if err != nil {
 			buildErr = fmt.Errorf("go build: %v\n%s", err, out)
 		}

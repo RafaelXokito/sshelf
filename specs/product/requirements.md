@@ -1012,7 +1012,7 @@ sshelf is TUI-only (D-001). The binary has no subcommands.
 ### FR-CLI-001 · Launch, help and version
 When `sshelf` is run with `--help` or `--version`, the system shall print usage or version information and exit with status 0, and otherwise shall start the TUI.
 
-- **Priority:** MVP · **Status:** Draft · **Source:** D-001
+- **Priority:** MVP · **Status:** Implemented · **Source:** D-001
 - **Acceptance:**
   - `--version` prints the version, commit and build date.
   - An unknown argument prints usage and exits with status 2.
