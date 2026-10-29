@@ -77,6 +77,10 @@ func resolve(goos string, getenv func(string) string, home func() (string, error
 // ConfigFile returns the path of config.json in dir.
 func ConfigFile(dir string) string { return filepath.Join(dir, "config.json") }
 
+// LogFile returns the path of the debug log in the state directory dir
+// (SEC-LOG-003). Its one rotated backup is LogFile(dir) + ".1".
+func LogFile(dir string) string { return filepath.Join(dir, "sshelf.log") }
+
 // KnownHostsFile returns the path of sshelf's own known_hosts in dir, the
 // only known_hosts file sshelf writes (D-102).
 func KnownHostsFile(dir string) string { return filepath.Join(dir, "known_hosts") }

@@ -18,6 +18,19 @@ const ResetSequence = "\x1b[?1049l" +
 	"\x1b[0m" +
 	"\x1b[<u"
 
+// SaveState saves the state of the terminal behind f and returns a
+// function that restores it. main saves the startup state so that its
+// panic handler can put the terminal back whatever mode it was left in
+// (ARCH-SEC-004).
+func SaveState(f *os.File) (restore func() error, err error) {
+	fd := int(f.Fd()) //nolint:gosec // a file descriptor fits in an int
+	st, err := xterm.GetState(fd)
+	if err != nil {
+		return nil, err
+	}
+	return func() error { return xterm.Restore(fd, st) }, nil
+}
+
 // TTY is the real terminal behind a file descriptor.
 type TTY struct {
 	f *os.File

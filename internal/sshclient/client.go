@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"net"
 	"os"
 	"strconv"
@@ -88,11 +89,16 @@ func (c Config) Connect(ctx context.Context, t domain.Target, creds CredentialSo
 	if timeout == 0 {
 		timeout = DefaultConnectTimeout
 	}
+	// Never log credentials: only the address, user, stages and errors.
+	log := slog.With("addr", addr, "user", t.User)
+	log.Debug("connect: dialling", "timeout", timeout)
 	d := net.Dialer{Timeout: timeout}
 	conn, err := d.DialContext(ctx, "tcp", addr)
 	if err != nil {
+		log.Debug("connect: dial failed", "err", err)
 		return nil, err
 	}
+	log.Debug("connect: handshake (verifying host key, then authenticating)")
 	// Closing the connection on cancel also unblocks the handshake and any
 	// callback waiting on the network.
 	stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
@@ -101,14 +107,18 @@ func (c Config) Connect(ctx context.Context, t domain.Target, creds CredentialSo
 	if err != nil {
 		_ = conn.Close()
 		if ctx.Err() != nil {
+			log.Debug("connect: cancelled", "err", ctx.Err())
 			return nil, ctx.Err()
 		}
+		log.Debug("connect: handshake failed", "err", err)
 		return nil, err
 	}
 	if !stopped {
 		_ = sc.Close()
+		log.Debug("connect: cancelled", "err", ctx.Err())
 		return nil, ctx.Err()
 	}
+	log.Debug("connect: authenticated")
 	return ssh.NewClient(sc, chans, reqs), nil
 }
 
@@ -119,6 +129,7 @@ func clientConfig(ctx context.Context, t domain.Target, creds CredentialSource, 
 	var auth []ssh.AuthMethod
 	if creds != nil {
 		auth = append(auth, ssh.PublicKeysCallback(func() ([]ssh.Signer, error) {
+			logAuthAttempt(t, "publickey")
 			return creds.Signers(ctx, t)
 		}))
 	}
@@ -143,4 +154,10 @@ func (c Config) hostKeyDB() (ssh.HostKeyCallback, error) {
 		return nil, fmt.Errorf("known_hosts: %w", err)
 	}
 	return cb, nil
+}
+
+// logAuthAttempt records that an auth method is being tried. It logs the
+// method name only, never a credential.
+func logAuthAttempt(t domain.Target, method string) {
+	slog.Debug("connect: auth attempt", "user", t.User, "host", t.Hostname, "method", method)
 }

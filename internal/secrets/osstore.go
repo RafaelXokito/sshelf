@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/zalando/go-keyring"
+
+	"github.com/RafaelXokito/sshelf/internal/term"
 )
 
 // defaultTimeout bounds every OS store call. It is long enough for the user
@@ -17,6 +19,10 @@ const defaultTimeout = 30 * time.Second
 // probeAccount is the account Available looks up. It has no '/', so it can
 // never collide with a Ref's account.
 const probeAccount = "sshelf-availability-probe"
+
+// errKeyringPanic replaces the result of a keyring call that panicked
+// (ARCH-SEC-004); mapError reports it as ErrUnavailable.
+var errKeyringPanic = errors.New("the keyring library failed")
 
 // keyringAPI is the slice of go-keyring the adapter uses, injectable for
 // tests.
@@ -62,10 +68,12 @@ func call[T any](ctx context.Context, timeout time.Duration, f func() (T, error)
 		err error
 	}
 	done := make(chan result, 1) // buffered: an abandoned f never blocks
-	go func() {
+	term.SafeGo(func() {
 		v, err := f()
 		done <- result{v, err}
-	}()
+	}, func(any) {
+		done <- result{zero, errKeyringPanic} // mapped to ErrUnavailable
+	})
 	select {
 	case r := <-done:
 		return r.v, r.err

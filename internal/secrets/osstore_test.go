@@ -317,3 +317,21 @@ func TestOSStore_ContextTimeout(t *testing.T) {
 		}
 	})
 }
+
+// A panic inside the keyring library is recovered by term.SafeGo and
+// reported as ErrUnavailable; the process keeps running (ARCH-SEC-004).
+func TestARCH_SEC_004_KeyringPanicIsUnavailable(t *testing.T) {
+	boom := keyringAPI{
+		set: func(string, string, string) error { panic("boom") },
+		get: func(string, string) (string, error) { panic("boom") },
+		del: func(string, string) error { panic("boom") },
+	}
+	store := newOSStore(testService, boom, time.Second)
+	ref := Ref{IdentityID: testID, Field: FieldPassword}
+	if _, err := store.Get(context.Background(), ref); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("Get = %v, want ErrUnavailable", err)
+	}
+	if err := store.Set(context.Background(), ref, NewSecret([]byte("pw"))); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("Set = %v, want ErrUnavailable", err)
+	}
+}
