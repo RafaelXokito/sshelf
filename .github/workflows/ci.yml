@@ -46,6 +46,8 @@ jobs:
           go-version-file: go.mod
       - name: go test -race (NFR-PORT-001, NFR-REL-001)
         run: go test -race -coverprofile=coverage.out ./...
+      - name: performance limits without -race (NFR-PERF-002)
+        run: go test -count=1 -run 'TestNFR_PERF_' ./...
       - name: Coverage report (NFR-QUAL-003, not gated yet)
         run: go tool cover -func=coverage.out | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Fuzz config.json loading for 30 s (T-006)

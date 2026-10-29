@@ -87,6 +87,9 @@ func TestNFR_PERF_002_Filter5k(t *testing.T) {
 	if testing.Short() {
 		t.Skip("benchmark")
 	}
+	if raceEnabled {
+		t.Skip("timing limit not meaningful under -race; CI runs it in the perf step")
+	}
 	r := testing.Benchmark(BenchmarkNFR_PERF_002_Filter5k)
 	if ns := r.NsPerOp(); ns > 16_000_000 {
 		t.Fatalf("Filter over 5,000 hosts: %d ns/op, want at most 16,000,000", ns)
