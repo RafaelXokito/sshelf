@@ -1,6 +1,6 @@
 module github.com/RafaelXokito/sshelf
 
-go 1.26.4
+go 1.26.10
 
 require (
 	charm.land/bubbles/v2 v2.2.1
