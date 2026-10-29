@@ -12,4 +12,4 @@ sshelf
 │ esc cancel                                  │
 ╰─────────────────────────────────────────────╯
 
-↑/↓ move • enter connect • q quit
+↑/↓ move • enter connect • a add • e edit • q quit

@@ -1,2 +1,3 @@
-// Package confirm is the confirmation modal.
+// Package confirm is the yes/no confirmation modal; its default answer is
+// "No".
 package confirm

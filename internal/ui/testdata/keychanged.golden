@@ -27,4 +27,4 @@ sshelf
 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 web-prod: host key changed; connection blocked
-↑/↓ move • enter connect • q quit
+↑/↓ move • enter connect • a add • e edit • q quit

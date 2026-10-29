@@ -17,10 +17,12 @@ import (
 	"github.com/RafaelXokito/sshelf/internal/domain"
 	"github.com/RafaelXokito/sshelf/internal/ui/components"
 	"github.com/RafaelXokito/sshelf/internal/ui/keys"
+	"github.com/RafaelXokito/sshelf/internal/ui/modals/confirm"
 	"github.com/RafaelXokito/sshelf/internal/ui/modals/connecting"
 	"github.com/RafaelXokito/sshelf/internal/ui/modals/keychanged"
 	"github.com/RafaelXokito/sshelf/internal/ui/modals/prompt"
 	"github.com/RafaelXokito/sshelf/internal/ui/modals/tofu"
+	"github.com/RafaelXokito/sshelf/internal/ui/screens/hostedit"
 	"github.com/RafaelXokito/sshelf/internal/ui/screens/hostlist"
 	"github.com/RafaelXokito/sshelf/internal/ui/screens/loaderror"
 )
@@ -33,10 +35,17 @@ var (
 
 // LoadedMsg carries the result of loading config.json.
 type LoadedMsg struct {
-	Hosts   []domain.Host
-	Notices []string // shown once in the status bar
-	Err     error
+	Hosts      []domain.Host
+	Identities []domain.Identity
+	Notices    []string // shown once in the status bar
+	Err        error
 }
+
+// HostSavedMsg reports that a host was written to config.json.
+type HostSavedMsg struct{ Saved app.SavedHost }
+
+// HostSaveFailedMsg reports that a host was not saved.
+type HostSaveFailedMsg struct{ Err error }
 
 // ConnectedMsg carries an authenticated session, ready for tea.Exec.
 type ConnectedMsg struct {
@@ -74,6 +83,9 @@ type Model struct {
 	status string
 	exec   execFunc
 
+	identities []domain.Identity // for the host form's picker
+	list       hostlist.Model    // the list to return to while a form is open
+
 	attempt     int                // id of the latest connection attempt
 	attemptHost domain.ID          // host of the attempt in progress
 	cancel      context.CancelFunc // cancels the attempt in progress; nil if none
@@ -89,7 +101,7 @@ func (m Model) Init() tea.Cmd {
 	svc := m.svc
 	return func() tea.Msg {
 		l, err := svc.Load(context.Background())
-		return LoadedMsg{Hosts: l.Hosts, Notices: l.Notices, Err: err}
+		return LoadedMsg{Hosts: l.Hosts, Identities: l.Identities, Notices: l.Notices, Err: err}
 	}
 }
 
@@ -98,6 +110,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		if key.Matches(msg, keys.ForceQuit) {
+			if fs, ok := m.screen.(components.FormScreen); ok {
+				// Ctrl+C cancels a form instead of quitting (FR-NAV-003).
+				m.modals = nil
+				return m.Update(fs.Cancel())
+			}
 			m.cancelAttempt()
 			return m, tea.Quit
 		}
@@ -126,7 +143,60 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.screen = loaderror.New(le)
 			return m, nil
 		}
+		m.identities = msg.Identities
 		m.screen = hostlist.New(msg.Hosts)
+		return m, nil
+
+	case hostlist.AddHostMsg:
+		return m.openForm(domain.Host{}), nil
+
+	case hostlist.EditHostMsg:
+		return m.openForm(msg.Host), nil
+
+	case hostedit.SaveMsg:
+		svc, h := m.svc, msg.Host
+		return m, func() tea.Msg {
+			saved, err := svc.SaveHost(context.Background(), h)
+			if err != nil {
+				return HostSaveFailedMsg{Err: err}
+			}
+			return HostSavedMsg{Saved: saved}
+		}
+
+	case HostSavedMsg:
+		// Saved even if the form was cancelled meanwhile: show and select
+		// the host (FR-HOST-001).
+		h := msg.Saved.Host
+		m.modals = nil
+		m.screen = hostlist.New(msg.Saved.Hosts).Select(h.ID)
+		m.status = domain.Sanitize(h.Label) + ": saved"
+		return m, nil
+
+	case HostSaveFailedMsg:
+		if f, ok := m.screen.(hostedit.Model); ok {
+			m.screen = f.SaveFailed(msg.Err)
+		} else {
+			m.status = "not saved: " + domain.Sanitize(msg.Err.Error())
+		}
+		return m, nil
+
+	case hostedit.CancelledMsg:
+		if _, ok := m.screen.(hostedit.Model); ok {
+			m.modals = nil
+			m.screen = m.list
+		}
+		return m, nil
+
+	case components.ShowModalMsg:
+		m.modals = append(m.modals, msg.Modal)
+		return m, nil
+
+	case confirm.DoneMsg:
+		m.popModal()
+		if msg.Then != nil {
+			then := msg.Then
+			return m, func() tea.Msg { return then }
+		}
 		return m, nil
 
 	case hostlist.ConnectRequestMsg:
@@ -234,6 +304,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// openForm shows the host form for h (the zero Host to add one) and keeps
+// the list to return to.
+func (m Model) openForm(h domain.Host) Model {
+	l, ok := m.screen.(hostlist.Model)
+	if !ok {
+		return m
+	}
+	m.list = l
+	m.status = ""
+	m.screen = hostedit.New(h, l.Hosts(), m.identities)
+	return m
+}
+
 // startConnect pushes the Connecting modal and starts the connect command.
 func (m Model) startConnect(hostID domain.ID, label string) (tea.Model, tea.Cmd) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -330,7 +413,7 @@ func (m Model) View() tea.View {
 		b.WriteString("\n")
 	}
 	if _, ok := m.screen.(hostlist.Model); ok {
-		b.WriteString(dimStyle.Render("↑/↓ move • enter connect • q quit"))
+		b.WriteString(dimStyle.Render("↑/↓ move • enter connect • a add • e edit • q quit"))
 		b.WriteString("\n")
 	}
 
