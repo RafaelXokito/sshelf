@@ -1,0 +1,40 @@
+sshelf
+
+Welcome to sshelf
+
+You have no saved hosts yet.
+
+  [I] Import from ~/.ssh/config
+  [a] Add host
+
+Import copies your hosts once and references key files by path.
+sshelf never changes ~/.ssh/config.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+I import ~/.ssh/config • a add host • q quit

@@ -26,6 +26,7 @@ import (
 	"github.com/RafaelXokito/sshelf/internal/ui/screens/hostedit"
 	"github.com/RafaelXokito/sshelf/internal/ui/screens/hostlist"
 	"github.com/RafaelXokito/sshelf/internal/ui/screens/loaderror"
+	"github.com/RafaelXokito/sshelf/internal/ui/screens/welcome"
 )
 
 var (
@@ -164,10 +165,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.identities = msg.Identities
-		m.screen = m.sized(hostlist.New(msg.Hosts))
+		m.screen = m.sized(hostsScreen(msg.Hosts))
 		return m, nil
 
-	case hostlist.AddHostMsg:
+	case hostlist.AddHostMsg, welcome.AddHostMsg:
 		return m.openForm(domain.Host{}), nil
 
 	case hostlist.EditHostMsg:
@@ -222,7 +223,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if l, ok := m.screen.(hostlist.Model); ok {
 			row = l.Cursor()
 		}
-		m.screen = m.sized(hostlist.New(msg.Hosts).SelectRow(row))
+		m.screen = m.sized(hostsScreen(msg.Hosts))
+		if l, ok := m.screen.(hostlist.Model); ok {
+			m.screen = l.SelectRow(row)
+		}
 		m.status = domain.Sanitize(msg.Label) + ": deleted"
 		return m, nil
 
@@ -350,14 +354,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // openForm shows the host form for h (the zero Host to add one) and keeps
 // the screen to return to.
 func (m Model) openForm(h domain.Host) Model {
-	l, ok := m.screen.(hostlist.Model)
-	if !ok {
+	var hosts []domain.Host
+	switch s := m.screen.(type) {
+	case hostlist.Model:
+		hosts = s.Hosts()
+	case welcome.Model:
+	default:
 		return m
 	}
-	m.prev = l
+	m.prev = m.screen
 	m.status = ""
-	m.screen = m.sized(hostedit.New(h, l.Hosts(), m.identities))
+	m.screen = m.sized(hostedit.New(h, hosts, m.identities))
 	return m
+}
+
+// hostsScreen is the host list, or the Welcome screen when there are no
+// hosts (FR-NAV-013).
+func hostsScreen(hosts []domain.Host) components.Screen {
+	if len(hosts) == 0 {
+		return welcome.New()
+	}
+	return hostlist.New(hosts)
 }
 
 // bodyHeight is the number of rows between the title and the status line.

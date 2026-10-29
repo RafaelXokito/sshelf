@@ -538,7 +538,7 @@ When the unknown-host-key prompt is shown, the system shall also offer "Trust on
 ### FR-NAV-001 · Host list
 The system shall display each host as one line showing the label and `user@hostname:port`, sorted by label.
 
-- **Priority:** MVP · **Status:** Draft
+- **Priority:** MVP · **Status:** Implemented
 - **Acceptance:**
   - Port 22 is omitted from the display.
   - Lines wider than the terminal are truncated with `…`.
@@ -630,7 +630,7 @@ Where mouse support is enabled, the system shall select a host on click, connect
 ### FR-NAV-013 · Welcome screen
 While `config.json` contains no hosts, the system shall show a Welcome screen offering "Import from ~/.ssh/config" and "Add host" instead of the host list.
 
-- **Priority:** MVP · **Status:** Draft
+- **Priority:** MVP · **Status:** Implemented
 - **Acceptance:**
   - The first launch with no config directory shows the Welcome screen.
   - `I` starts the import (FR-IMPORT-001) and `a` opens the host form. `q` quits.
@@ -933,7 +933,7 @@ Where session logging is enabled for a host, the system shall write the session'
 ### FR-CFG-001 · Config directory
 The system shall keep its hosts, identities (without secrets), settings and `known_hosts` file in the sshelf config directory defined in ADR-005 of `../architecture/design.md`, creating it on first launch.
 
-- **Priority:** MVP · **Status:** Draft · **Source:** D-003
+- **Priority:** MVP · **Status:** Implemented · **Source:** D-003
 - **Acceptance:**
   - sshelf starts with no existing config directory and shows the Welcome screen (FR-NAV-013).
   - The directory and files are created with the permissions set in SEC-FILE-001 (0700 directory, 0600 files).
