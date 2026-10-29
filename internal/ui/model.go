@@ -6,6 +6,7 @@ package ui
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"charm.land/bubbles/v2/key"
@@ -17,6 +18,7 @@ import (
 	"github.com/RafaelXokito/sshelf/internal/ui/components"
 	"github.com/RafaelXokito/sshelf/internal/ui/keys"
 	"github.com/RafaelXokito/sshelf/internal/ui/modals/connecting"
+	"github.com/RafaelXokito/sshelf/internal/ui/modals/keychanged"
 	"github.com/RafaelXokito/sshelf/internal/ui/modals/tofu"
 	"github.com/RafaelXokito/sshelf/internal/ui/screens/hostlist"
 	"github.com/RafaelXokito/sshelf/internal/ui/screens/loaderror"
@@ -176,6 +178,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.cancelAttempt()
 		m.modals = nil
 		m.status = failedStatus(msg.Label, msg.Err)
+		if me, ok := errors.AsType[*app.HostKeyMismatchError](msg.Err); ok {
+			m.modals = append(m.modals, keychanged.New(msg.Label, me))
+		}
+		return m, nil
+
+	case keychanged.CloseMsg:
+		m.popModal()
 		return m, nil
 
 	case SessionEndedMsg:
@@ -228,6 +237,12 @@ func (m *Model) popModal() {
 func failedStatus(label string, err error) string {
 	if errors.Is(err, app.ErrHostKeyRejected) {
 		return label + ": host key not trusted; connection cancelled"
+	}
+	if errors.Is(err, app.ErrHostKeyMismatch) {
+		return label + ": host key changed; connection blocked"
+	}
+	if re, ok := errors.AsType[*app.HostKeyRevokedError](err); ok {
+		return fmt.Sprintf("%s: host key revoked (%s line %d); connection refused", label, re.Entry.File, re.Entry.Line)
 	}
 	return label + ": " + err.Error()
 }

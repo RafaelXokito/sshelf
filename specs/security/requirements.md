@@ -187,7 +187,7 @@ The system shall also consult `~/.ssh/known_hosts` and `/etc/ssh/ssh_known_hosts
 `golang.org/x/crypto/ssh/knownhosts`, including plain and hashed host entries, `[host]:port` entries and `@revoked`
 markers, and shall never modify them.
 Note: `@cert-authority` support is SEC-HOSTKEY-011 (`Later`).
-Priority: MVP · Status: Draft · Threats: T-10, T-11
+Priority: MVP · Status: Implemented · Threats: T-10, T-11
 - AC1: A hashed fixture entry connects without a prompt.
 - AC2: A key marked `@revoked` fails even when sshelf's file trusts it, and the UI offers no trust action.
 
@@ -201,7 +201,7 @@ Priority: MVP · Status: Implemented · Threats: T-10, T-8
 **SEC-HOSTKEY-005: Changed key is a hard failure.**
 If a server presents a key that differs from a stored key of the same type for that host, then the system shall
 abort before authentication, show both fingerprints, and offer no single-keystroke override.
-Priority: MVP · Status: Draft · Threats: T-11
+Priority: MVP · Status: Implemented · Threats: T-11
 - AC1: Connect returns `ErrHostKeyMismatch`, no auth callback fires, and the test server records zero auth
   attempts.
 - AC2: The block screen shows the path and line number of the stale entry and how to remove it. After the user
@@ -210,7 +210,7 @@ Priority: MVP · Status: Draft · Threats: T-11
 **SEC-HOSTKEY-007: No algorithm downgrade.**
 When keys are known for a host, the system shall restrict `ssh.ClientConfig.HostKeyAlgorithms` to the algorithms
 of those keys.
-Priority: MVP · Status: Draft · Threats: T-12
+Priority: MVP · Status: Implemented · Threats: T-12
 - AC1: With a stored ed25519 key, `HostKeyAlgorithms` contains only ed25519 algorithms. An RSA-only server fails
   without a TOFU prompt.
 

@@ -321,3 +321,36 @@ func TestHostKeyPromptCancelledContext(t *testing.T) {
 		t.Fatal("known_hosts written after the attempt was cancelled")
 	}
 }
+
+func TestFR_KH_002_ChangedKeyBlocksWithoutPrompt(t *testing.T) {
+	f := newTrustFixture(t)
+	if err := f.connectAnswering(f.app(), true); err != nil {
+		t.Fatal(err)
+	}
+	// The server's key is replaced (a new server on another port gets the
+	// trusted line rewritten to its address).
+	other := sshtest.New(t)
+	line := knownhosts.Line([]string{knownhosts.Normalize(f.srv.Addr())}, other.HostKeys()[0])
+	if err := os.WriteFile(paths.KnownHostsFile(f.dir), []byte("# sshelf\n"+line+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	attempts := len(f.srv.AuthAttempts())
+	before, _ := os.ReadFile(f.openssh) //nolint:gosec // test temp file
+	a := f.app()
+	_, err := a.Connect(context.Background(), "h1")
+	me, ok := errors.AsType[*HostKeyMismatchError](err)
+	if !ok || !errors.Is(err, ErrHostKeyMismatch) || me.Stale[0].File != paths.KnownHostsFile(f.dir) || me.Stale[0].Line != 2 {
+		t.Fatalf("err = %#v", err)
+	}
+	if n := len(f.srv.AuthAttempts()); n != attempts {
+		t.Fatalf("%d new auth attempts", n-attempts)
+	}
+	select {
+	case p := <-f.prompts:
+		t.Fatalf("prompted for a changed key: %+v", p)
+	default:
+	}
+	if after, _ := os.ReadFile(f.openssh); !bytes.Equal(before, after) { //nolint:gosec // test temp file
+		t.Fatal("~/.ssh/known_hosts changed")
+	}
+}

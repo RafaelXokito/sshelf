@@ -486,7 +486,7 @@ When a server presents a host key that is not trusted for that host and port, th
 ### FR-KH-002 · Changed host key
 If a server presents a host key that differs from a trusted key of the same type for that host and port, then the system shall abort the connection before authentication and show both fingerprints with a possible-attack warning.
 
-- **Priority:** MVP · **Status:** Draft · **Source:** SEC-HOSTKEY-005
+- **Priority:** MVP · **Status:** Implemented · **Source:** SEC-HOSTKEY-005
 - **Acceptance:**
   - No "connect anyway" option is offered.
   - The block screen shows the path and line number of the stale entry (in sshelf's `known_hosts`, or in `~/.ssh/known_hosts` when the old key is there) and tells the user how to remove it, as OpenSSH does (for example "delete line 12 of <path>" or `ssh-keygen -R <host> -f <path>`).
@@ -495,7 +495,7 @@ If a server presents a host key that differs from a trusted key of the same type
 ### FR-KH-003 · Trust OpenSSH known hosts
 The system shall treat host keys in `~/.ssh/known_hosts` as trusted, including hashed entries, `[host]:port` entries and comma-separated host patterns, and shall never modify that file.
 
-- **Priority:** MVP · **Status:** Draft · **Source:** D-102
+- **Priority:** MVP · **Status:** Implemented · **Source:** D-102
 - **Acceptance:**
   - A host present in `~/.ssh/known_hosts` under a hashed name connects with no prompt.
   - `~/.ssh/known_hosts` has the same checksum before and after any sshelf action.

@@ -65,7 +65,10 @@ type Config struct {
 // Connect dials t, verifies its host key and authenticates with the
 // credentials from creds. Cancelling ctx aborts the attempt and closes the
 // connection. Only the default x/crypto/ssh algorithms are used
-// (SEC-SESSION-004).
+// (SEC-SESSION-004), except that the host-key algorithms are pinned to the
+// types of the keys already known for the host (SEC-HOSTKEY-007). A changed
+// key fails with *HostKeyMismatchError and a revoked one with
+// *HostKeyRevokedError, both before any credential is used.
 func (c Config) Connect(ctx context.Context, t domain.Target, creds CredentialSource, p Prompter) (*ssh.Client, error) {
 	if p == nil {
 		p = RejectUnknownHosts{}
@@ -74,13 +77,13 @@ func (c Config) Connect(ctx context.Context, t domain.Target, creds CredentialSo
 	if err != nil {
 		return nil, err
 	}
-	cfg := clientConfig(ctx, t, creds, hostKeyCallback(ctx, known, p))
-
 	port := t.Port
 	if port == 0 {
 		port = 22
 	}
 	addr := net.JoinHostPort(t.Hostname, strconv.Itoa(port))
+	cfg := clientConfig(ctx, t, creds, hostKeyCallback(ctx, known, p))
+	cfg.HostKeyAlgorithms = hostKeyAlgorithms(known, addr)
 	timeout := t.ConnectTimeout
 	if timeout == 0 {
 		timeout = DefaultConnectTimeout
@@ -110,7 +113,8 @@ func (c Config) Connect(ctx context.Context, t domain.Target, creds CredentialSo
 }
 
 // clientConfig builds the x/crypto client configuration. It leaves every
-// algorithm list empty so x/crypto's secure defaults apply.
+// algorithm list empty so x/crypto's secure defaults apply; Connect then
+// pins HostKeyAlgorithms.
 func clientConfig(ctx context.Context, t domain.Target, creds CredentialSource, hk ssh.HostKeyCallback) *ssh.ClientConfig {
 	var auth []ssh.AuthMethod
 	if creds != nil {
@@ -139,31 +143,4 @@ func (c Config) hostKeyDB() (ssh.HostKeyCallback, error) {
 		return nil, fmt.Errorf("known_hosts: %w", err)
 	}
 	return cb, nil
-}
-
-// hostKeyCallback verifies the key against the known_hosts files and asks p
-// about unknown keys (SEC-HOSTKEY-001). A changed or revoked key fails
-// without asking.
-func hostKeyCallback(ctx context.Context, known ssh.HostKeyCallback, p Prompter) ssh.HostKeyCallback {
-	return func(addr string, remote net.Addr, key ssh.PublicKey) error {
-		err := known(addr, remote, key)
-		var ke *knownhosts.KeyError
-		if err == nil || !errors.As(err, &ke) || len(ke.Want) > 0 {
-			return err
-		}
-		trust, err := p.HostKey(ctx, HostKeyPrompt{
-			Address:     addr,
-			Remote:      remote,
-			Key:         key,
-			KeyType:     key.Type(),
-			Fingerprint: ssh.FingerprintSHA256(key),
-		})
-		if err != nil {
-			return err
-		}
-		if !trust {
-			return ErrHostKeyRejected
-		}
-		return nil
-	}
 }

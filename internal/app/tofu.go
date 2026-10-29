@@ -17,9 +17,28 @@ import (
 	"github.com/RafaelXokito/sshelf/internal/store"
 )
 
-// ErrHostKeyRejected means the user did not trust an unknown host key
-// (ARCH-CONN-003).
-var ErrHostKeyRejected = sshclient.ErrHostKeyRejected
+// Host-key failures, re-exported from sshclient for the UI.
+var (
+	// ErrHostKeyRejected means the user did not trust an unknown host key
+	// (ARCH-CONN-003).
+	ErrHostKeyRejected = sshclient.ErrHostKeyRejected
+	// ErrHostKeyMismatch means the host is known with another key; the
+	// error is a *HostKeyMismatchError (FR-KH-002).
+	ErrHostKeyMismatch = sshclient.ErrHostKeyMismatch
+	// ErrHostKeyRevoked means the key is marked @revoked; the error is a
+	// *HostKeyRevokedError (FR-KH-003).
+	ErrHostKeyRevoked = sshclient.ErrHostKeyRevoked
+)
+
+type (
+	// HostKeyMismatchError carries both fingerprints and the stale
+	// entries' file and line.
+	HostKeyMismatchError = sshclient.HostKeyMismatchError
+	// HostKeyRevokedError carries the @revoked entry's file and line.
+	HostKeyRevokedError = sshclient.HostKeyRevokedError
+	// KnownKey is one known_hosts entry.
+	KnownKey = sshclient.KnownKey
+)
 
 // HostKeyPromptMsg asks the UI whether to trust a host key that no
 // known_hosts file knows (FR-KH-001, SEC-HOSTKEY-004). App sends it with the

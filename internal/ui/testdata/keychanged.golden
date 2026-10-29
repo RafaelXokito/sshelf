@@ -1,0 +1,30 @@
+sshelf
+
+  db-staging           admin@10.0.1.20:2222
+> web-prod             ubuntu@10.0.0.10:22
+  zeta                 10.0.0.30:22
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ WARNING: HOST KEY HAS CHANGED                                        ┃
+┃                                                                      ┃
+┃ web-prod (10.0.0.10) presented a different key from the one you      ┃
+┃ trust. Someone could be intercepting the connection                  ┃
+┃ (a man-in-the-middle attack), or the server's key was                ┃
+┃ replaced. sshelf did not connect and sent no credentials.            ┃
+┃                                                                      ┃
+┃   Key type:       ssh-ed25519                                        ┃
+┃   Presented key:  SHA256:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU ┃
+┃   Trusted key:    SHA256:uNiVztksCsDhcc0u9e8BujQXVUpKZIDTMczCvj3tD2s ┃
+┃                   /home/u/.config/sshelf/known_hosts line 12         ┃
+┃                                                                      ┃
+┃ If you know the key was replaced, remove the stale entry             ┃
+┃ and connect again to review the new key:                             ┃
+┃   delete line 12 of /home/u/.config/sshelf/known_hosts               ┃
+┃ or run:                                                              ┃
+┃   ssh-keygen -R 10.0.0.10 -f /home/u/.config/sshelf/known_hosts      ┃
+┃                                                                      ┃
+┃ esc close                                                            ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+web-prod: host key changed; connection blocked
+↑/↓ move • enter connect • q quit

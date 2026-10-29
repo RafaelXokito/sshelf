@@ -16,4 +16,7 @@ var (
 	// cancels.
 	TrustAndSave = key.NewBinding(key.WithKeys("y"), key.WithHelp("y", "trust and save"))
 	TOFUCancel   = key.NewBinding(key.WithKeys("enter", "esc"), key.WithHelp("enter/esc", "cancel"))
+
+	// Changed-host-key block screen: closing is the only action.
+	CloseBlock = key.NewBinding(key.WithKeys("esc", "enter", "q"), key.WithHelp("esc", "close"))
 )
