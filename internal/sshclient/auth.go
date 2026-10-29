@@ -3,7 +3,6 @@ package sshclient
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"slices"
 
 	"golang.org/x/crypto/ssh"
@@ -76,7 +75,7 @@ func (s *authState) next(ac *ssh.ClientAuthContext) (ssh.AuthMethod, error) {
 			slices.Contains(ac.PartialSuccessMethods, m) {
 			continue
 		}
-		slog.Debug("ssh auth", "method", m, "host", s.t.Hostname)
+		logAuthAttempt(s.t, m)
 		return s.method(m), nil
 	}
 	return nil, nil // nothing left: x/crypto reports "unable to authenticate"

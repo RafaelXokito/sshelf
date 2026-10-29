@@ -15,9 +15,9 @@ import (
 	"testing"
 )
 
-// buildTags makes go list also see the files behind the devcheck tag, so the
-// bans cover them too.
-const buildTags = "devcheck"
+// buildTags makes go list also see the files behind the devcheck and
+// sshelf_faultinject tags, so the bans cover them too.
+const buildTags = "devcheck,sshelf_faultinject"
 
 var bubbleTea = []string{"charm.land/bubbletea/v2/...", "github.com/charmbracelet/bubbletea/..."}
 
@@ -35,7 +35,7 @@ type rule struct {
 var rules = []rule{
 	{pkg: "internal/domain", allow: []string{}, forbid: []string{"golang.org/x/crypto/ssh/..."}},
 	{pkg: "internal/store", allow: []string{"internal/domain"}, forbid: []string{"internal/ui/...", "internal/app", "internal/sshclient", "internal/session"}},
-	{pkg: "internal/secrets", allow: []string{"internal/domain"}, forbid: []string{"internal/ui/...", "internal/app", "internal/sshclient", "internal/session"}},
+	{pkg: "internal/secrets", allow: []string{"internal/domain", "internal/term"}, forbid: []string{"internal/ui/...", "internal/app", "internal/sshclient", "internal/session"}},
 	{pkg: "internal/sshclient", allow: []string{"internal/domain"}, forbid: append([]string{"internal/secrets", "internal/store", "internal/ui/...", "internal/app"}, bubbleTea...)},
 	{pkg: "internal/session", allow: []string{"internal/sshclient", "internal/term"}, forbid: append([]string{"internal/secrets", "internal/store", "internal/ui/...", "internal/app"}, bubbleTea...)},
 	{pkg: "internal/ui/...", allow: []string{"internal/app", "internal/domain", "internal/search", "internal/session", "internal/ui/..."}, forbid: []string{"internal/secrets", "internal/store", "internal/sshclient", "golang.org/x/crypto/ssh/..."}},

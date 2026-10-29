@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -126,6 +127,7 @@ type slice struct {
 	exited  chan struct{} // closed once the process has exited
 	exitErr error
 	before  string // stty -a before launch
+	state   string // sshelf state dir (log and crash reports) under home
 	cfgDir  string // sshelf config dir (XDG_CONFIG_HOME/sshelf)
 	home    string // HOME
 }
@@ -145,12 +147,17 @@ func stty(t *testing.T, tty *os.File) string {
 	return string(out)
 }
 
-func startSlice(t *testing.T) *slice {
+// startSlice starts sshelf with env added to its minimal environment.
+func startSlice(t *testing.T, env ...string) *slice {
+	t.Helper()
+	return startSliceBin(t, sshelfBinary(t), env...)
+}
+
+func startSliceBin(t *testing.T, bin string, env ...string) *slice {
 	t.Helper()
 	if _, err := exec.LookPath("stty"); err != nil {
 		t.Skip("stty not available")
 	}
-	bin := sshelfBinary(t)
 
 	home, xdg := t.TempDir(), t.TempDir()
 	if err := os.Mkdir(filepath.Join(home, ".ssh"), 0o700); err != nil {
@@ -184,6 +191,11 @@ func startSlice(t *testing.T) *slice {
 		t.Fatal(err)
 	}
 	s := &slice{t: t, srv: srv, master: master, tty: tty, out: &syncBuffer{}, exited: make(chan struct{}), cfgDir: cfgDir, home: home}
+	// ADR-005, with XDG_STATE_HOME unset.
+	s.state = filepath.Join(home, ".local", "state", "sshelf")
+	if runtime.GOOS == "darwin" {
+		s.state = filepath.Join(home, "Library", "Logs", "sshelf")
+	}
 	s.before = stty(t, tty)
 
 	drained := make(chan struct{})
@@ -196,6 +208,7 @@ func startSlice(t *testing.T) *slice {
 	s.cmd.Env = []string{
 		"HOME=" + home, "XDG_CONFIG_HOME=" + xdg, "TERM=xterm-256color", "PATH=" + os.Getenv("PATH"),
 	}
+	s.cmd.Env = append(s.cmd.Env, env...)
 	s.cmd.Stdin, s.cmd.Stdout, s.cmd.Stderr = tty, tty, tty
 	// A new session without a controlling terminal: sshelf only needs its
 	// stdin to be a TTY. With Setctty, macOS revokes and resets the slave
@@ -279,6 +292,9 @@ func TestFR_CONN_001_E2EKeyFileSlice(t *testing.T) {
 	if after := stty(t, s.tty); after != s.before {
 		t.Fatalf("stty -a changed:\nbefore:\n%s\nafter:\n%s", s.before, after)
 	}
+	if _, err := os.Stat(s.state); !os.IsNotExist(err) {
+		t.Fatalf("state dir created without SSHELF_DEBUG (SEC-LOG-003): %v", err)
+	}
 	pty := s.srv.RequestsOfType("pty-req")
 	if len(pty) != 1 || pty[0].Term != "xterm-256color" || pty[0].Width != 80 || pty[0].Height != 24 {
 		t.Fatalf("pty-req = %+v", pty)
@@ -302,5 +318,34 @@ func TestFR_CONN_005_TerminalRestored(t *testing.T) {
 	all := s.out.From(0)
 	if !bytes.Contains(all, []byte("\x1b[?1049l\x1b[?1000l")) {
 		t.Fatal("the session reset sequence was not written")
+	}
+}
+
+// TestSEC_LOG_003_E2EConnectStagesLogged runs the slice with SSHELF_DEBUG=1:
+// the log, mode 0600, records the connect stages and auth method attempts.
+func TestSEC_LOG_003_E2EConnectStagesLogged(t *testing.T) {
+	s := startSlice(t, "SSHELF_DEBUG=1")
+	s.run()
+	s.quit()
+	logFile := filepath.Join(s.state, "sshelf.log")
+	st, err := os.Stat(logFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Mode().Perm() != 0o600 {
+		t.Fatalf("log mode %04o", st.Mode().Perm())
+	}
+	b, err := os.ReadFile(logFile) //nolint:gosec // test temp dir
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		`msg="sshelf starting"`, `msg="connect: start" host=web-prod`, `msg="connect: dialling"`,
+		`msg="connect: verifying host key"`, `msg="connect: auth attempt" user=demo host=127.0.0.1 method=publickey`,
+		`msg="connect: authenticated"`, `msg="connect: session open"`, `msg="session: ended" result="exited (3)"`,
+	} {
+		if !strings.Contains(string(b), want) {
+			t.Errorf("log lacks %s; log:\n%s", want, b)
+		}
 	}
 }

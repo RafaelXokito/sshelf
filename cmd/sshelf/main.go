@@ -6,14 +6,17 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
+	"runtime/debug"
 
 	tea "charm.land/bubbletea/v2"
-	"golang.org/x/term"
+	xterm "golang.org/x/term"
 
 	"github.com/RafaelXokito/sshelf/internal/app"
 	"github.com/RafaelXokito/sshelf/internal/paths"
 	"github.com/RafaelXokito/sshelf/internal/secrets"
+	"github.com/RafaelXokito/sshelf/internal/term"
 	"github.com/RafaelXokito/sshelf/internal/ui"
 )
 
@@ -39,7 +42,7 @@ func main() {
 
 // run parses the command line (FR-CLI-001) and starts the TUI. It returns
 // the process exit status.
-func run(args []string) int {
+func run(args []string) (code int) {
 	fs := flag.NewFlagSet("sshelf", flag.ContinueOnError)
 	fs.SetOutput(io.Discard) // usage goes to the right stream below
 	showHelp := fs.Bool("help", false, "")
@@ -70,6 +73,30 @@ func run(args []string) int {
 		fmt.Fprintln(os.Stderr, "sshelf:", err)
 		return 1
 	}
+	closeLog, err := setupLogging(os.Getenv, dirs.State)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "sshelf: debug log:", err)
+		return 1
+	}
+	defer func() { _ = closeLog() }()
+	slog.Info("sshelf starting", "version", versionString())
+
+	// ARCH-SEC-004: from here on a panic restores the startup terminal
+	// state, writes the reset sequence and a crash report, and exits 70.
+	// Panics in goroutines started with term.SafeGo get a report too.
+	restoreTerm, err := term.SaveState(os.Stdin)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "sshelf:", err)
+		return 1
+	}
+	crash := crashHandler{stateDir: dirs.State, restore: restoreTerm, stdout: os.Stdout, stderr: os.Stderr}
+	term.SetPanicReporter(func(r any, stack []byte) { _, _ = crash.report(r, stack) })
+	defer func() {
+		if r := recover(); r != nil {
+			code = crash.crash(r, debug.Stack())
+		}
+	}()
+
 	home, _ := os.UserHomeDir() // "" skips ~/.ssh/known_hosts
 	svc := app.New(app.Config{
 		Dir:             dirs.Config,
@@ -77,7 +104,7 @@ func run(args []string) int {
 		Secrets:         secrets.NewOSStore("sshelf"),
 	})
 
-	p := tea.NewProgram(ui.New(svc))
+	p := tea.NewProgram(guard{model: ui.New(svc)}, tea.WithoutCatchPanics())
 	svc.SetSend(func(msg any) { p.Send(msg) }) // prompts reach the UI (design §8.3)
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "sshelf:", err)
@@ -87,5 +114,5 @@ func run(args []string) int {
 }
 
 func isTerminal(f *os.File) bool {
-	return term.IsTerminal(int(f.Fd())) //nolint:gosec // a file descriptor fits in an int
+	return xterm.IsTerminal(int(f.Fd())) //nolint:gosec // a file descriptor fits in an int
 }

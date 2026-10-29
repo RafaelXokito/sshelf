@@ -294,7 +294,7 @@ Priority: MVP · Status: Implemented · Threats: T-17
 **SEC-LOG-003: Logging off by default.**
 Where debug logging is enabled by setting the environment variable `SSHELF_DEBUG=1`, the system shall write the log with mode 0600 in the state directory and rotate it
 at 5 MiB.
-Priority: MVP · Status: Draft · Threats: T-17, T-5
+Priority: MVP · Status: Implemented · Threats: T-17, T-5
 - AC1: The default run creates no log file. With logging on, the file mode is 0600.
 
 **SEC-LOG-005: Secrets never displayed.**

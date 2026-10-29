@@ -1,6 +1,7 @@
 package term
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -20,6 +21,38 @@ func TestSafeGoRecoversPanic(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("onPanic not called")
+	}
+}
+
+// panicsHere is a named frame for the stack check below.
+//
+//go:noinline
+func panicsHere() { panic("boom") }
+
+func TestARCH_SEC_004_SafeGoReportsBeforeOnPanic(t *testing.T) {
+	var order []string
+	var stack []byte
+	done := make(chan struct{})
+	SetPanicReporter(func(r any, s []byte) { order = append(order, fmt.Sprint("report ", r)); stack = s })
+	t.Cleanup(func() { SetPanicReporter(nil) })
+	SafeGo(panicsHere, func(r any) { order = append(order, fmt.Sprint("onPanic ", r)); close(done) })
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("onPanic not called")
+	}
+	if strings.Join(order, ", ") != "report boom, onPanic boom" {
+		t.Fatalf("calls: %v", order)
+	}
+	if !strings.Contains(string(stack), "panicsHere") {
+		t.Fatalf("reported stack lacks the panicking frame:\n%s", stack)
+	}
+
+	SetPanicReporter(nil)
+	got := make(chan any, 1)
+	SafeGo(panicsHere, func(r any) { got <- r })
+	if r := <-got; r != "boom" {
+		t.Fatalf("without a reporter: recovered %v", r)
 	}
 }
 

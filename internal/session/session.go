@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"maps"
 	"os"
 	"slices"
@@ -196,10 +197,13 @@ func (s *Session) Run() (err error) {
 	if err != nil {
 		return fmt.Errorf("raw mode: %w", err)
 	}
+	// Deferred, so it also runs while a panic in Run unwinds; main's
+	// handler then deals with the panic (ARCH-SEC-004).
 	defer func() {
 		_ = restore()
 		_, _ = io.WriteString(stdout, term.ResetSequence)
 	}()
+	term.Fault("session-run")
 
 	// A cancelable reader, so the stdin pump stops before Run returns and
 	// never steals the TUI's next keystroke.
@@ -208,6 +212,15 @@ func (s *Session) Run() (err error) {
 		return fmt.Errorf("stdin: %w", err)
 	}
 	defer func() { _ = in.Close() }()
+	// If Run itself panics, stop the pumps before the panic moves on to
+	// main's handler. No recover, so the handler gets the original stack.
+	unwinding := true
+	defer func() {
+		if unwinding {
+			in.Cancel()
+			_ = s.Close()
+		}
+	}()
 
 	var (
 		all, out, inWG sync.WaitGroup
@@ -267,12 +280,14 @@ func (s *Session) Run() (err error) {
 	if canceled {
 		inWG.Wait()
 	}
+	unwinding = false
 
 	select {
 	case <-failed:
-		return ErrInternal
+		result = ErrInternal
 	default:
 	}
+	slog.Debug("session: ended", "result", result)
 	return result
 }
 
@@ -283,6 +298,7 @@ func (s *Session) pumpStdin(in io.Reader) {
 	for {
 		n, err := in.Read(buf)
 		if n > 0 {
+			term.Fault("session-goroutine")
 			if _, werr := s.remoteIn.Write(buf[:n]); werr != nil {
 				return
 			}

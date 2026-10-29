@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"slices"
 
@@ -79,8 +80,10 @@ func knownKey(k knownhosts.KnownKey) KnownKey {
 // p.
 func hostKeyCallback(ctx context.Context, known ssh.HostKeyCallback, p Prompter) ssh.HostKeyCallback {
 	return func(addr string, remote net.Addr, key ssh.PublicKey) error {
+		slog.Debug("connect: verifying host key", "addr", addr, "type", key.Type(), "fingerprint", ssh.FingerprintSHA256(key))
 		err := known(addr, remote, key)
 		if err == nil {
+			slog.Debug("connect: host key known", "addr", addr)
 			return nil
 		}
 		if re, ok := errors.AsType[*knownhosts.RevokedError](err); ok {
