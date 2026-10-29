@@ -253,3 +253,43 @@ func TestSEC_HOSTKEY_001_NoInsecureIgnoreHostKey(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// TestARCH_PKG_002_OnlyPathsResolvesDirs checks that no package other than
+// internal/paths works out a config or state directory itself.
+func TestARCH_PKG_002_OnlyPathsResolvesDirs(t *testing.T) {
+	needles := [][]byte{[]byte("UserConfigDir"), []byte("UserCacheDir"), []byte("XDG_")}
+	root := moduleRoot(t)
+	allowed := filepath.Join(root, "internal", "paths")
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			switch d.Name() {
+			case ".git", "testdata", "vendor":
+				return filepath.SkipDir
+			}
+			if path == allowed {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		b, err := os.ReadFile(path) //nolint:gosec // paths come from walking the module
+		if err != nil {
+			return err
+		}
+		for _, n := range needles {
+			if bytes.Contains(b, n) {
+				rel, _ := filepath.Rel(root, path)
+				t.Errorf("%s uses %s; resolve directories through internal/paths", rel, n)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}

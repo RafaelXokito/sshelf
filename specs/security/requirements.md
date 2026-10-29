@@ -319,13 +319,13 @@ Priority: MVP · Status: Implemented · Threats: T-17
 **SEC-FILE-001: Modes.**
 The system shall create the config directory with mode 0700 and `config.json`, `known_hosts` and the log with
 mode 0600, independent of the umask.
-Priority: MVP · Status: Draft · Threats: T-5, T-2
+Priority: MVP · Status: Implemented · Threats: T-5, T-2
 - AC1: Under `umask 000`, `os.Stat` modes match.
 
 **SEC-FILE-002: Permission check.**
 If `config.json`, `known_hosts` or the config directory is accessible by group or others at startup, then the
 system shall restore modes 0600/0700 and show a one-line notice.
-Priority: MVP · Status: Draft · Threats: T-5
+Priority: MVP · Status: Implemented · Threats: T-5
 - AC1: A 0644 config ends up as 0600 after start, and the notice is shown once.
 
 **SEC-FILE-003: Atomic write.**

@@ -6,11 +6,13 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
 
 	"github.com/RafaelXokito/sshelf/internal/domain"
+	"github.com/RafaelXokito/sshelf/internal/paths"
 	"github.com/RafaelXokito/sshelf/internal/session"
 	"github.com/RafaelXokito/sshelf/internal/sshclient"
 	"github.com/RafaelXokito/sshelf/internal/store"
@@ -31,11 +33,21 @@ type Session interface {
 	Close() error
 }
 
+// Loaded is the result of Service.Load.
+type Loaded struct {
+	Hosts    []domain.Host // sorted by label
+	FirstRun bool          // config.json did not exist
+	// Notices are one-line messages to show once, such as repaired file
+	// modes (SEC-FILE-002).
+	Notices []string
+}
+
 // Service is what the UI calls. Every method may block on I/O, so the UI
 // calls it only from tea.Cmd goroutines, never from Update (ARCH-UI-002).
 type Service interface {
-	// Load reads config.json and returns the hosts sorted by label.
-	Load(ctx context.Context) ([]domain.Host, error)
+	// Load creates the config directory if needed, repairs loose file
+	// modes, and reads config.json.
+	Load(ctx context.Context) (Loaded, error)
 	// Connect dials, verifies and authenticates the host, then opens an
 	// interactive session ready for tea.Exec. Nothing is handed to the
 	// terminal unless all of that succeeded (ARCH-SESS-002).
@@ -44,8 +56,12 @@ type Service interface {
 
 // Config wires an App.
 type Config struct {
-	ConfigPath      string   // config.json
-	KnownHostsFiles []string // from paths.KnownHostsFiles
+	// Dir is the sshelf config directory (paths.Dirs.Config). It holds
+	// config.json and sshelf's own known_hosts.
+	Dir string
+	// KnownHostsFiles are the files host keys are checked against, from
+	// paths.KnownHostsFiles(Dir, home).
+	KnownHostsFiles []string
 	// Creds and Prompter default to KeyFileSource and
 	// sshclient.RejectUnknownHosts.
 	Creds    sshclient.CredentialSource
@@ -76,14 +92,28 @@ func New(cfg Config) *App {
 	return &App{cfg: cfg}
 }
 
-// Load implements Service.
-func (a *App) Load(ctx context.Context) ([]domain.Host, error) {
+// Load implements Service. On first launch it creates the config
+// directory with mode 0700 (FR-CFG-001); it then restores 0700/0600 on the
+// directory, config.json and known_hosts if group or others can access them
+// (SEC-FILE-002).
+func (a *App) Load(ctx context.Context) (Loaded, error) {
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return Loaded{}, err
 	}
-	snap, err := store.Load(a.cfg.ConfigPath)
+	if _, err := paths.EnsureDir(a.cfg.Dir); err != nil {
+		return Loaded{}, err
+	}
+	var notices []string
+	fixed, err := paths.CheckModes(a.cfg.Dir)
 	if err != nil {
-		return nil, err
+		return Loaded{}, err
+	}
+	if len(fixed) > 0 {
+		notices = append(notices, modesNotice(fixed))
+	}
+	snap, err := store.Load(paths.ConfigFile(a.cfg.Dir))
+	if err != nil {
+		return Loaded{Notices: notices}, err
 	}
 	a.mu.Lock()
 	a.data = snap.Data
@@ -92,7 +122,17 @@ func (a *App) Load(ctx context.Context) ([]domain.Host, error) {
 	slices.SortStableFunc(hosts, func(x, y domain.Host) int {
 		return cmp.Compare(strings.ToLower(x.Label), strings.ToLower(y.Label))
 	})
-	return hosts, nil
+	return Loaded{Hosts: hosts, FirstRun: snap.FirstRun, Notices: notices}, nil
+}
+
+// modesNotice is the one-line notice for repaired modes, e.g.
+// "permissions of config.json, known_hosts were too open; set to 0700/0600".
+func modesNotice(fixed []string) string {
+	names := make([]string, len(fixed))
+	for i, f := range fixed {
+		names[i] = filepath.Base(f)
+	}
+	return "permissions of " + strings.Join(names, ", ") + " were too open; set to 0700/0600"
 }
 
 // Connect implements Service.

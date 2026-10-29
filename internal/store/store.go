@@ -36,6 +36,32 @@ func Load(path string) (*Snapshot, error) {
 	return &Snapshot{Data: f.toDomain()}, nil
 }
 
+// fileMode is the mode of config.json (SEC-FILE-001).
+const fileMode = 0o600
+
+// Save writes s to config.json at path with mode 0600, whatever the umask.
+// The directory must exist (paths.EnsureDir).
+func Save(path string, s *Snapshot) error {
+	b, err := json.MarshalIndent(fromDomain(s.Data), "", "  ")
+	if err != nil {
+		return err
+	}
+	b = append(b, '\n')
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, fileMode) //nolint:gosec // path comes from internal/paths
+	if err != nil {
+		return err
+	}
+	if _, err := f.Write(b); err != nil {
+		_ = f.Close()
+		return err
+	}
+	if err := f.Chmod(fileMode); err != nil {
+		_ = f.Close()
+		return err
+	}
+	return f.Close()
+}
+
 // Version is the config.json schema version this build writes.
 const Version = 1
 
@@ -96,4 +122,33 @@ func (f fileConfig) toDomain() domain.Data {
 		})
 	}
 	return d
+}
+
+func fromDomain(d domain.Data) fileConfig {
+	f := fileConfig{Version: Version, Identities: []fileIdentity{}, Hosts: []fileHost{}}
+	for _, i := range d.Identities {
+		f.Identities = append(f.Identities, fileIdentity{
+			ID:               string(i.ID),
+			Name:             i.Label,
+			Username:         i.Username,
+			KeyPath:          i.KeyPath,
+			HasPassword:      i.HasPassword,
+			HasPrivateKey:    i.HasKey,
+			HasKeyPassphrase: i.HasPassphrase,
+			UseAgent:         i.UseAgent,
+		})
+	}
+	for _, h := range d.Hosts {
+		f.Hosts = append(f.Hosts, fileHost{
+			ID:         string(h.ID),
+			Label:      h.Label,
+			Hostname:   h.Hostname,
+			Port:       h.Port,
+			User:       h.User,
+			IdentityID: string(h.IdentityID),
+			GroupID:    string(h.GroupID),
+			Tags:       h.Tags,
+		})
+	}
+	return f
 }

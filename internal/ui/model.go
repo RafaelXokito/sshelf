@@ -27,8 +27,9 @@ var (
 
 // LoadedMsg carries the result of loading config.json.
 type LoadedMsg struct {
-	Hosts []domain.Host
-	Err   error
+	Hosts   []domain.Host
+	Notices []string // shown once in the status bar
+	Err     error
 }
 
 // ConnectedMsg carries an authenticated session, ready for tea.Exec.
@@ -80,8 +81,8 @@ func New(svc app.Service) Model {
 func (m Model) Init() tea.Cmd {
 	svc := m.svc
 	return func() tea.Msg {
-		hosts, err := svc.Load(context.Background())
-		return LoadedMsg{Hosts: hosts, Err: err}
+		l, err := svc.Load(context.Background())
+		return LoadedMsg{Hosts: l.Hosts, Notices: l.Notices, Err: err}
 	}
 }
 
@@ -110,6 +111,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case LoadedMsg:
 		m.screen = hostlist.New(msg.Hosts)
+		m.status = strings.Join(msg.Notices, "; ")
 		if msg.Err != nil {
 			m.status = "config: " + msg.Err.Error()
 		}
