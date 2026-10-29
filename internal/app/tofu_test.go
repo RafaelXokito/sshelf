@@ -78,11 +78,15 @@ func (f *trustFixture) app() *App {
 	a := New(Config{
 		Dir:             f.dir,
 		KnownHostsFiles: []string{paths.KnownHostsFile(f.dir), f.openssh},
-		Creds:           KeyFileSource{Home: f.home},
+		Home:            f.home,
 		Terminal:        stillTerm{},
 	})
 	f.prompts = make(chan HostKeyPromptMsg, 4)
-	a.SetSend(func(msg any) { f.prompts <- msg.(HostKeyPromptMsg) })
+	a.SetSend(func(msg any) {
+		if p, ok := msg.(HostKeyPromptMsg); ok {
+			f.prompts <- p
+		}
+	})
 	if _, err := a.Load(context.Background()); err != nil {
 		f.t.Fatal(err)
 	}

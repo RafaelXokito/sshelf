@@ -19,6 +19,7 @@ import (
 	"github.com/RafaelXokito/sshelf/internal/ui/keys"
 	"github.com/RafaelXokito/sshelf/internal/ui/modals/connecting"
 	"github.com/RafaelXokito/sshelf/internal/ui/modals/keychanged"
+	"github.com/RafaelXokito/sshelf/internal/ui/modals/prompt"
 	"github.com/RafaelXokito/sshelf/internal/ui/modals/tofu"
 	"github.com/RafaelXokito/sshelf/internal/ui/screens/hostlist"
 	"github.com/RafaelXokito/sshelf/internal/ui/screens/loaderror"
@@ -73,8 +74,9 @@ type Model struct {
 	status string
 	exec   execFunc
 
-	attempt int                // id of the latest connection attempt
-	cancel  context.CancelFunc // cancels the attempt in progress; nil if none
+	attempt     int                // id of the latest connection attempt
+	attemptHost domain.ID          // host of the attempt in progress
+	cancel      context.CancelFunc // cancels the attempt in progress; nil if none
 }
 
 // New returns the root model. It does no I/O; Init loads the config.
@@ -150,6 +152,35 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.modals = append(m.modals, tofu.New(msg))
 		return m, nil
 
+	case app.ConnectProgressMsg:
+		if m.cancel != nil && msg.HostID == m.attemptHost && len(m.modals) > 0 {
+			if c, ok := m.modals[0].(connecting.Model); ok {
+				m.modals[0] = c.WithStage(msg.Stage)
+			}
+		}
+		return m, nil
+
+	case app.AuthPromptMsg:
+		if m.cancel == nil {
+			msg.Cancel() // the attempt is already over
+			return m, nil
+		}
+		m.modals = append(m.modals, prompt.New(msg))
+		return m, nil
+
+	case prompt.DoneMsg:
+		// The connection goes on, or fails with ErrAuthCancelled;
+		// Connecting stays up until then.
+		m.popModal()
+		return m, nil
+
+	case tea.PasteMsg:
+		if n := len(m.modals); n > 0 {
+			var cmd tea.Cmd
+			m.modals[n-1], cmd = m.modals[n-1].Update(msg)
+			return m, cmd
+		}
+
 	case tofu.DoneMsg:
 		// The connection goes on (trusted) or fails with
 		// ErrHostKeyRejected; Connecting stays up until then.
@@ -207,6 +238,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) startConnect(hostID domain.ID, label string) (tea.Model, tea.Cmd) {
 	ctx, cancel := context.WithCancel(context.Background())
 	m.attempt++
+	m.attemptHost = hostID
 	m.cancel = cancel
 	m.modals = append(m.modals, connecting.New(label))
 	m.status = ""
@@ -235,6 +267,25 @@ func (m *Model) popModal() {
 
 // failedStatus is the status-bar text after a connection attempt failed.
 func failedStatus(label string, err error) string {
+	label = domain.Sanitize(label)
+	if errors.Is(err, app.ErrAuthCancelled) {
+		return label + ": authentication cancelled"
+	}
+	if errors.Is(err, app.ErrAuthFailed) {
+		return label + ": authentication failed"
+	}
+	if errors.Is(err, app.ErrNameResolution) {
+		return label + ": name resolution failed"
+	}
+	if errors.Is(err, app.ErrConnectionRefused) {
+		return label + ": connection refused"
+	}
+	if errors.Is(err, app.ErrTimedOut) {
+		return label + ": timed out"
+	}
+	if se, ok := errors.AsType[*app.StoreError](err); ok {
+		return label + ": " + se.Error()
+	}
 	if errors.Is(err, app.ErrHostKeyRejected) {
 		return label + ": host key not trusted; connection cancelled"
 	}
@@ -244,16 +295,17 @@ func failedStatus(label string, err error) string {
 	if re, ok := errors.AsType[*app.HostKeyRevokedError](err); ok {
 		return fmt.Sprintf("%s: host key revoked (%s line %d); connection refused", label, re.Entry.File, re.Entry.Line)
 	}
-	return label + ": " + err.Error()
+	return label + ": " + domain.Sanitize(err.Error()) // may carry server text
 }
 
 // endedStatus is the status-bar text after a session (FR-CONN-005), e.g.
 // "web-prod: exited (3)" or "web-prod: connection lost: <reason>".
 func endedStatus(label string, err error) string {
+	label = domain.Sanitize(label)
 	if err == nil {
 		return label + ": exited (0)"
 	}
-	return label + ": " + err.Error()
+	return label + ": " + domain.Sanitize(err.Error()) // may carry server text
 }
 
 // View implements tea.Model.

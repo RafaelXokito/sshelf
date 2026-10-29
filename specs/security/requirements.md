@@ -137,14 +137,14 @@ Priority: MVP · Status: Draft · Threats: T-6
 If the store denies access or the user cancels an OS unlock prompt, then the system shall abort only the current
 connect or save with a message that names the store, without retrying automatically and without caching the
 failure.
-Priority: MVP · Status: Draft · Threats: T-6
+Priority: MVP · Status: Implemented · Threats: T-6
 - AC1: Fake returns `ErrDenied` on `Get`: connect fails with the "Access to Keychain was denied" message, makes no
   second `Get` call, and the next connect calls `Get` again.
 
 **SEC-CRED-007: Missing item.**
 If an identity references a secret that the store does not contain (new machine, synced config, manual
 deletion), then the system shall show the field as "not set on this device" and ask for the value at connect time.
-Priority: MVP · Status: Draft · Threats: T-6, T-9
+Priority: MVP · Status: Implemented · Threats: T-6, T-9
 - AC1: Config with a password reference and an empty fake: connect opens the password prompt, and the typed value
   is used for that connection only. Offering to save it is v1 (FR-IDENT-005).
 
@@ -271,7 +271,7 @@ Priority: MVP · Status: Draft · Threats: T-17
 **SEC-MEM-009: Just-in-time secrets.**
 When connecting, the system shall read the identity's secrets from the store only for that connection attempt,
 and shall destroy them (and drop any parsed `ssh.Signer`) once authentication completes or fails.
-Priority: MVP · Status: Draft · Threats: T-4, T-7
+Priority: MVP · Status: Implemented · Threats: T-4, T-7
 - AC1: The fake store counts `Get` calls: zero at startup, one per needed field per connect.
 - AC2: After auth, the `Secret` buffers are zero (test hook).
 
@@ -354,7 +354,7 @@ Priority: MVP · Status: Implemented · Threats: T-5
 **SEC-SESSION-001: Credentials only to verified owners.**
 The system shall offer a credential only to the hosts linked to its identity, and only after that connection's
 host key has been verified.
-Priority: MVP · Status: Draft · Threats: T-16
+Priority: MVP · Status: Implemented · Threats: T-16
 - AC1: With a rejected host key, no store `Get` and no auth callback happens. Host A's password is never sent to
   host B.
 
@@ -362,14 +362,14 @@ Priority: MVP · Status: Draft · Threats: T-16
 When a server sends keyboard-interactive prompts, the system shall auto-answer only a single echo-off prompt
 matching `/password/i` with the identity's stored password, and shall show every other prompt (such as an OTP) to
 the user labelled "Prompt from <host>" with control characters stripped.
-Priority: MVP · Status: Draft · Threats: T-14
+Priority: MVP · Status: Implemented · Threats: T-14
 - AC1: A password-only keyboard-interactive server gets the stored password with no user prompt. Two prompts get
   no auto-answer. An instruction containing `\x1b]52;` renders escaped.
 
 **SEC-SESSION-003: Sanitize untrusted strings.**
 The system shall strip C0 controls (except `\t` and `\n`), C1 controls and ANSI escape sequences from
 server-supplied and imported strings before rendering them in sshelf's UI.
-Priority: MVP · Status: Draft · Threats: T-15
+Priority: MVP · Status: Implemented · Threats: T-15
 - AC1: Fuzz `Sanitize`: the output never contains runes U+0000–U+0008, U+000B–U+001F, U+007F or U+0080–U+009F.
 
 **SEC-SESSION-004: Algorithms and dependencies.**

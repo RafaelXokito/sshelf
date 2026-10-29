@@ -59,7 +59,7 @@ func sliceFixture(t *testing.T, authorize bool) (*App, *sshtest.Server) {
 	a := New(Config{
 		Dir:             dir,
 		KnownHostsFiles: []string{kh},
-		Creds:           KeyFileSource{Home: home},
+		Home:            home,
 		Terminal:        stillTerm{},
 	})
 	return a, srv

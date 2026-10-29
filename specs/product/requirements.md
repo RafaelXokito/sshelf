@@ -284,7 +284,7 @@ When the user creates, edits or deletes an identity, the system shall save the c
 ### FR-IDENT-002 · Link a host to an identity
 When a host is linked to an identity, the system shall authenticate that host with the identity's credentials, using the host's own username when the host sets one and the identity's username otherwise.
 
-- **Priority:** MVP · **Status:** Draft · **Rationale:** avoids Royal TSX's need for duplicate credentials per username.
+- **Priority:** MVP · **Status:** Implemented · **Rationale:** avoids Royal TSX's need for duplicate credentials per username.
 - **Acceptance:**
   - Identity `ops` (user `deploy`, key K) on host A, which has no username, connects as `deploy` with K. Host B, linked to `ops` with username `root`, connects as `root` with K.
 
@@ -349,7 +349,7 @@ When the user presses Enter on a host, the system shall open an interactive SSH 
 ### FR-CONN-002 · Authenticate with stored credentials
 Where the effective identity has a private key or a password, the system shall authenticate with it without prompting, trying the key (stored or file) first and then password or keyboard-interactive (FR-CONN-008).
 
-- **Priority:** MVP · **Status:** Draft
+- **Priority:** MVP · **Status:** Implemented
 - **Acceptance:**
   - A host accepting only the identity's key connects without a prompt when the key is unencrypted or its passphrase is stored.
   - Given both a key and a password, against a server accepting both, the key is used (visible in the debug log).
@@ -358,7 +358,7 @@ Where the effective identity has a private key or a password, the system shall a
 ### FR-CONN-003 · Prompt for missing secrets
 If the server requests a password, or a key passphrase is needed, and none is stored, then the system shall prompt for it with a non-echoing field and continue authentication.
 
-- **Priority:** MVP · **Status:** Draft
+- **Priority:** MVP · **Status:** Implemented
 - **Acceptance:**
   - The prompt shows `user@host` and what is needed ("password" or "passphrase for <key>").
   - Esc cancels and returns to the list. 3 failed attempts end with "authentication failed".
@@ -381,7 +381,7 @@ When an interactive session ends, the system shall restore the host list with th
 ### FR-CONN-006 · Connection failure reporting
 If a connection cannot be established within the connect timeout, then the system shall abort it and report one of: name resolution failed, connection refused, timed out, host key rejected, or authentication failed.
 
-- **Priority:** MVP · **Status:** Draft
+- **Priority:** MVP · **Status:** Implemented
 - **Acceptance:**
   - Each cause is reproduced in a test and shows its own message.
   - The timeout is 10 s. Esc cancels a pending connection immediately.
@@ -398,7 +398,7 @@ Where the `SSH_AUTH_SOCK` environment variable points to a running agent, the sy
 ### FR-CONN-008 · Keyboard-interactive authentication
 When the server sends keyboard-interactive challenges, the system shall answer a single non-echoing password prompt with the identity's stored password and show every other prompt, such as an OTP, to the user, echoing input only when the server allows it.
 
-- **Priority:** MVP · **Status:** Draft · **Rationale:** many servers accept passwords only through keyboard-interactive; OTP and 2FA bastions. **Source:** SEC-SESSION-002, ARCH-CONN-002
+- **Priority:** MVP · **Status:** Implemented · **Rationale:** many servers accept passwords only through keyboard-interactive; OTP and 2FA bastions. **Source:** SEC-SESSION-002, ARCH-CONN-002
 - **Acceptance:**
   - A server that accepts passwords only through keyboard-interactive connects with the stored password and no prompt.
   - A test server with a password prompt and an OTP prompt fills the password and shows only the OTP prompt. The OTP field echoes only when the server sets echo.

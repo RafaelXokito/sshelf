@@ -15,6 +15,7 @@ import (
 
 	"github.com/RafaelXokito/sshelf/internal/app"
 	"github.com/RafaelXokito/sshelf/internal/paths"
+	"github.com/RafaelXokito/sshelf/internal/secrets"
 	"github.com/RafaelXokito/sshelf/internal/term"
 	"github.com/RafaelXokito/sshelf/internal/ui"
 )
@@ -100,6 +101,7 @@ func run(args []string) (code int) {
 	svc := app.New(app.Config{
 		Dir:             dirs.Config,
 		KnownHostsFiles: paths.KnownHostsFiles(dirs.Config, home),
+		Secrets:         secrets.NewOSStore("sshelf"),
 	})
 
 	p := tea.NewProgram(guard{model: ui.New(svc)}, tea.WithoutCatchPanics())

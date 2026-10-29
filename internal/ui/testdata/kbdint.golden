@@ -1,0 +1,27 @@
+sshelf
+
+> db-staging           admin@10.0.1.20:2222
+  web-prod             ubuntu@10.0.0.10:22
+  zeta                 10.0.0.30:22
+
+╭─────────────────────────────────────────────╮
+│ Connecting to web-prod…                     │
+│                                             │
+│ › dialling → · verifying → · authenticating │
+│                                             │
+│ esc cancel                                  │
+╰─────────────────────────────────────────────╯
+
+╭───────────────────────────────╮
+│ Prompt from 10.0.0.10         │
+│ ubuntu@10.0.0.10              │
+│                               │
+│ Duo two-factor login          │
+│ Enter a passcode              │
+│                               │
+│ Passcode or option (1-3): 12_ │
+│                               │
+│ enter submit • esc cancel     │
+╰───────────────────────────────╯
+
+↑/↓ move • enter connect • q quit

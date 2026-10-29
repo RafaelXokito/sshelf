@@ -44,7 +44,7 @@ func (f keyFileFixture) target(keyPath string) domain.Target {
 }
 
 func (f keyFileFixture) connect(keyPath string) error {
-	c, err := f.cfg.Connect(context.Background(), f.target(keyPath), KeyFileSource{Home: f.home}, nil)
+	c, err := f.cfg.Connect(context.Background(), f.target(keyPath), Credentials{Home: f.home}, nil)
 	if c != nil {
 		_ = c.Close()
 	}
@@ -83,7 +83,7 @@ func TestSEC_FILE_009_Mode0600KeyUsed(t *testing.T) {
 }
 
 func TestFR_IDENT_003_TildeExpanded(t *testing.T) {
-	src := KeyFileSource{Home: "/home/u"}
+	src := Credentials{Home: "/home/u"}
 	for in, want := range map[string]string{
 		"~/.ssh/id_ed25519": "/home/u/.ssh/id_ed25519",
 		"~":                 "/home/u",
@@ -116,7 +116,7 @@ func TestFR_IDENT_003_KeyFileNotFound(t *testing.T) {
 }
 
 func TestFR_IDENT_003_NoKeyPathNoSigner(t *testing.T) {
-	s, err := KeyFileSource{}.Signers(context.Background(), domain.Target{})
+	s, err := Credentials{}.Signers(context.Background(), domain.Target{})
 	if err != nil || s != nil {
 		t.Fatalf("Signers() = %v, %v; want none", s, err)
 	}
@@ -129,7 +129,7 @@ func TestFR_IDENT_003_KeyTypes(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		s, err := KeyFileSource{}.Signers(context.Background(), domain.Target{KeyPath: path})
+		s, err := Credentials{}.Signers(context.Background(), domain.Target{KeyPath: path})
 		if err != nil || len(s) != 1 || string(s[0].PublicKey().Marshal()) != string(pub.Marshal()) {
 			t.Fatalf("%s: Signers() = %v, %v", kind, s, err)
 		}
