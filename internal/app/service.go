@@ -67,29 +67,27 @@ type Config struct {
 	// KnownHostsFiles are the files host keys are checked against, from
 	// paths.KnownHostsFiles(Dir, home).
 	KnownHostsFiles []string
-	// Creds and Prompter default to KeyFileSource and
-	// sshclient.RejectUnknownHosts.
-	Creds    sshclient.CredentialSource
-	Prompter sshclient.Prompter
+	// Creds defaults to KeyFileSource.
+	Creds sshclient.CredentialSource
 	// Terminal is the local terminal sessions attach to; default os.Stdin.
 	Terminal session.Terminal
 }
 
-// App implements Service.
+// App implements Service, and sshclient.Prompter for its own connections.
 type App struct {
 	cfg Config
 
 	mu   sync.Mutex
 	data domain.Data
+	send func(any) // delivers prompts to the UI; see SetSend
+
+	khMu sync.Mutex // serialises writes to sshelf's known_hosts
 }
 
 // New returns an App. It does no I/O.
 func New(cfg Config) *App {
 	if cfg.Creds == nil {
 		cfg.Creds = KeyFileSource{}
-	}
-	if cfg.Prompter == nil {
-		cfg.Prompter = sshclient.RejectUnknownHosts{}
 	}
 	if cfg.Terminal == nil {
 		cfg.Terminal = term.NewTTY(os.Stdin)
@@ -164,7 +162,7 @@ func (a *App) Connect(ctx context.Context, hostID domain.ID) (Session, error) {
 	a.mu.Unlock()
 
 	ssh := sshclient.Config{KnownHostsFiles: a.cfg.KnownHostsFiles}
-	client, err := ssh.Connect(ctx, target, a.cfg.Creds, a.cfg.Prompter)
+	client, err := ssh.Connect(ctx, target, a.cfg.Creds, a)
 	if err != nil {
 		return nil, err
 	}

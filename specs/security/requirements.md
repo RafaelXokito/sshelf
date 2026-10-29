@@ -178,7 +178,7 @@ Priority: MVP · Status: Implemented · Threats: T-10, T-11
 **SEC-HOSTKEY-002: sshelf known_hosts file.**
 The system shall record accepted host keys in `known_hosts` in the sshelf config directory, in OpenSSH format,
 written atomically with mode 0600 (D-102).
-Priority: MVP · Status: Draft · Threats: T-10
+Priority: MVP · Status: Implemented · Threats: T-10
 - AC1: After "Trust and save", the file contains one parseable line (`knownhosts.New` accepts it), and
   `~/.ssh/known_hosts` is byte-identical to before.
 
@@ -194,7 +194,7 @@ Priority: MVP · Status: Draft · Threats: T-10, T-11
 **SEC-HOSTKEY-004: TOFU prompt.**
 When a server presents a host key that no source knows, the system shall show host, port, key type and SHA-256
 fingerprint and offer exactly two choices, "Trust and save" and "Cancel", where Enter and Esc both mean "Cancel".
-Priority: MVP · Status: Draft · Threats: T-10, T-8
+Priority: MVP · Status: Implemented · Threats: T-10, T-8
 - AC1: Model test: Enter and Esc on the initial prompt both cancel. The fingerprint equals
   `ssh.FingerprintSHA256(key)`. "Trust once" is v1 (FR-KH-007) and writes nothing.
 

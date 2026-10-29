@@ -24,7 +24,9 @@ func main() {
 		KnownHostsFiles: paths.KnownHostsFiles(dirs.Config, home),
 	})
 
-	if _, err := tea.NewProgram(ui.New(svc)).Run(); err != nil {
+	p := tea.NewProgram(ui.New(svc))
+	svc.SetSend(func(msg any) { p.Send(msg) }) // prompts reach the UI (design §8.3)
+	if _, err := p.Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "sshelf:", err)
 		os.Exit(1)
 	}

@@ -17,6 +17,7 @@ import (
 	"github.com/RafaelXokito/sshelf/internal/ui/components"
 	"github.com/RafaelXokito/sshelf/internal/ui/keys"
 	"github.com/RafaelXokito/sshelf/internal/ui/modals/connecting"
+	"github.com/RafaelXokito/sshelf/internal/ui/modals/tofu"
 	"github.com/RafaelXokito/sshelf/internal/ui/screens/hostlist"
 	"github.com/RafaelXokito/sshelf/internal/ui/screens/loaderror"
 )
@@ -135,8 +136,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.cancelAttempt()
-		m.popModal()
+		m.modals = nil
 		m.status = "connection cancelled"
+		return m, nil
+
+	case app.HostKeyPromptMsg:
+		if m.cancel == nil {
+			msg.Answer(false) // the attempt is already over
+			return m, nil
+		}
+		m.modals = append(m.modals, tofu.New(msg))
+		return m, nil
+
+	case tofu.DoneMsg:
+		// The connection goes on (trusted) or fails with
+		// ErrHostKeyRejected; Connecting stays up until then.
+		m.popModal()
 		return m, nil
 
 	case ConnectedMsg:
@@ -147,7 +162,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, func() tea.Msg { _ = s.Close(); return nil }
 		}
 		m.cancelAttempt()
-		m.popModal()
+		m.modals = nil
 		m.status = ""
 		hostID, label := msg.HostID, msg.Label
 		return m, m.exec(msg.Session, func(err error) tea.Msg {
@@ -159,8 +174,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.cancelAttempt()
-		m.popModal()
-		m.status = msg.Label + ": " + msg.Err.Error()
+		m.modals = nil
+		m.status = failedStatus(msg.Label, msg.Err)
 		return m, nil
 
 	case SessionEndedMsg:
@@ -207,6 +222,14 @@ func (m *Model) popModal() {
 	if n := len(m.modals); n > 0 {
 		m.modals = m.modals[:n-1]
 	}
+}
+
+// failedStatus is the status-bar text after a connection attempt failed.
+func failedStatus(label string, err error) string {
+	if errors.Is(err, app.ErrHostKeyRejected) {
+		return label + ": host key not trusted; connection cancelled"
+	}
+	return label + ": " + err.Error()
 }
 
 // endedStatus is the status-bar text after a session (FR-CONN-005), e.g.

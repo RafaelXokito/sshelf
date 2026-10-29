@@ -476,7 +476,7 @@ The trust model and matching rules are defined in `SEC-HOSTKEY-*`.
 ### FR-KH-001 · Unknown host key prompt
 When a server presents a host key that is not trusted for that host and port, the system shall show the host, port, key type and SHA256 fingerprint and ask the user to choose "Trust and save" or "Cancel" before any credentials are sent.
 
-- **Priority:** MVP · **Status:** Draft
+- **Priority:** MVP · **Status:** Implemented
 - **Acceptance:**
   - The fingerprint format matches `ssh-keygen -lf`.
   - Enter and Esc both mean "Cancel", which aborts the connection. "Trust and save" connects and suppresses the prompt next time.
@@ -504,7 +504,7 @@ The system shall treat host keys in `~/.ssh/known_hosts` as trusted, including h
 ### FR-KH-004 · sshelf known_hosts file
 When the user chooses "trust and save", the system shall append the key to sshelf's own `known_hosts` file in its config directory.
 
-- **Priority:** MVP · **Status:** Draft · **Source:** D-102
+- **Priority:** MVP · **Status:** Implemented · **Source:** D-102
 - **Acceptance:**
   - The trust survives a restart.
   - The file uses the OpenSSH format (`ssh-keygen -F <host> -f <file>` finds the entry).

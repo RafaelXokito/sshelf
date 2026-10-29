@@ -49,7 +49,7 @@ type Prompter interface {
 }
 
 // RejectUnknownHosts is a Prompter that never trusts an unknown host key.
-// It is the default until the TOFU prompt exists (T-007).
+// It is what Connect uses when it is given no Prompter.
 type RejectUnknownHosts struct{}
 
 // HostKey implements Prompter.

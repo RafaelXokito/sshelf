@@ -11,4 +11,9 @@ var (
 	Quit      = key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit"))
 	Cancel    = key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "cancel"))
 	ForceQuit = key.NewBinding(key.WithKeys("ctrl+c"), key.WithHelp("ctrl+c", "quit"))
+
+	// TOFU modal (design §9.3): y is the only key that trusts; Enter
+	// cancels.
+	TrustAndSave = key.NewBinding(key.WithKeys("y"), key.WithHelp("y", "trust and save"))
+	TOFUCancel   = key.NewBinding(key.WithKeys("enter", "esc"), key.WithHelp("enter/esc", "cancel"))
 )

@@ -112,7 +112,8 @@ func TestConnectUnknownHost(t *testing.T) {
 	if _, err := a.Connect(context.Background(), "nope"); !errors.Is(err, ErrHostNotFound) {
 		t.Fatalf("err = %v", err)
 	}
-	if _, ok := any(a.cfg.Prompter).(sshclient.RejectUnknownHosts); !ok {
-		t.Fatal("default prompter is not RejectUnknownHosts")
+	// Without SetSend an unknown host key is rejected without a prompt.
+	if trust, err := a.HostKey(context.Background(), sshclient.HostKeyPrompt{Address: "h:22"}); trust || err != nil {
+		t.Fatalf("HostKey without SetSend = %v, %v", trust, err)
 	}
 }
