@@ -627,7 +627,7 @@ func Shell(ss *Session) {
 	}
 	if cmd := ss.Command(); cmd != "" {
 		out, code, _ := runCommand(ss, cmd)
-		_, _ = ss.Write([]byte(out))
+		_, _ = ss.Write([]byte(strings.ReplaceAll(out, "\n", nl)))
 		ss.Exit(code)
 		return
 	}

@@ -366,7 +366,7 @@ If the server requests a password, or a key passphrase is needed, and none is st
 ### FR-CONN-004 · Window resize
 While an interactive session is active, when the local terminal is resized, the system shall send the new size to the remote PTY.
 
-- **Priority:** MVP · **Status:** Draft
+- **Priority:** MVP · **Status:** Implemented
 - **Acceptance:**
   - After a resize, `tput cols; tput lines` on the remote host prints the new size.
 
