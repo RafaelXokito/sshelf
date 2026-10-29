@@ -24,4 +24,15 @@ var (
 
 	// Changed-host-key block screen: closing is the only action.
 	CloseBlock = key.NewBinding(key.WithKeys("esc", "enter", "q"), key.WithHelp("esc", "close"))
+
+	// Text inputs (components.TextInput). Letters always type, so only
+	// arrows, editing keys and readline-style control keys are bound.
+	CursorLeft    = key.NewBinding(key.WithKeys("left", "ctrl+b"), key.WithHelp("←", "cursor left"))
+	CursorRight   = key.NewBinding(key.WithKeys("right", "ctrl+f"), key.WithHelp("→", "cursor right"))
+	CursorHome    = key.NewBinding(key.WithKeys("home", "ctrl+a"), key.WithHelp("home", "start of field"))
+	CursorEnd     = key.NewBinding(key.WithKeys("end", "ctrl+e"), key.WithHelp("end", "end of field"))
+	DeleteBack    = key.NewBinding(key.WithKeys("backspace", "ctrl+h"), key.WithHelp("backspace", "delete before cursor"))
+	DeleteForward = key.NewBinding(key.WithKeys("delete", "ctrl+d"), key.WithHelp("delete", "delete at cursor"))
+	DeleteToStart = key.NewBinding(key.WithKeys("ctrl+u"), key.WithHelp("ctrl+u", "delete to start"))
+	DeleteToEnd   = key.NewBinding(key.WithKeys("ctrl+k"), key.WithHelp("ctrl+k", "delete to end"))
 )
