@@ -2,6 +2,7 @@ package identityedit
 
 import (
 	"errors"
+	"slices"
 	"strings"
 
 	"charm.land/bubbles/v2/key"
@@ -30,8 +31,14 @@ const (
 	rowUser
 	rowPassword
 	rowKeyPath
+	rowKey
 	rowPassphrase
 )
+
+// MaxKeyPaste is how many runes the stored-key field takes: well over the
+// 2800-byte limit, so that an oversized key gets the "reference the key
+// file" message (SEC-CRED-003) instead of being cut.
+const MaxKeyPaste = 16 << 10
 
 // SaveMsg asks the root model to save Input through app.Service. Its
 // secrets print as [REDACTED]; the service destroys them.
@@ -41,7 +48,8 @@ type SaveMsg struct{ Input app.IdentityInput }
 type CancelledMsg struct{}
 
 // Model is the identity form (FR-IDENT-001): name, username, password,
-// key file and key passphrase. Secret fields never show a stored value,
+// key file, stored key (pasted, or imported from the key file with ctrl+o,
+// FR-IDENT-003) and key passphrase. Secret fields never show a stored value,
 // only its status (FR-IDENT-004); typing replaces it on save, and leaving
 // one empty keeps it. Ctrl+S validates and sends SaveMsg; Esc closes,
 // after a confirm when there are unsaved changes.
@@ -53,6 +61,8 @@ type Model struct {
 	keyPath    *components.TextInput
 	password   *components.SecretField
 	passphrase *components.SecretField
+	key        *components.SecretField
+	importKey  bool // store the key file in the credential store on save
 
 	saving bool
 	err    string // why the last save failed, when not a field error
@@ -84,11 +94,15 @@ func New(info app.IdentityInfo, identities []domain.Identity) Model {
 	m.keyPath.CharLimit = 4096
 	m.password = secret(info.Password)
 	m.passphrase = secret(info.Passphrase)
+	m.key = secret(info.Key)
+	m.key.Input().Newlines = true
+	m.key.Input().CharLimit = MaxKeyPaste
 
 	m.form.Add("Name", m.name).
 		Add("Username", m.user).
 		Add("Password", m.password).
 		Add("Key file", m.keyPath).
+		Add("Stored key", m.key).
 		Add("Passphrase", m.passphrase)
 	m.form.MarkClean()
 	return m
@@ -103,6 +117,7 @@ func (m Model) Cancel() tea.Msg { return CancelledMsg{} }
 func (m Model) Destroy() {
 	m.password.Reset()
 	m.passphrase.Reset()
+	m.key.Reset()
 }
 
 // Update implements components.Screen.
@@ -112,10 +127,16 @@ func (m Model) Update(msg tea.Msg) (components.Screen, tea.Cmd) {
 	default:
 		return m, nil
 	}
+	if k, ok := msg.(tea.KeyPressMsg); ok && key.Matches(k, keys.StoreKeyFile) {
+		if m.form.Focused() == rowKeyPath {
+			m.importKey = !m.importKey
+		}
+		return m, nil
+	}
 	ev, cmd := m.form.Update(msg)
 	switch ev {
 	case components.FormCancel:
-		if m.form.Dirty() {
+		if m.form.Dirty() || m.importKey {
 			return m, func() tea.Msg {
 				return components.ShowModalMsg{Modal: confirm.New("Discard unsaved changes?", CancelledMsg{})}
 			}
@@ -150,19 +171,36 @@ func (m Model) submit() (components.Screen, tea.Cmd) {
 		KeyPath:    m.keyPath.Value(),
 		Password:   app.NewSecret(m.password.Bytes()),
 		Passphrase: app.NewSecret(m.passphrase.Bytes()),
+		Key:        app.NewSecret(m.key.Bytes()),
 
 		ClearPassword:   m.password.Cleared(),
 		ClearPassphrase: m.passphrase.Cleared(),
+		ClearKey:        m.key.Cleared(),
+		ImportKeyFile:   m.importKey,
 	}
 	return m, func() tea.Msg { return SaveMsg{Input: in} }
 }
 
-func (m Model) showErrors(err error) {
-	if ve, ok := errors.AsType[*domain.ValidationError](err); ok {
-		if text, ok := ve.Fields[domain.FieldName]; ok {
-			m.form.SetError(rowName, text)
+// showErrors puts a name error next to the name; a key problem, whose
+// message is too long for that, goes under the form with a short mark on
+// its row. It returns the text for under the form.
+func (m Model) showErrors(err error) string {
+	ve, ok := errors.AsType[*domain.ValidationError](err)
+	if !ok {
+		return ""
+	}
+	if text, ok := ve.Fields[domain.FieldName]; ok {
+		m.form.SetError(rowName, text)
+	}
+	var below []string
+	for f, row := range map[domain.Field]int{domain.FieldKeyPath: rowKeyPath, domain.FieldKey: rowKey} {
+		if text, ok := ve.Fields[f]; ok {
+			m.form.SetError(row, "see below")
+			below = append(below, text)
 		}
 	}
+	slices.Sort(below)
+	return strings.Join(below, "; ")
 }
 
 // SaveFailed returns the form after the save it sent failed: a name error
@@ -171,7 +209,7 @@ func (m Model) showErrors(err error) {
 func (m Model) SaveFailed(err error) Model {
 	m.saving = false
 	if _, ok := errors.AsType[*domain.ValidationError](err); ok {
-		m.showErrors(err)
+		m.err = domain.Sanitize(m.showErrors(err))
 		m.form.FocusFirstError()
 		return m
 	}
@@ -194,6 +232,10 @@ func (m Model) View() string {
 		b.WriteString(dimStyle.Render("Saving…") + "\n")
 	case m.err != "":
 		b.WriteString(errStyle.Render(m.err) + "\n")
+	case m.importKey:
+		b.WriteString(dimStyle.Render("The key file is stored in the credential store on save; the file stays.") + "\n")
+	case m.info.KeyFingerprint != "" && !m.key.Changed() && !m.key.Cleared():
+		b.WriteString(dimStyle.Render("Stored key: "+m.info.KeyType+" "+m.info.KeyFingerprint) + "\n")
 	}
 	b.WriteString(components.Help(m.help()...) + "\n")
 	return b.String()
@@ -202,8 +244,10 @@ func (m Model) View() string {
 // help is the key hint line for the focused field; it fits 80 columns.
 func (m Model) help() []key.Binding {
 	switch m.form.Focused() {
-	case rowPassword, rowPassphrase:
+	case rowPassword, rowPassphrase, rowKey:
 		return []key.Binding{keys.NextField, keys.Save, keys.Cancel, keys.ClearSecret}
+	case rowKeyPath:
+		return []key.Binding{keys.NextField, keys.Save, keys.Cancel, keys.StoreKeyFile}
 	}
 	return []key.Binding{keys.NextField, keys.PrevField, keys.Save, keys.Cancel}
 }

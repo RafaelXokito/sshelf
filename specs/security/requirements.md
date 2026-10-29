@@ -113,7 +113,7 @@ Priority: MVP · Status: Implemented · Threats: T-9
 **SEC-CRED-003: Size limit.**
 If a secret exceeds 2800 bytes, then the system shall refuse to store it and suggest referencing the key file
 instead.
-Priority: MVP · Status: Draft · Threats: T-6
+Priority: MVP · Status: Implemented · Threats: T-6
 - AC1: A 2800-byte value is stored and a 2801-byte value returns `secrets.ErrTooLarge` (an RSA-4096 OpenSSH key is
   about 3.4 KB). The message mentions "reference the key file".
 

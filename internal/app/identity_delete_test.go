@@ -18,7 +18,7 @@ import (
 // threeSecrets saves an identity "ops" with all three secrets.
 func threeSecrets(t *testing.T, a *App) domain.Identity {
 	t.Helper()
-	saved, err := a.SaveIdentity(context.Background(), IdentityInput{Name: "ops", Password: secretOf("p"), Key: secretOf("k"), Passphrase: secretOf("q")})
+	saved, err := a.SaveIdentity(context.Background(), IdentityInput{Name: "ops", Password: secretOf("p"), Key: keySecret(t), Passphrase: secretOf("q")})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -211,6 +211,7 @@ func TestSEC_LOG_005_GoldenHasNoCanaryOrBullets(t *testing.T) {
 	d.typeText(canary)
 	d.tab()
 	d.tab()
+	d.tab()
 	d.send(tea.PasteMsg{Content: canary})
 	v := ansiSeq.ReplaceAllString(d.view(), "")
 	if strings.Contains(v, canary) || strings.Contains(v, strings.Repeat("•", len(canary))) {

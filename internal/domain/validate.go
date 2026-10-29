@@ -102,8 +102,13 @@ func ParsePort(s string) (int, error) {
 	return p, nil
 }
 
-// The identity fields ValidateIdentity checks.
-const FieldName Field = "name"
+// The identity fields: ValidateIdentity checks the name; app checks a
+// pasted or imported key and the key file to import (FR-IDENT-003).
+const (
+	FieldName    Field = "name"
+	FieldKey     Field = "key"
+	FieldKeyPath Field = "key_path"
+)
 
 // The messages shown next to an invalid identity field (FR-IDENT-001).
 const (

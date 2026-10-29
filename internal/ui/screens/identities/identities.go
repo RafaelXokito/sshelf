@@ -175,7 +175,7 @@ func Details(info app.IdentityInfo) string {
 	rows := [][2]string{
 		{"Password", info.Password.String()},
 		{"Key file", keyFile(id)},
-		{"Stored key", info.Key.String()},
+		{"Stored key", storedKey(info)},
 		{"Passphrase", info.Passphrase.String()},
 	}
 	var b strings.Builder
@@ -183,6 +183,15 @@ func Details(info app.IdentityInfo) string {
 		b.WriteString("  " + dimStyle.Render(pad(r[0], 11)) + " " + r[1] + "\n")
 	}
 	return b.String()
+}
+
+// storedKey is the stored key's status, with its type and SHA256
+// fingerprint when known (FR-IDENT-003).
+func storedKey(info app.IdentityInfo) string {
+	if info.Key == app.SecretSet && info.KeyFingerprint != "" {
+		return info.KeyType + " " + info.KeyFingerprint
+	}
+	return info.Key.String()
 }
 
 func keyFile(id domain.Identity) string {

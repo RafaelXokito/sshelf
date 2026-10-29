@@ -291,7 +291,7 @@ When a host is linked to an identity, the system shall authenticate that host wi
 ### FR-IDENT-003 · Key from a file or stored in sshelf
 Where an identity has a private key, the system shall take it either from a referenced file path read at connection time or from key contents that the user pasted or imported into sshelf and that are stored in the OS credential store.
 
-- **Priority:** MVP · **Status:** Draft · **Source:** D-004, Termius keychain
+- **Priority:** MVP · **Status:** Implemented · **Source:** D-004, Termius keychain
 - **Acceptance:**
   - A path starting with `~` is expanded. A missing file fails with "key file not found: <path>".
   - After a key file is imported into sshelf, deleting the original file does not stop connections.

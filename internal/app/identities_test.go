@@ -156,7 +156,7 @@ func TestSEC_CRED_002_RenameKeepsKeys(t *testing.T) {
 	store := secrets.NewMemStore()
 	a, dir := storeApp(t, store)
 	ctx := context.Background()
-	saved, err := a.SaveIdentity(ctx, IdentityInput{Name: "ops", Password: secretOf("p"), Key: secretOf("k"), Passphrase: secretOf("q")})
+	saved, err := a.SaveIdentity(ctx, IdentityInput{Name: "ops", Password: secretOf("p"), Key: keySecret(t), Passphrase: secretOf("q")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -205,7 +205,7 @@ func TestFR_IDENT_001_PartialSetFailureRollsBack(t *testing.T) {
 	// The password is stored, then the key fails.
 	store.FailNext(secrets.OpSet, nil)
 	store.FailNext(secrets.OpSet, secrets.ErrDenied)
-	_, err = a.SaveIdentity(ctx, IdentityInput{Name: "ops", Password: secretOf("p"), Key: secretOf("k"), Passphrase: secretOf("q")})
+	_, err = a.SaveIdentity(ctx, IdentityInput{Name: "ops", Password: secretOf("p"), Key: keySecret(t), Passphrase: secretOf("q")})
 	if se, ok := errors.AsType[*StoreError](err); !ok || !errors.Is(err, secrets.ErrDenied) || se.Error() != "Access to "+StoreName()+" was denied" {
 		t.Fatalf("err = %v, want a denied StoreError", err)
 	}

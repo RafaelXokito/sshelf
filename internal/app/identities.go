@@ -60,6 +60,11 @@ type IdentityInfo struct {
 	Key         SecretStatus
 	Passphrase  SecretStatus
 	LinkedHosts int
+	// KeyType and KeyFingerprint describe the stored key ("ED25519",
+	// "SHA256:…"); both are "" when there is none or it is encrypted
+	// without a readable public part (FR-IDENT-003).
+	KeyType        string
+	KeyFingerprint string
 }
 
 // IdentityInput is what the identity form submits. A secret that is empty
@@ -79,6 +84,11 @@ type IdentityInput struct {
 	ClearPassword   bool
 	ClearKey        bool
 	ClearPassphrase bool
+	// ImportKeyFile stores the key file at KeyPath in the credential
+	// store, as if its contents were pasted, and drops the path; the
+	// file is only read (ADR-010, "Store key in keychain"). A pasted Key
+	// wins.
+	ImportKeyFile bool
 }
 
 // Destroy zeroes the input's secrets.
@@ -135,6 +145,9 @@ func (a *App) identityList(d domain.Data) []IdentityInfo {
 			Password:   a.status(id, id.HasPassword, secrets.FieldPassword),
 			Key:        a.status(id, id.HasKey, secrets.FieldPrivateKey),
 			Passphrase: a.status(id, id.HasPassphrase, secrets.FieldKeyPassphrase),
+		}
+		if id.HasKey {
+			info.KeyType, info.KeyFingerprint = keyDisplay(id.PublicKey)
 		}
 		for _, h := range d.Hosts {
 			if h.IdentityID == id.ID {
@@ -244,6 +257,26 @@ func (a *App) prepareIdentity(ctx context.Context, d domain.Data, in IdentityInp
 	if err := domain.ValidateIdentity(id, d); err != nil {
 		return identityChange{}, err
 	}
+	key := in.Key
+	if in.ImportKeyFile && key.Len() == 0 {
+		b, err := a.importKeyFile(id.KeyPath)
+		if err != nil {
+			return identityChange{}, err
+		}
+		key = NewSecret(b)
+		defer key.Destroy()
+		id.KeyPath = ""
+	}
+	switch {
+	case key.Len() > 0:
+		pub, err := checkKey(key.Bytes(), in.Passphrase.Bytes())
+		if err != nil {
+			return identityChange{}, err
+		}
+		id.PublicKey = pub
+	case in.ClearKey:
+		id.PublicKey = ""
+	}
 
 	for _, fl := range []struct {
 		f     secrets.Field
@@ -252,7 +285,7 @@ func (a *App) prepareIdentity(ctx context.Context, d domain.Data, in IdentityInp
 		flag  *bool
 	}{ // in allSecretFields order
 		{secrets.FieldPassword, in.Password, in.ClearPassword, &id.HasPassword},
-		{secrets.FieldPrivateKey, in.Key, in.ClearKey, &id.HasKey},
+		{secrets.FieldPrivateKey, key, in.ClearKey, &id.HasKey},
 		{secrets.FieldKeyPassphrase, in.Passphrase, in.ClearPassphrase, &id.HasPassphrase},
 	} {
 		if fl.s.Len() == 0 {
