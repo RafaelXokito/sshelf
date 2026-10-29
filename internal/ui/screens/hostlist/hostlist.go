@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/RafaelXokito/sshelf/internal/domain"
+	searchpkg "github.com/RafaelXokito/sshelf/internal/search"
 	"github.com/RafaelXokito/sshelf/internal/ui/components"
 	"github.com/RafaelXokito/sshelf/internal/ui/keys"
 	"github.com/RafaelXokito/sshelf/internal/ui/modals/confirm"
@@ -58,13 +59,16 @@ type IdentitiesMsg struct{}
 type ImportMsg struct{}
 
 // Model is the host list (FR-NAV-001, FR-NAV-003): one line per host,
-// sorted by label, with a cursor and a search field opened with /.
+// sorted by label, with a cursor and a search field opened with /. While
+// the query is not empty only the hosts that fuzzy-match it are shown,
+// best match first (FR-NAV-002).
 type Model struct {
 	hosts  []domain.Host // sorted by label
-	cursor int
-	offset int // first row shown
-	width  int // 0 = unknown: nothing is truncated
-	height int // rows available, search line included; 0 = unknown
+	shown  []int         // indexes into hosts, in row order
+	cursor int           // row
+	offset int           // first row shown
+	width  int           // 0 = unknown: nothing is truncated
+	height int           // rows available, search line included; 0 = unknown
 
 	search    *components.TextInput
 	searching bool // the search field has the keyboard
@@ -79,20 +83,29 @@ func New(hosts []domain.Host) Model {
 	})
 	search := components.NewTextInput()
 	search.CharLimit = 128
-	return Model{hosts: hosts, search: search}
+	return Model{hosts: hosts, shown: searchpkg.Filter(hosts, ""), search: search}
 }
 
 // Selected returns the host under the cursor.
 func (m Model) Selected() (domain.Host, bool) {
-	if m.cursor < 0 || m.cursor >= len(m.hosts) {
+	if m.cursor < 0 || m.cursor >= len(m.shown) {
 		return domain.Host{}, false
 	}
-	return m.hosts[m.cursor], true
+	return m.hosts[m.shown[m.cursor]], true
 }
 
-// Hosts returns the listed hosts, in list order. The caller must not
-// modify them.
+// Hosts returns every host, sorted by label, whether shown or filtered
+// out. The caller must not modify them.
 func (m Model) Hosts() []domain.Host { return m.hosts }
+
+// Shown returns the hosts shown, in row order.
+func (m Model) Shown() []domain.Host {
+	out := make([]domain.Host, len(m.shown))
+	for i, j := range m.shown {
+		out[i] = m.hosts[j]
+	}
+	return out
+}
 
 // Cursor returns the row of the selected host.
 func (m Model) Cursor() int { return m.cursor }
@@ -103,9 +116,9 @@ func (m Model) Searching() bool { return m.searching }
 // Query returns the search query.
 func (m Model) Query() string { return m.search.Value() }
 
-// Select moves the cursor to the host with id, if it is listed.
+// Select moves the cursor to the host with id, if it is shown.
 func (m Model) Select(id domain.ID) Model {
-	if i := slices.IndexFunc(m.hosts, func(h domain.Host) bool { return h.ID == id }); i >= 0 {
+	if i := slices.IndexFunc(m.shown, func(j int) bool { return m.hosts[j].ID == id }); i >= 0 {
 		m.cursor = i
 		m.scroll()
 	}
@@ -114,9 +127,16 @@ func (m Model) Select(id domain.ID) Model {
 
 // SelectRow moves the cursor to row i, clamped to the list.
 func (m Model) SelectRow(i int) Model {
-	m.cursor = min(max(i, 0), max(len(m.hosts)-1, 0))
+	m.cursor = min(max(i, 0), max(len(m.shown)-1, 0))
 	m.scroll()
 	return m
+}
+
+// refilter applies the query and selects the top result.
+func (m *Model) refilter() {
+	m.shown = searchpkg.Filter(m.hosts, m.search.Value())
+	m.cursor, m.offset = 0, 0
+	m.scroll()
 }
 
 // Hints implements components.Hinter (FR-NAV-004).
@@ -137,6 +157,7 @@ func (m Model) Update(msg tea.Msg) (components.Screen, tea.Cmd) {
 	case tea.PasteMsg:
 		if m.searching {
 			m.search.Update(msg)
+			m.refilter()
 		}
 		return m, nil
 	case tea.KeyPressMsg:
@@ -157,7 +178,7 @@ func (m Model) updateList(k tea.KeyPressMsg) (components.Screen, tea.Cmd) {
 	case key.Matches(k, keys.First):
 		m = m.SelectRow(0)
 	case key.Matches(k, keys.Last):
-		m = m.SelectRow(len(m.hosts) - 1)
+		m = m.SelectRow(len(m.shown) - 1)
 	case key.Matches(k, keys.Search):
 		m.searching = true
 		m.search.Focus()
@@ -187,8 +208,10 @@ func (m Model) updateList(k tea.KeyPressMsg) (components.Screen, tea.Cmd) {
 }
 
 // updateSearch handles a key while the search field has the keyboard:
-// arrows move, enter connects, esc clears the query and returns to the
-// list, and every other key goes to the field (FR-NAV-003).
+// arrows move, enter connects to the selected result (the top one unless
+// the arrows moved), esc clears the query and returns to the list keeping
+// the selected host selected, and every other key goes to the field and
+// filters again (FR-NAV-002, FR-NAV-003).
 func (m Model) updateSearch(k tea.KeyPressMsg) (components.Screen, tea.Cmd) {
 	switch {
 	case key.Matches(k, keys.SearchUp):
@@ -198,12 +221,20 @@ func (m Model) updateSearch(k tea.KeyPressMsg) (components.Screen, tea.Cmd) {
 	case key.Matches(k, keys.Connect):
 		return m, m.connect()
 	case key.Matches(k, keys.ClearSearch):
+		h, ok := m.Selected()
 		m.search.Reset()
 		m.search.Blur()
 		m.searching = false
-		m.scroll()
+		m.refilter()
+		if ok {
+			m = m.Select(h.ID)
+		}
 	default:
+		before := m.search.Value()
 		m.search.Update(k)
+		if m.search.Value() != before {
+			m.refilter()
+		}
 	}
 	return m, nil
 }
@@ -217,14 +248,14 @@ func (m Model) connect() tea.Cmd {
 }
 
 func (m *Model) move(d int) {
-	m.cursor = min(max(m.cursor+d, 0), max(len(m.hosts)-1, 0))
+	m.cursor = min(max(m.cursor+d, 0), max(len(m.shown)-1, 0))
 	m.scroll()
 }
 
 // rows returns how many host rows fit.
 func (m Model) rows() int {
 	if m.height <= 0 {
-		return len(m.hosts)
+		return len(m.shown)
 	}
 	n := m.height
 	if m.searching {
@@ -242,7 +273,7 @@ func (m *Model) scroll() {
 	if m.cursor >= m.offset+rows {
 		m.offset = m.cursor - rows + 1
 	}
-	m.offset = max(min(m.offset, len(m.hosts)-rows), 0)
+	m.offset = max(min(m.offset, len(m.shown)-rows), 0)
 }
 
 // View implements components.Screen.
@@ -252,17 +283,21 @@ func (m Model) View() string {
 		b.WriteString(m.fit(searchStyle.Render("/ ") + m.search.View()))
 		b.WriteString("\n")
 	}
-	if len(m.hosts) == 0 {
-		b.WriteString(dimStyle.Render("No hosts yet."))
-		b.WriteString("\n")
+	switch {
+	case len(m.hosts) == 0:
+		b.WriteString(dimStyle.Render("No hosts yet.") + "\n")
+		return b.String()
+	case len(m.shown) == 0:
+		b.WriteString(dimStyle.Render(m.fit("No host matches the search.")) + "\n")
 		return b.String()
 	}
-	end := min(m.offset+m.rows(), len(m.hosts))
+	end := min(m.offset+m.rows(), len(m.shown))
 	for i := m.offset; i < end; i++ {
+		h := m.hosts[m.shown[i]]
 		if i == m.cursor {
-			b.WriteString(selectedStyle.Render(m.fit(SelectGlyph + Line(m.hosts[i]))))
+			b.WriteString(selectedStyle.Render(m.fit(SelectGlyph + Line(h))))
 		} else {
-			b.WriteString(m.fit("  " + Line(m.hosts[i])))
+			b.WriteString(m.fit("  " + Line(h)))
 		}
 		b.WriteString("\n")
 	}

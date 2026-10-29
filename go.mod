@@ -10,6 +10,7 @@ require (
 	github.com/creack/pty v1.1.24
 	github.com/google/uuid v1.6.0
 	github.com/muesli/cancelreader v0.2.2
+	github.com/sahilm/fuzzy v0.1.3
 	github.com/zalando/go-keyring v0.2.8
 	go.uber.org/goleak v1.3.0
 	golang.org/x/crypto v0.58.0

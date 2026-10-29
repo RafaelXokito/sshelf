@@ -547,7 +547,7 @@ The system shall display each host as one line showing the label and `user@hostn
 ### FR-NAV-002 · Fuzzy search
 When the user types in the search field, the system shall filter the host list to hosts whose label, hostname or username fuzzy-matches the query, ordered by match score, and Enter shall connect to the selected result.
 
-- **Priority:** MVP · **Status:** Draft · **Source:** sshs, lazyssh
+- **Priority:** MVP · **Status:** Implemented · **Source:** sshs, lazyssh
 - **Acceptance:**
   - `/` focuses search. `wbprd` matches `web-prod`, and `10.0.1` matches `10.0.1.20`. Matching is case-insensitive.
   - Typing `wbprd` and pressing Enter connects to `web-prod` when it is the top match.
