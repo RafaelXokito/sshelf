@@ -170,7 +170,7 @@ Priority: MVP · Status: Draft · Threats: T-21
 **SEC-HOSTKEY-001: Always verify.**
 The system shall verify every server host key through the sshelf `HostKeyCallback` and shall never use
 `ssh.InsecureIgnoreHostKey`.
-Priority: MVP · Status: Draft · Threats: T-10, T-11
+Priority: MVP · Status: Implemented · Threats: T-10, T-11
 - AC1: CI fails if `InsecureIgnoreHostKey` appears outside `_test.go`.
 - AC2: Integration test (in-process `x/crypto/ssh` server): an unknown key with "Cancel" fails before any auth
   callback runs.
@@ -346,7 +346,7 @@ Priority: v1 · Status: Draft · Threats: T-18 · Source: FR-CFG-004
 **SEC-FILE-009: Unprotected key files.**
 If an identity references a private key file readable by group or others, then the system shall refuse to use it
 and show OpenSSH's "unprotected private key file" error.
-Priority: MVP · Status: Draft · Threats: T-5
+Priority: MVP · Status: Implemented · Threats: T-5
 - AC1: A 0644 key is refused and a 0600 key is used.
 
 ### 4.8 SSH session safety (SEC-SESSION)
@@ -376,7 +376,7 @@ Priority: MVP · Status: Draft · Threats: T-15
 The system shall use `golang.org/x/crypto/ssh` default algorithms (≥ v0.17.0, Terrapin strict-KEX,
 [terrapin-attack.com](https://terrapin-attack.com)), shall not enable legacy algorithms, and shall run
 `govulncheck` in CI.
-Priority: MVP · Status: Draft · Threats: T-20
+Priority: MVP · Status: Implemented · Threats: T-20
 - AC1: CI `govulncheck ./...` passes. A unit test asserts that the client config contains no `ssh-dss`, `3des-cbc`,
   `arcfour*` or `diffie-hellman-group1-sha1`.
 

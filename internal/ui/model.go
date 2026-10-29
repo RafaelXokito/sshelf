@@ -1,63 +1,212 @@
-// Package ui is the root Bubble Tea model. For now it shows a plain,
-// selectable list of hosts; the router and modal stack come later.
+// Package ui is the root Bubble Tea model: it routes messages to one active
+// screen and a stack of modals (design §9.2), and runs every I/O operation
+// through app.Service inside tea.Cmd functions (ARCH-UI-002).
 package ui
 
 import (
-	"fmt"
-	"net"
-	"strconv"
+	"context"
 	"strings"
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/RafaelXokito/sshelf/internal/app"
 	"github.com/RafaelXokito/sshelf/internal/domain"
+	"github.com/RafaelXokito/sshelf/internal/ui/components"
+	"github.com/RafaelXokito/sshelf/internal/ui/keys"
+	"github.com/RafaelXokito/sshelf/internal/ui/modals/connecting"
+	"github.com/RafaelXokito/sshelf/internal/ui/screens/hostlist"
 )
 
 var (
-	titleStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("212")).MarginBottom(1)
-	selectedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("212")).Bold(true)
-	dimStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+	titleStyle  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("212")).MarginBottom(1)
+	statusStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
+	dimStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
 )
 
-var (
-	keyUp   = key.NewBinding(key.WithKeys("up", "k"))
-	keyDown = key.NewBinding(key.WithKeys("down", "j"))
-	keyQuit = key.NewBinding(key.WithKeys("q", "ctrl+c"))
-)
+// LoadedMsg carries the result of loading config.json.
+type LoadedMsg struct {
+	Hosts []domain.Host
+	Err   error
+}
+
+// ConnectedMsg carries an authenticated session, ready for tea.Exec.
+type ConnectedMsg struct {
+	attempt int
+	HostID  domain.ID
+	Label   string
+	Session app.Session
+}
+
+// ConnectFailedMsg reports a connection attempt that did not get a session.
+type ConnectFailedMsg struct {
+	attempt int
+	HostID  domain.ID
+	Label   string
+	Err     error
+}
+
+// SessionEndedMsg reports that an attached session returned the terminal.
+// Err is nil for exit status 0, a *session.ExitError, a
+// *session.DisconnectError, or another error.
+type SessionEndedMsg struct {
+	HostID domain.ID
+	Label  string
+	Err    error
+}
+
+// execFunc is tea.Exec; tests replace it.
+type execFunc func(tea.ExecCommand, tea.ExecCallback) tea.Cmd
 
 // Model is the root Bubble Tea model.
 type Model struct {
-	hosts  []domain.Host
-	cursor int
+	svc    app.Service
+	screen components.Screen // nil while loading
+	modals []components.Modal
+	status string
+	exec   execFunc
+
+	attempt int                // id of the latest connection attempt
+	cancel  context.CancelFunc // cancels the attempt in progress; nil if none
 }
 
-// New returns a model listing hosts.
-func New(hosts []domain.Host) Model {
-	return Model{hosts: hosts}
+// New returns the root model. It does no I/O; Init loads the config.
+func New(svc app.Service) Model {
+	return Model{svc: svc, exec: tea.Exec}
 }
 
 // Init implements tea.Model.
-func (m Model) Init() tea.Cmd { return nil }
+func (m Model) Init() tea.Cmd {
+	svc := m.svc
+	return func() tea.Msg {
+		hosts, err := svc.Load(context.Background())
+		return LoadedMsg{Hosts: hosts, Err: err}
+	}
+}
 
 // Update implements tea.Model.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if k, ok := msg.(tea.KeyPressMsg); ok {
-		switch {
-		case key.Matches(k, keyQuit):
+	switch msg := msg.(type) {
+	case tea.KeyPressMsg:
+		if key.Matches(msg, keys.ForceQuit) {
+			m.cancelAttempt()
 			return m, tea.Quit
-		case key.Matches(k, keyUp):
-			if m.cursor > 0 {
-				m.cursor--
-			}
-		case key.Matches(k, keyDown):
-			if m.cursor < len(m.hosts)-1 {
-				m.cursor++
-			}
 		}
+		if n := len(m.modals); n > 0 {
+			var cmd tea.Cmd
+			m.modals[n-1], cmd = m.modals[n-1].Update(msg)
+			return m, cmd
+		}
+		if m.screen == nil {
+			if key.Matches(msg, keys.Quit) {
+				return m, tea.Quit
+			}
+			return m, nil
+		}
+		var cmd tea.Cmd
+		m.screen, cmd = m.screen.Update(msg)
+		return m, cmd
+
+	case LoadedMsg:
+		m.screen = hostlist.New(msg.Hosts)
+		if msg.Err != nil {
+			m.status = "config: " + msg.Err.Error()
+		}
+		return m, nil
+
+	case hostlist.ConnectRequestMsg:
+		if m.cancel != nil {
+			return m, nil // one attempt at a time
+		}
+		return m.startConnect(msg.HostID, msg.Label)
+
+	case connecting.CancelMsg:
+		if m.cancel == nil {
+			return m, nil
+		}
+		m.cancelAttempt()
+		m.popModal()
+		m.status = "connection cancelled"
+		return m, nil
+
+	case ConnectedMsg:
+		if msg.attempt != m.attempt || m.cancel == nil {
+			// The user cancelled meanwhile: release the session off the
+			// Update goroutine.
+			s := msg.Session
+			return m, func() tea.Msg { _ = s.Close(); return nil }
+		}
+		m.cancelAttempt()
+		m.popModal()
+		m.status = ""
+		hostID, label := msg.HostID, msg.Label
+		return m, m.exec(msg.Session, func(err error) tea.Msg {
+			return SessionEndedMsg{HostID: hostID, Label: label, Err: err}
+		})
+
+	case ConnectFailedMsg:
+		if msg.attempt != m.attempt || m.cancel == nil {
+			return m, nil
+		}
+		m.cancelAttempt()
+		m.popModal()
+		m.status = msg.Label + ": " + msg.Err.Error()
+		return m, nil
+
+	case SessionEndedMsg:
+		m.status = endedStatus(msg.Label, msg.Err)
+		if l, ok := m.screen.(hostlist.Model); ok {
+			m.screen = l.Select(msg.HostID)
+		}
+		return m, nil
+	}
+
+	if m.screen != nil {
+		var cmd tea.Cmd
+		m.screen, cmd = m.screen.Update(msg)
+		return m, cmd
 	}
 	return m, nil
+}
+
+// startConnect pushes the Connecting modal and starts the connect command.
+func (m Model) startConnect(hostID domain.ID, label string) (tea.Model, tea.Cmd) {
+	ctx, cancel := context.WithCancel(context.Background())
+	m.attempt++
+	m.cancel = cancel
+	m.modals = append(m.modals, connecting.New(label))
+	m.status = ""
+	svc, attempt := m.svc, m.attempt
+	return m, func() tea.Msg {
+		s, err := svc.Connect(ctx, hostID)
+		if err != nil {
+			return ConnectFailedMsg{attempt: attempt, HostID: hostID, Label: label, Err: err}
+		}
+		return ConnectedMsg{attempt: attempt, HostID: hostID, Label: label, Session: s}
+	}
+}
+
+func (m *Model) cancelAttempt() {
+	if m.cancel != nil {
+		m.cancel()
+		m.cancel = nil
+	}
+}
+
+func (m *Model) popModal() {
+	if n := len(m.modals); n > 0 {
+		m.modals = m.modals[:n-1]
+	}
+}
+
+// endedStatus is the status-bar text after a session (FR-CONN-005), e.g.
+// "web-prod: exited (3)" or "web-prod: connection lost: <reason>".
+func endedStatus(label string, err error) string {
+	if err == nil {
+		return label + ": exited (0)"
+	}
+	return label + ": " + err.Error()
 }
 
 // View implements tea.Model.
@@ -65,36 +214,26 @@ func (m Model) View() tea.View {
 	var b strings.Builder
 	b.WriteString(titleStyle.Render("sshelf"))
 	b.WriteString("\n")
-
-	if len(m.hosts) == 0 {
-		b.WriteString(dimStyle.Render("No hosts yet."))
+	if m.screen == nil {
+		b.WriteString(dimStyle.Render("Loading…"))
+		b.WriteString("\n")
+	} else {
+		b.WriteString(m.screen.View())
+	}
+	for _, md := range m.modals {
+		b.WriteString("\n")
+		b.WriteString(md.View())
 		b.WriteString("\n")
 	}
-	for i, h := range m.hosts {
-		line := fmt.Sprintf("%-20s %s@%s", h.Label, h.User, address(h))
-		if i == m.cursor {
-			b.WriteString(selectedStyle.Render("> " + line))
-		} else {
-			b.WriteString("  " + line)
-		}
-		b.WriteString("\n")
-	}
-
 	b.WriteString("\n")
-	b.WriteString(dimStyle.Render("↑/↓ move • q quit"))
+	if m.status != "" {
+		b.WriteString(statusStyle.Render(m.status))
+		b.WriteString("\n")
+	}
+	b.WriteString(dimStyle.Render("↑/↓ move • enter connect • q quit"))
 	b.WriteString("\n")
 
 	v := tea.NewView(b.String())
 	v.AltScreen = true
 	return v
-}
-
-// address returns host:port with port 22 when unset. domain.Resolve replaces
-// it once groups and settings exist.
-func address(h domain.Host) string {
-	port := h.Port
-	if port == 0 {
-		port = 22
-	}
-	return net.JoinHostPort(h.Hostname, strconv.Itoa(port))
 }
