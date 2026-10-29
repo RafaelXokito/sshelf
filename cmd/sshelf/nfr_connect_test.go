@@ -4,6 +4,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"net"
 	"os"
@@ -32,27 +33,107 @@ func (stillTerm) MakeRaw() (func() error, error)     { return func() error { ret
 func (stillTerm) Size() (int, int, error)            { return 80, 24, nil }
 func (stillTerm) Resizes() (<-chan struct{}, func()) { return nil, func() {} }
 
-// loadModel runs the root model's Init (the startup load) and feeds the
-// result back, as Bubble Tea would.
-func loadModel(t *testing.T, svc app.Service) tea.Model {
+// startModel runs the root model's Init as Bubble Tea would. Since T-023,
+// Init returns a batch of the config load and the asynchronous
+// credential-store probe (D-101), so each command runs on its own goroutine
+// and its result is fed back in arrival order. startModel returns once
+// LoadedMsg has been handled, with a channel that yields the remaining
+// startup messages and is closed when every command has finished.
+func startModel(t *testing.T, svc app.Service) (tea.Model, <-chan tea.Msg) {
 	t.Helper()
 	var m tea.Model = ui.New(svc)
 	m, _ = m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
-	m, _ = m.Update(m.Init()())
+	var cmds []tea.Cmd
+	switch msg := m.Init()().(type) {
+	case tea.BatchMsg:
+		cmds = msg
+	default:
+		cmds = []tea.Cmd{func() tea.Msg { return msg }}
+	}
+	msgs := make(chan tea.Msg, len(cmds))
+	var wg sync.WaitGroup
+	for _, c := range cmds {
+		if c == nil {
+			continue
+		}
+		wg.Add(1)
+		go func() { defer wg.Done(); msgs <- c() }()
+	}
+	timeout := time.After(10 * time.Second)
+	for {
+		select {
+		case msg := <-msgs:
+			m, _ = m.Update(msg)
+			if _, ok := msg.(ui.LoadedMsg); ok {
+				rest := make(chan tea.Msg, len(cmds))
+				go func() {
+					wg.Wait()
+					close(msgs)
+					for msg := range msgs {
+						rest <- msg
+					}
+					close(rest)
+				}()
+				return m, rest
+			}
+		case <-timeout:
+			t.Fatal("startup load did not finish within 10 s")
+		}
+	}
+}
+
+// loadModel starts the root model and feeds back every startup message,
+// the credential-store probe result included.
+func loadModel(t *testing.T, svc app.Service) tea.Model {
+	t.Helper()
+	m, rest := startModel(t, svc)
+	for msg := range rest {
+		m, _ = m.Update(msg)
+	}
 	return m
+}
+
+// heldProbe is an app.Service whose credential-store probe does not return
+// until release is closed, standing in for a slow keychain.
+type heldProbe struct {
+	app.Service
+	release chan struct{}
+}
+
+func (h heldProbe) SecretsAvailable(ctx context.Context) error {
+	select {
+	case <-h.release:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	return h.Service.SecretsAvailable(ctx)
 }
 
 // TestNFR_PERF_001_NoSecretReadAtStartup starts the root model against the
 // 1,000-host fixture with a MemStore and checks that the host list shows
-// without any read from the credential store.
+// without any read from the credential store, and while the asynchronous
+// credential-store probe (D-101) is still outstanding.
 func TestNFR_PERF_001_NoSecretReadAtStartup(t *testing.T) {
 	home, xdg := t.TempDir(), t.TempDir()
 	first := writeFixture1k(t, xdg)
 	store := secrets.NewMemStore()
-	svc := app.New(app.Config{Dir: filepath.Join(xdg, "sshelf"), Secrets: store, Home: home, Terminal: stillTerm{}})
-	m := loadModel(t, svc)
+	svc := heldProbe{
+		Service: app.New(app.Config{Dir: filepath.Join(xdg, "sshelf"), Secrets: store, Home: home, Terminal: stillTerm{}}),
+		release: make(chan struct{}),
+	}
+	m, rest := startModel(t, svc)
 	if v := m.View().Content; !strings.Contains(v, first) {
-		t.Fatalf("host list lacks %s:\n%s", first, v)
+		t.Fatalf("host list lacks %s while the store probe is pending:\n%s", first, v)
+	}
+	close(svc.release)
+	for msg := range rest {
+		m, _ = m.Update(msg)
+	}
+	if v := m.View().Content; !strings.Contains(v, first) {
+		t.Fatalf("host list lacks %s after the store probe:\n%s", first, v)
+	}
+	if n := store.Calls(secrets.OpAvailable); n != 1 {
+		t.Errorf("%d store probes at startup, want 1", n)
 	}
 	if n := store.Calls(secrets.OpGet); n != 0 {
 		t.Fatalf("%d secret reads at startup, want 0", n)
