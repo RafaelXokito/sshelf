@@ -106,7 +106,7 @@ func Maps() []Map {
 		{Name: "form", Bindings: []key.Binding{NextField, PrevField, Save, Cancel, ForceQuit}},
 		{Name: "form text field", Bindings: textInput},
 		{Name: "form choice field", Bindings: []key.Binding{ChoicePrev, ChoiceNext}},
-		{Name: "import report", Bindings: []key.Binding{Back, ForceQuit}},
+		{Name: "import report", Bindings: []key.Binding{Back, Up, Down, ForceQuit}},
 		{Name: "load error", Bindings: []key.Binding{Quit, ForceQuit}},
 		{Name: "confirm", Bindings: []key.Binding{ConfirmYes, ConfirmNo, ForceQuit}},
 		{Name: "connecting", Bindings: []key.Binding{Cancel, ForceQuit}},

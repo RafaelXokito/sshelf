@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 
@@ -71,4 +72,34 @@ func TestFR_CFG_001_StartsWithoutConfigDir(t *testing.T) {
 		t.Fatalf("config dir mode %04o, want 0700", st.Mode().Perm())
 	}
 	s.quit()
+}
+
+// TestFR_IMPORT_001_E2EImportFromWelcome imports a fixture ~/.ssh/config
+// from the Welcome screen and lands on a populated host list.
+func TestFR_IMPORT_001_E2EImportFromWelcome(t *testing.T) {
+	const sshConfig = "Host web\n  HostName 10.0.0.10\n  User ubuntu\n  IdentityFile ~/.ssh/id_ed25519\n\n" +
+		"Host db\n  HostName db.example\n  Port 5432\n\nHost bastion\n  ProxyJump jump\n"
+	s := startFresh(t, func(home string) {
+		if err := os.Mkdir(filepath.Join(home, ".ssh"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(home, ".ssh", "config"), []byte(sshConfig), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	})
+	off := s.waitText(0, "Import from ~/.ssh/config")
+	s.typeKeys("I")
+	s.waitText(off, "Created 3 hosts and 1 identity.")
+	off = s.waitText(off, "bastion: ProxyJump")
+	s.typeKeys("\r")
+	s.waitText(off, "db db.example:5432")
+	s.waitText(off, "web ubuntu@10.0.0.10")
+	s.quit()
+	cfg, err := os.ReadFile(filepath.Join(s.cfgDir, "config.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(cfg), filepath.Join(s.home, ".ssh", "id_ed25519")) {
+		t.Fatalf("config.json lacks the key path:\n%s", cfg)
+	}
 }

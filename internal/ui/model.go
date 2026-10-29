@@ -25,6 +25,7 @@ import (
 	"github.com/RafaelXokito/sshelf/internal/ui/modals/tofu"
 	"github.com/RafaelXokito/sshelf/internal/ui/screens/hostedit"
 	"github.com/RafaelXokito/sshelf/internal/ui/screens/hostlist"
+	importscreen "github.com/RafaelXokito/sshelf/internal/ui/screens/import"
 	"github.com/RafaelXokito/sshelf/internal/ui/screens/loaderror"
 	"github.com/RafaelXokito/sshelf/internal/ui/screens/welcome"
 )
@@ -48,6 +49,12 @@ type HostSavedMsg struct{ Saved app.SavedHost }
 
 // HostSaveFailedMsg reports that a host was not saved.
 type HostSaveFailedMsg struct{ Err error }
+
+// ImportedMsg carries the result of importing ~/.ssh/config.
+type ImportedMsg struct{ Report app.ImportReport }
+
+// ImportFailedMsg reports that ~/.ssh/config could not be imported.
+type ImportFailedMsg struct{ Err error }
 
 // HostDeletedMsg reports that a host was deleted; Hosts are the rest.
 type HostDeletedMsg struct {
@@ -205,6 +212,34 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if _, ok := m.screen.(hostedit.Model); ok && m.prev != nil {
 			m.modals = nil
 			m.screen = m.sized(m.prev)
+		}
+		return m, nil
+
+	case hostlist.ImportMsg, welcome.ImportMsg:
+		svc := m.svc
+		m.status = "importing ~/.ssh/config…"
+		return m, func() tea.Msg {
+			rep, err := svc.ImportSSHConfig(context.Background())
+			if err != nil {
+				return ImportFailedMsg{Err: err}
+			}
+			return ImportedMsg{Report: rep}
+		}
+
+	case ImportedMsg:
+		m.identities = msg.Report.AllIdentities
+		m.modals = nil
+		m.status = ""
+		m.screen = m.sized(importscreen.New(msg.Report))
+		return m, nil
+
+	case ImportFailedMsg:
+		m.status = components.ErrorPrefix + "import failed: " + domain.Sanitize(msg.Err.Error())
+		return m, nil
+
+	case importscreen.DoneMsg:
+		if r, ok := m.screen.(importscreen.Model); ok {
+			m.screen = m.sized(hostsScreen(r.Report().AllHosts))
 		}
 		return m, nil
 

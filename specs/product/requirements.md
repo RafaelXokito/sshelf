@@ -815,7 +815,7 @@ Imports are a one-time copy. sshelf does not keep watching `~/.ssh/config`
 ### FR-IMPORT-001 · Import from `~/.ssh/config`
 When the user triggers import, the system shall create one host for each `Host` alias in `~/.ssh/config` that has no wildcard, mapping `HostName`, `User`, `Port` and `IdentityFile`, and linking hosts that share the same user and key files to a single identity.
 
-- **Priority:** MVP · **Status:** Draft · **Source:** Termius, sshs, lazyssh
+- **Priority:** MVP · **Status:** Implemented · **Source:** Termius, sshs, lazyssh
 - **Acceptance:**
   - `Host web` with `HostName 10.0.0.10`, `User ubuntu` and `IdentityFile ~/.ssh/id_ed25519` creates host `web` linked to an identity with user `ubuntu` and that key path.
   - An alias without `HostName` uses the alias as the hostname. `Host a b` creates hosts `a` and `b`.
@@ -833,7 +833,7 @@ When importing, the system shall follow `Include` directives and apply values fr
 ### FR-IMPORT-003 · Import report
 When an import finishes, the system shall show how many hosts and identities were created and list the aliases skipped because the label already exists and the directives not imported per host.
 
-- **Priority:** MVP · **Status:** Draft
+- **Priority:** MVP · **Status:** Implemented
 - **Acceptance:**
   - Importing the same file twice creates nothing the second time and reports every alias as skipped.
   - `Match`, `ProxyCommand`, `ProxyJump` and the `*Forward` directives are listed as "not imported" (`ProxyJump` and forwards are mapped in v1 by FR-IMPORT-005).
