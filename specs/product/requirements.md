@@ -476,7 +476,7 @@ The trust model and matching rules are defined in `SEC-HOSTKEY-*`.
 ### FR-KH-001 · Unknown host key prompt
 When a server presents a host key that is not trusted for that host and port, the system shall show the host, port, key type and SHA256 fingerprint and ask the user to choose "Trust and save" or "Cancel" before any credentials are sent.
 
-- **Priority:** MVP · **Status:** Draft
+- **Priority:** MVP · **Status:** Implemented
 - **Acceptance:**
   - The fingerprint format matches `ssh-keygen -lf`.
   - Enter and Esc both mean "Cancel", which aborts the connection. "Trust and save" connects and suppresses the prompt next time.
@@ -486,7 +486,7 @@ When a server presents a host key that is not trusted for that host and port, th
 ### FR-KH-002 · Changed host key
 If a server presents a host key that differs from a trusted key of the same type for that host and port, then the system shall abort the connection before authentication and show both fingerprints with a possible-attack warning.
 
-- **Priority:** MVP · **Status:** Draft · **Source:** SEC-HOSTKEY-005
+- **Priority:** MVP · **Status:** Implemented · **Source:** SEC-HOSTKEY-005
 - **Acceptance:**
   - No "connect anyway" option is offered.
   - The block screen shows the path and line number of the stale entry (in sshelf's `known_hosts`, or in `~/.ssh/known_hosts` when the old key is there) and tells the user how to remove it, as OpenSSH does (for example "delete line 12 of <path>" or `ssh-keygen -R <host> -f <path>`).
@@ -495,7 +495,7 @@ If a server presents a host key that differs from a trusted key of the same type
 ### FR-KH-003 · Trust OpenSSH known hosts
 The system shall treat host keys in `~/.ssh/known_hosts` as trusted, including hashed entries, `[host]:port` entries and comma-separated host patterns, and shall never modify that file.
 
-- **Priority:** MVP · **Status:** Draft · **Source:** D-102
+- **Priority:** MVP · **Status:** Implemented · **Source:** D-102
 - **Acceptance:**
   - A host present in `~/.ssh/known_hosts` under a hashed name connects with no prompt.
   - `~/.ssh/known_hosts` has the same checksum before and after any sshelf action.
@@ -504,7 +504,7 @@ The system shall treat host keys in `~/.ssh/known_hosts` as trusted, including h
 ### FR-KH-004 · sshelf known_hosts file
 When the user chooses "trust and save", the system shall append the key to sshelf's own `known_hosts` file in its config directory.
 
-- **Priority:** MVP · **Status:** Draft · **Source:** D-102
+- **Priority:** MVP · **Status:** Implemented · **Source:** D-102
 - **Acceptance:**
   - The trust survives a restart.
   - The file uses the OpenSSH format (`ssh-keygen -F <host> -f <file>` finds the entry).
@@ -941,7 +941,7 @@ The system shall keep its hosts, identities (without secrets), settings and `kno
 ### FR-CFG-002 · Durable writes
 When the user confirms a change, the system shall write it to disk before reporting it as saved, so that a crash leaves either the old or the new file contents.
 
-- **Priority:** MVP · **Status:** Draft · **Source:** ARCH-DATA-005, SEC-FILE-003 (atomic write)
+- **Priority:** MVP · **Status:** Implemented · **Source:** ARCH-DATA-005, SEC-FILE-003 (atomic write)
 - **Acceptance:**
   - After "Saved" is shown, a SIGKILL and restart still shows the change.
   - Killing the process during a write never leaves a truncated file.
@@ -949,7 +949,7 @@ When the user confirms a change, the system shall write it to disk before report
 ### FR-CFG-003 · Broken config file
 If a config file cannot be parsed, then the system shall show the file, line and problem, and shall not overwrite that file until the user fixes it.
 
-- **Priority:** MVP · **Status:** Draft
+- **Priority:** MVP · **Status:** Implemented
 - **Acceptance:**
   - A syntax error in `config.json` shows an error screen with the path and line number, and `q` quits. The file is byte-for-byte unchanged afterwards.
   - An unknown setting key produces a warning, and sshelf starts with the default for that setting.

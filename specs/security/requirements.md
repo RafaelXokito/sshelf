@@ -178,7 +178,7 @@ Priority: MVP · Status: Implemented · Threats: T-10, T-11
 **SEC-HOSTKEY-002: sshelf known_hosts file.**
 The system shall record accepted host keys in `known_hosts` in the sshelf config directory, in OpenSSH format,
 written atomically with mode 0600 (D-102).
-Priority: MVP · Status: Draft · Threats: T-10
+Priority: MVP · Status: Implemented · Threats: T-10
 - AC1: After "Trust and save", the file contains one parseable line (`knownhosts.New` accepts it), and
   `~/.ssh/known_hosts` is byte-identical to before.
 
@@ -187,21 +187,21 @@ The system shall also consult `~/.ssh/known_hosts` and `/etc/ssh/ssh_known_hosts
 `golang.org/x/crypto/ssh/knownhosts`, including plain and hashed host entries, `[host]:port` entries and `@revoked`
 markers, and shall never modify them.
 Note: `@cert-authority` support is SEC-HOSTKEY-011 (`Later`).
-Priority: MVP · Status: Draft · Threats: T-10, T-11
+Priority: MVP · Status: Implemented · Threats: T-10, T-11
 - AC1: A hashed fixture entry connects without a prompt.
 - AC2: A key marked `@revoked` fails even when sshelf's file trusts it, and the UI offers no trust action.
 
 **SEC-HOSTKEY-004: TOFU prompt.**
 When a server presents a host key that no source knows, the system shall show host, port, key type and SHA-256
 fingerprint and offer exactly two choices, "Trust and save" and "Cancel", where Enter and Esc both mean "Cancel".
-Priority: MVP · Status: Draft · Threats: T-10, T-8
+Priority: MVP · Status: Implemented · Threats: T-10, T-8
 - AC1: Model test: Enter and Esc on the initial prompt both cancel. The fingerprint equals
   `ssh.FingerprintSHA256(key)`. "Trust once" is v1 (FR-KH-007) and writes nothing.
 
 **SEC-HOSTKEY-005: Changed key is a hard failure.**
 If a server presents a key that differs from a stored key of the same type for that host, then the system shall
 abort before authentication, show both fingerprints, and offer no single-keystroke override.
-Priority: MVP · Status: Draft · Threats: T-11
+Priority: MVP · Status: Implemented · Threats: T-11
 - AC1: Connect returns `ErrHostKeyMismatch`, no auth callback fires, and the test server records zero auth
   attempts.
 - AC2: The block screen shows the path and line number of the stale entry and how to remove it. After the user
@@ -210,7 +210,7 @@ Priority: MVP · Status: Draft · Threats: T-11
 **SEC-HOSTKEY-007: No algorithm downgrade.**
 When keys are known for a host, the system shall restrict `ssh.ClientConfig.HostKeyAlgorithms` to the algorithms
 of those keys.
-Priority: MVP · Status: Draft · Threats: T-12
+Priority: MVP · Status: Implemented · Threats: T-12
 - AC1: With a stored ed25519 key, `HostKeyAlgorithms` contains only ed25519 algorithms. An RSA-only server fails
   without a TOFU prompt.
 
@@ -319,20 +319,20 @@ Priority: MVP · Status: Implemented · Threats: T-17
 **SEC-FILE-001: Modes.**
 The system shall create the config directory with mode 0700 and `config.json`, `known_hosts` and the log with
 mode 0600, independent of the umask.
-Priority: MVP · Status: Draft · Threats: T-5, T-2
+Priority: MVP · Status: Implemented · Threats: T-5, T-2
 - AC1: Under `umask 000`, `os.Stat` modes match.
 
 **SEC-FILE-002: Permission check.**
 If `config.json`, `known_hosts` or the config directory is accessible by group or others at startup, then the
 system shall restore modes 0600/0700 and show a one-line notice.
-Priority: MVP · Status: Draft · Threats: T-5
+Priority: MVP · Status: Implemented · Threats: T-5
 - AC1: A 0644 config ends up as 0600 after start, and the notice is shown once.
 
 **SEC-FILE-003: Atomic write.**
 When saving `config.json` or `known_hosts`, the system shall write a temp file in the same directory
 (`O_CREATE|O_EXCL`, 0600), `Sync` it, `rename` it over the target (resolving symlinks first), and `fsync` the
 directory.
-Priority: MVP · Status: Draft · Threats: T-18
+Priority: MVP · Status: Implemented · Threats: T-18
 - AC1: Fault injection at each step (through an `fs` fake) leaves the old or the new file, never a partial file.
 - AC2: A symlinked config stays a symlink, and the target is updated.
 

@@ -48,6 +48,8 @@ func (s *stubSession) Close() error        { s.closed.Store(true); return nil }
 // goroutine that runs Update (ARCH-UI-002).
 type fakeService struct {
 	hosts      []domain.Host
+	notices    []string
+	loadErr    error
 	connectErr error
 	session    *stubSession
 	updateGID  atomic.Uint64
@@ -62,9 +64,12 @@ func (f *fakeService) checkGoroutine(method string) {
 	}
 }
 
-func (f *fakeService) Load(context.Context) ([]domain.Host, error) {
+func (f *fakeService) Load(context.Context) (app.Loaded, error) {
 	f.checkGoroutine("Load")
-	return f.hosts, nil
+	if f.loadErr != nil {
+		return app.Loaded{}, f.loadErr
+	}
+	return app.Loaded{Hosts: f.hosts, Notices: f.notices}, nil
 }
 
 func (f *fakeService) Connect(_ context.Context, id domain.ID) (app.Session, error) {
@@ -293,6 +298,18 @@ func TestConnectingModalCancel(t *testing.T) {
 		t.Fatalf("view:\n%s", tm.View().Content)
 	}
 	close(block)
+}
+
+func TestSEC_FILE_002_NoticeInStatusBar(t *testing.T) {
+	notice := "permissions of config.json were too open; set to 0700/0600"
+	d := newDriver(t, &fakeService{hosts: testHosts, notices: []string{notice}, session: &stubSession{}})
+	if v := d.view(); !strings.Contains(v, notice) {
+		t.Fatalf("view lacks the notice:\n%s", v)
+	}
+	connectSecond(d)
+	if v := d.view(); strings.Contains(v, notice) {
+		t.Fatalf("notice still shown after the next action:\n%s", v)
+	}
 }
 
 // blockingService's Connect waits for its context to end.

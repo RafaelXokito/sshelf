@@ -57,7 +57,7 @@ func sliceFixture(t *testing.T, authorize bool) (*App, *sshtest.Server) {
 		t.Fatal(err)
 	}
 	a := New(Config{
-		ConfigPath:      filepath.Join(dir, "config.json"),
+		Dir:             dir,
 		KnownHostsFiles: []string{kh},
 		Creds:           KeyFileSource{Home: home},
 		Terminal:        stillTerm{},
@@ -67,11 +67,11 @@ func sliceFixture(t *testing.T, authorize bool) (*App, *sshtest.Server) {
 
 func TestFR_CONN_001_ServiceConnectsKeyFileHost(t *testing.T) {
 	a, srv := sliceFixture(t, true)
-	hosts, err := a.Load(context.Background())
+	l, err := a.Load(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(hosts) != 2 || hosts[0].Label != "web-prod" || hosts[1].Label != "zeta" {
+	if hosts := l.Hosts; len(hosts) != 2 || hosts[0].Label != "web-prod" || hosts[1].Label != "zeta" {
 		t.Fatalf("hosts = %+v, want sorted by label", hosts)
 	}
 	s, err := a.Connect(context.Background(), "h1")
@@ -105,14 +105,15 @@ func TestARCH_SESS_002_AuthFailureReturnsNoSession(t *testing.T) {
 }
 
 func TestConnectUnknownHost(t *testing.T) {
-	a := New(Config{ConfigPath: filepath.Join(t.TempDir(), "config.json"), Terminal: stillTerm{}})
+	a := New(Config{Dir: t.TempDir(), Terminal: stillTerm{}})
 	if _, err := a.Load(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := a.Connect(context.Background(), "nope"); !errors.Is(err, ErrHostNotFound) {
 		t.Fatalf("err = %v", err)
 	}
-	if _, ok := any(a.cfg.Prompter).(sshclient.RejectUnknownHosts); !ok {
-		t.Fatal("default prompter is not RejectUnknownHosts")
+	// Without SetSend an unknown host key is rejected without a prompt.
+	if trust, err := a.HostKey(context.Background(), sshclient.HostKeyPrompt{Address: "h:22"}); trust || err != nil {
+		t.Fatalf("HostKey without SetSend = %v, %v", trust, err)
 	}
 }

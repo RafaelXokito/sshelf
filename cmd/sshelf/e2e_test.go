@@ -126,6 +126,8 @@ type slice struct {
 	exited  chan struct{} // closed once the process has exited
 	exitErr error
 	before  string // stty -a before launch
+	cfgDir  string // sshelf config dir (XDG_CONFIG_HOME/sshelf)
+	home    string // HOME
 }
 
 func stty(t *testing.T, tty *os.File) string {
@@ -181,7 +183,7 @@ func startSlice(t *testing.T) *slice {
 	if err := pty.Setsize(master, &pty.Winsize{Cols: 80, Rows: 24}); err != nil {
 		t.Fatal(err)
 	}
-	s := &slice{t: t, srv: srv, master: master, tty: tty, out: &syncBuffer{}, exited: make(chan struct{})}
+	s := &slice{t: t, srv: srv, master: master, tty: tty, out: &syncBuffer{}, exited: make(chan struct{}), cfgDir: cfgDir, home: home}
 	s.before = stty(t, tty)
 
 	drained := make(chan struct{})

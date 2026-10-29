@@ -64,18 +64,20 @@ func run(args []string) int {
 		return 1
 	}
 
-	dir, err := paths.ConfigDir()
+	dirs, err := paths.Resolve("")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "sshelf:", err)
 		return 1
 	}
 	home, _ := os.UserHomeDir() // "" skips ~/.ssh/known_hosts
 	svc := app.New(app.Config{
-		ConfigPath:      paths.ConfigFile(dir),
-		KnownHostsFiles: paths.KnownHostsFiles(dir, home),
+		Dir:             dirs.Config,
+		KnownHostsFiles: paths.KnownHostsFiles(dirs.Config, home),
 	})
 
-	if _, err := tea.NewProgram(ui.New(svc)).Run(); err != nil {
+	p := tea.NewProgram(ui.New(svc))
+	svc.SetSend(func(msg any) { p.Send(msg) }) // prompts reach the UI (design §8.3)
+	if _, err := p.Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "sshelf:", err)
 		return 1
 	}

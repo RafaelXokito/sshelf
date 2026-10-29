@@ -5,6 +5,8 @@ package ui
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strings"
 
 	"charm.land/bubbles/v2/key"
@@ -16,7 +18,10 @@ import (
 	"github.com/RafaelXokito/sshelf/internal/ui/components"
 	"github.com/RafaelXokito/sshelf/internal/ui/keys"
 	"github.com/RafaelXokito/sshelf/internal/ui/modals/connecting"
+	"github.com/RafaelXokito/sshelf/internal/ui/modals/keychanged"
+	"github.com/RafaelXokito/sshelf/internal/ui/modals/tofu"
 	"github.com/RafaelXokito/sshelf/internal/ui/screens/hostlist"
+	"github.com/RafaelXokito/sshelf/internal/ui/screens/loaderror"
 )
 
 var (
@@ -27,8 +32,9 @@ var (
 
 // LoadedMsg carries the result of loading config.json.
 type LoadedMsg struct {
-	Hosts []domain.Host
-	Err   error
+	Hosts   []domain.Host
+	Notices []string // shown once in the status bar
+	Err     error
 }
 
 // ConnectedMsg carries an authenticated session, ready for tea.Exec.
@@ -80,8 +86,8 @@ func New(svc app.Service) Model {
 func (m Model) Init() tea.Cmd {
 	svc := m.svc
 	return func() tea.Msg {
-		hosts, err := svc.Load(context.Background())
-		return LoadedMsg{Hosts: hosts, Err: err}
+		l, err := svc.Load(context.Background())
+		return LoadedMsg{Hosts: l.Hosts, Notices: l.Notices, Err: err}
 	}
 }
 
@@ -109,10 +115,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case LoadedMsg:
-		m.screen = hostlist.New(msg.Hosts)
+		m.status = strings.Join(msg.Notices, "; ")
 		if msg.Err != nil {
-			m.status = "config: " + msg.Err.Error()
+			le, ok := errors.AsType[*app.LoadError](msg.Err)
+			if !ok {
+				le = &app.LoadError{Path: "config.json", Problem: msg.Err.Error(), Err: msg.Err}
+			}
+			m.screen = loaderror.New(le)
+			return m, nil
 		}
+		m.screen = hostlist.New(msg.Hosts)
 		return m, nil
 
 	case hostlist.ConnectRequestMsg:
@@ -126,8 +138,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.cancelAttempt()
-		m.popModal()
+		m.modals = nil
 		m.status = "connection cancelled"
+		return m, nil
+
+	case app.HostKeyPromptMsg:
+		if m.cancel == nil {
+			msg.Answer(false) // the attempt is already over
+			return m, nil
+		}
+		m.modals = append(m.modals, tofu.New(msg))
+		return m, nil
+
+	case tofu.DoneMsg:
+		// The connection goes on (trusted) or fails with
+		// ErrHostKeyRejected; Connecting stays up until then.
+		m.popModal()
 		return m, nil
 
 	case ConnectedMsg:
@@ -138,7 +164,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, func() tea.Msg { _ = s.Close(); return nil }
 		}
 		m.cancelAttempt()
-		m.popModal()
+		m.modals = nil
 		m.status = ""
 		hostID, label := msg.HostID, msg.Label
 		return m, m.exec(msg.Session, func(err error) tea.Msg {
@@ -150,8 +176,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.cancelAttempt()
+		m.modals = nil
+		m.status = failedStatus(msg.Label, msg.Err)
+		if me, ok := errors.AsType[*app.HostKeyMismatchError](msg.Err); ok {
+			m.modals = append(m.modals, keychanged.New(msg.Label, me))
+		}
+		return m, nil
+
+	case keychanged.CloseMsg:
 		m.popModal()
-		m.status = msg.Label + ": " + msg.Err.Error()
 		return m, nil
 
 	case SessionEndedMsg:
@@ -200,6 +233,20 @@ func (m *Model) popModal() {
 	}
 }
 
+// failedStatus is the status-bar text after a connection attempt failed.
+func failedStatus(label string, err error) string {
+	if errors.Is(err, app.ErrHostKeyRejected) {
+		return label + ": host key not trusted; connection cancelled"
+	}
+	if errors.Is(err, app.ErrHostKeyMismatch) {
+		return label + ": host key changed; connection blocked"
+	}
+	if re, ok := errors.AsType[*app.HostKeyRevokedError](err); ok {
+		return fmt.Sprintf("%s: host key revoked (%s line %d); connection refused", label, re.Entry.File, re.Entry.Line)
+	}
+	return label + ": " + err.Error()
+}
+
 // endedStatus is the status-bar text after a session (FR-CONN-005), e.g.
 // "web-prod: exited (3)" or "web-prod: connection lost: <reason>".
 func endedStatus(label string, err error) string {
@@ -230,8 +277,10 @@ func (m Model) View() tea.View {
 		b.WriteString(statusStyle.Render(m.status))
 		b.WriteString("\n")
 	}
-	b.WriteString(dimStyle.Render("↑/↓ move • enter connect • q quit"))
-	b.WriteString("\n")
+	if _, ok := m.screen.(hostlist.Model); ok {
+		b.WriteString(dimStyle.Render("↑/↓ move • enter connect • q quit"))
+		b.WriteString("\n")
+	}
 
 	v := tea.NewView(b.String())
 	v.AltScreen = true
