@@ -1,0 +1,207 @@
+{
+  "a": {
+    "hostname": "a.internal.example",
+    "user": "fallback",
+    "port": "22",
+    "identityfile": [
+      "~/.ssh/id_rsa",
+      "~/.ssh/id_ecdsa",
+      "~/.ssh/id_ecdsa_sk",
+      "~/.ssh/id_ed25519",
+      "~/.ssh/id_ed25519_sk"
+    ]
+  },
+  "aws-01": {
+    "hostname": "aws-01",
+    "user": "ubuntu",
+    "port": "22",
+    "identityfile": [
+      "~/.ssh/aws.pem"
+    ]
+  },
+  "aws-02": {
+    "hostname": "aws-02",
+    "user": "ubuntu",
+    "port": "22",
+    "identityfile": [
+      "~/.ssh/aws.pem"
+    ]
+  },
+  "aws-03": {
+    "hostname": "aws-03",
+    "user": "ubuntu",
+    "port": "22",
+    "identityfile": [
+      "~/.ssh/aws.pem"
+    ]
+  },
+  "aws-04": {
+    "hostname": "aws-04",
+    "user": "ubuntu",
+    "port": "22",
+    "identityfile": [
+      "~/.ssh/aws.pem"
+    ]
+  },
+  "aws-05": {
+    "hostname": "aws-05",
+    "user": "ubuntu",
+    "port": "22",
+    "identityfile": [
+      "~/.ssh/aws.pem"
+    ]
+  },
+  "aws-06": {
+    "hostname": "aws-06",
+    "user": "ubuntu",
+    "port": "22",
+    "identityfile": [
+      "~/.ssh/aws.pem"
+    ]
+  },
+  "aws-07": {
+    "hostname": "aws-07",
+    "user": "ubuntu",
+    "port": "22",
+    "identityfile": [
+      "~/.ssh/aws.pem"
+    ]
+  },
+  "aws-08": {
+    "hostname": "aws-08",
+    "user": "ubuntu",
+    "port": "22",
+    "identityfile": [
+      "~/.ssh/aws.pem"
+    ]
+  },
+  "aws-09": {
+    "hostname": "aws-09",
+    "user": "ubuntu",
+    "port": "22",
+    "identityfile": [
+      "~/.ssh/aws.pem"
+    ]
+  },
+  "aws-10": {
+    "hostname": "aws-10",
+    "user": "ubuntu",
+    "port": "22",
+    "identityfile": [
+      "~/.ssh/aws.pem"
+    ]
+  },
+  "b": {
+    "hostname": "b.internal.example",
+    "user": "fallback",
+    "port": "22",
+    "identityfile": [
+      "~/.ssh/id_rsa",
+      "~/.ssh/id_ecdsa",
+      "~/.ssh/id_ecdsa_sk",
+      "~/.ssh/id_ed25519",
+      "~/.ssh/id_ed25519_sk"
+    ]
+  },
+  "bastion": {
+    "hostname": "bastion.example",
+    "user": "fallback",
+    "port": "22",
+    "identityfile": [
+      "~/.ssh/id_rsa",
+      "~/.ssh/id_ecdsa",
+      "~/.ssh/id_ecdsa_sk",
+      "~/.ssh/id_ed25519",
+      "~/.ssh/id_ed25519_sk"
+    ]
+  },
+  "cond": {
+    "hostname": "cond.example",
+    "user": "cond-user",
+    "port": "22",
+    "identityfile": [
+      "~/.ssh/id_rsa",
+      "~/.ssh/id_ecdsa",
+      "~/.ssh/id_ecdsa_sk",
+      "~/.ssh/id_ed25519",
+      "~/.ssh/id_ed25519_sk"
+    ]
+  },
+  "db": {
+    "hostname": "db.example",
+    "user": "postgres",
+    "port": "7000",
+    "identityfile": [
+      "~/.ssh/k_%r_%p_%h_%n",
+      "~/.ssh/second"
+    ]
+  },
+  "deep": {
+    "hostname": "deep.example",
+    "user": "deep-user",
+    "port": "22",
+    "identityfile": [
+      "~/.ssh/id_rsa",
+      "~/.ssh/id_ecdsa",
+      "~/.ssh/id_ecdsa_sk",
+      "~/.ssh/id_ed25519",
+      "~/.ssh/id_ed25519_sk"
+    ]
+  },
+  "plain": {
+    "hostname": "plain",
+    "user": "fallback",
+    "port": "22",
+    "identityfile": [
+      "~/.ssh/id_rsa",
+      "~/.ssh/id_ecdsa",
+      "~/.ssh/id_ecdsa_sk",
+      "~/.ssh/id_ed25519",
+      "~/.ssh/id_ed25519_sk"
+    ]
+  },
+  "prod-app": {
+    "hostname": "prod-app",
+    "user": "prod",
+    "port": "2201",
+    "identityfile": [
+      "~/.ssh/id_rsa",
+      "~/.ssh/id_ecdsa",
+      "~/.ssh/id_ecdsa_sk",
+      "~/.ssh/id_ed25519",
+      "~/.ssh/id_ed25519_sk"
+    ]
+  },
+  "prod-secret": {
+    "hostname": "prod-secret",
+    "user": "fallback",
+    "port": "22",
+    "identityfile": [
+      "~/.ssh/id_rsa",
+      "~/.ssh/id_ecdsa",
+      "~/.ssh/id_ecdsa_sk",
+      "~/.ssh/id_ed25519",
+      "~/.ssh/id_ed25519_sk"
+    ]
+  },
+  "team1": {
+    "hostname": "team1.example",
+    "user": "team",
+    "port": "22",
+    "identityfile": [
+      "~/.ssh/id_rsa",
+      "~/.ssh/id_ecdsa",
+      "~/.ssh/id_ecdsa_sk",
+      "~/.ssh/id_ed25519",
+      "~/.ssh/id_ed25519_sk"
+    ]
+  },
+  "web": {
+    "hostname": "10.0.0.10",
+    "user": "ubuntu",
+    "port": "22",
+    "identityfile": [
+      "~/.ssh/id_ed25519"
+    ]
+  }
+}
