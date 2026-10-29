@@ -302,7 +302,7 @@ Where an identity has a private key, the system shall take it either from a refe
 ### FR-IDENT-004 · Never show secrets
 The system shall never display a stored password, passphrase or private key in any view, log or error message.
 
-- **Priority:** MVP · **Status:** Draft · **Source:** SEC-LOG-005
+- **Priority:** MVP · **Status:** Implemented · **Source:** SEC-LOG-005
 - **Acceptance:**
   - Each secret field in the identity form shows "(set)" or "(not set)", never the value or its length.
   - Grepping the debug log after a password login finds no occurrence of the password.

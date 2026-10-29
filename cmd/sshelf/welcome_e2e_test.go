@@ -18,9 +18,21 @@ import (
 // directory. setup, when not nil, prepares HOME first.
 func startFresh(t *testing.T, setup func(home string)) *slice {
 	t.Helper()
+	var setupDirs func(home, xdg string)
+	if setup != nil {
+		setupDirs = func(home, _ string) { setup(home) }
+	}
+	return startFreshBin(t, sshelfBinary(t), setupDirs)
+}
+
+// startFreshBin is startFresh for bin, with env added to sshelf's minimal
+// environment. setup, when not nil, prepares HOME and XDG_CONFIG_HOME
+// first.
+func startFreshBin(t *testing.T, bin string, setup func(home, xdg string), env ...string) *slice {
+	t.Helper()
 	home, xdg := t.TempDir(), t.TempDir()
 	if setup != nil {
-		setup(home)
+		setup(home, xdg)
 	}
 	master, tty, err := pty.Open()
 	if err != nil {
@@ -29,14 +41,18 @@ func startFresh(t *testing.T, setup func(home string)) *slice {
 	if err := pty.Setsize(master, &pty.Winsize{Cols: 80, Rows: 24}); err != nil {
 		t.Fatal(err)
 	}
-	s := &slice{t: t, master: master, tty: tty, out: &syncBuffer{}, exited: make(chan struct{}), cfgDir: filepath.Join(xdg, "sshelf"), home: home}
+	s := &slice{t: t, master: master, tty: tty, out: &syncBuffer{}, exited: make(chan struct{}), cfgDir: filepath.Join(xdg, "sshelf"), home: home, state: stateDir(home)}
+	if _, err := exec.LookPath("stty"); err == nil {
+		s.before = stty(t, tty) // for checkCrash
+	}
 	drained := make(chan struct{})
 	go func() {
 		defer close(drained)
 		_, _ = io.Copy(s.out, master)
 	}()
-	s.cmd = exec.Command(sshelfBinary(t)) //nolint:gosec // the binary this test just built
+	s.cmd = exec.Command(bin) //nolint:gosec // a binary this test run built
 	s.cmd.Env = []string{"HOME=" + home, "XDG_CONFIG_HOME=" + xdg, "TERM=xterm-256color", "PATH=" + os.Getenv("PATH")}
+	s.cmd.Env = append(s.cmd.Env, env...)
 	s.cmd.Stdin, s.cmd.Stdout, s.cmd.Stderr = tty, tty, tty
 	s.cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	if err := s.cmd.Start(); err != nil {
