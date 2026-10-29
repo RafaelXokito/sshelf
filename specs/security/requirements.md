@@ -248,7 +248,7 @@ Priority: v1 · Status: Draft · Threats: T-13
 **SEC-MEM-001: Secret type.**
 The system shall carry secrets inside sshelf as `secrets.Secret` (a `[]byte` wrapper with `Destroy()`), never as a
 Go `string` beyond the boundary of the keyring library.
-Priority: MVP · Status: Draft · Threats: T-4, T-17
+Priority: MVP · Status: Implemented · Threats: T-4, T-17
 - AC1: `Destroy()` zeroes the backing array (an alias-slice assertion).
 - AC2: `go vet`-style check: no exported `secrets` function returns `string` secrets.
 - Note: the recommended keyring library's API is `string`-based, so one immutable copy per get or set is
@@ -288,7 +288,7 @@ Priority: MVP · Status: Draft · Threats: T-17
 **SEC-LOG-002: Redaction.**
 The system shall render `secrets.Secret` as `[REDACTED]` in `fmt` (`%s %v %+v %#v %q`), `encoding/json` and
 `log/slog`.
-Priority: MVP · Status: Draft · Threats: T-17
+Priority: MVP · Status: Implemented · Threats: T-17
 - AC1: A table test over every formatter.
 
 **SEC-LOG-003: Logging off by default.**
