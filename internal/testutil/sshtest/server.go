@@ -190,6 +190,12 @@ func (s *Server) serverConfig() *ssh.ServerConfig {
 			s.attempts = append(s.attempts, AuthAttempt{
 				Conn: connNumber(md), User: md.User(), Method: method, Success: err == nil,
 			})
+			// Recorded here rather than after NewServerConn returns: this
+			// callback runs before the server sends auth success, so the
+			// version is visible as soon as the client's dial returns.
+			if err == nil {
+				s.versions = append(s.versions, string(md.ClientVersion()))
+			}
 		},
 	}
 	if len(s.passwords) > 0 {
@@ -309,9 +315,6 @@ func (s *Server) serveConn(c numberedConn) {
 		return
 	}
 	defer func() { _ = sc.Close() }()
-	s.mu.Lock()
-	s.versions = append(s.versions, string(sc.ClientVersion()))
-	s.mu.Unlock()
 
 	var wg sync.WaitGroup
 	wg.Add(1)
