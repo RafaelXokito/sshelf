@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/zalando/go-keyring"
+	"go.uber.org/goleak"
 
 	"github.com/RafaelXokito/sshelf/internal/testutil"
 )
@@ -19,7 +20,10 @@ import (
 // gets injected functions. Real-store tests are in
 // osstore_integration_test.go behind the integration_keyring build tag.
 
-func TestMain(m *testing.M) { testutil.VerifyTestMain(m) }
+// leakOptions is extended by the integration_keyring build only.
+var leakOptions []goleak.Option
+
+func TestMain(m *testing.M) { testutil.VerifyTestMain(m, leakOptions...) }
 
 const testService = "sshelf-test-unit"
 

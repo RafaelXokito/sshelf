@@ -19,7 +19,18 @@ import (
 	"testing"
 
 	"github.com/zalando/go-keyring"
+	"go.uber.org/goleak"
 )
+
+// On Linux, go-keyring uses godbus's process-wide shared session-bus
+// connection (dbus.SessionBus), which is never closed and keeps two
+// goroutines alive for the life of the process. They are not sshelf leaks.
+func init() {
+	leakOptions = append(leakOptions,
+		goleak.IgnoreAnyFunction("github.com/godbus/dbus/v5.newConn.func1"),
+		goleak.IgnoreAnyFunction("github.com/godbus/dbus/v5.(*Conn).inWorker"),
+	)
+}
 
 func requireKeyringCI(t *testing.T) {
 	t.Helper()

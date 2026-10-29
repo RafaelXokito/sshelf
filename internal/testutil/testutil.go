@@ -12,6 +12,9 @@ import (
 // starts goroutines calls it from TestMain:
 //
 //	func TestMain(m *testing.M) { testutil.VerifyTestMain(m) }
-func VerifyTestMain(m *testing.M) {
-	goleak.VerifyTestMain(m)
+//
+// opts are passed to goleak, for example to ignore a dependency's
+// long-lived goroutines.
+func VerifyTestMain(m *testing.M, opts ...goleak.Option) {
+	goleak.VerifyTestMain(m, opts...)
 }

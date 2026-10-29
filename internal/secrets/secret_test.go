@@ -11,6 +11,7 @@ import (
 	"go/types"
 	"log/slog"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -173,11 +174,18 @@ func TestSEC_LOG_002_RedactedEveryFormatter(t *testing.T) {
 		outputs["slog "+h.name] = buf.String()
 	}
 
+	// decimalBytes is how fmt prints the raw []byte, e.g. "[99 97 110 ...]".
+	nums := make([]string, len(canary))
+	for i := range len(canary) {
+		nums[i] = strconv.Itoa(int(canary[i]))
+	}
+	decimalBytes := "[" + strings.Join(nums, " ") + "]"
+
 	for name, out := range outputs {
 		if strings.Contains(out, canary) {
 			t.Errorf("%s leaks the secret: %s", name, out)
 		}
-		if strings.Contains(out, fmt.Sprint([]byte(canary))) || strings.Contains(out, fmt.Sprintf("%x", canary)) {
+		if strings.Contains(out, decimalBytes) || strings.Contains(out, fmt.Sprintf("%x", canary)) {
 			t.Errorf("%s leaks the secret bytes: %s", name, out)
 		}
 		if !strings.Contains(name, "%T") && !strings.Contains(out, redacted) {

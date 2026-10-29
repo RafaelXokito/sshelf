@@ -117,7 +117,7 @@ func (c *Config) parseFile(path string, data []byte, depth int) (*file, error) {
 // an error, as in OpenSSH.
 func (c *Config) include(args []string, depth int) ([]*file, error) {
 	if depth+1 > maxIncludeDepth {
-		return nil, fmt.Errorf("Include nested more than %d levels (cycle?)", maxIncludeDepth)
+		return nil, fmt.Errorf("include nested more than %d levels (cycle?)", maxIncludeDepth)
 	}
 	var files []*file
 	for _, arg := range args {
@@ -127,7 +127,7 @@ func (c *Config) include(args []string, depth int) ([]*file, error) {
 		}
 		paths, err := filepath.Glob(pattern)
 		if err != nil {
-			return nil, fmt.Errorf("Include %q: %w", arg, err)
+			return nil, fmt.Errorf("include %q: %w", arg, err)
 		}
 		for _, p := range paths {
 			if fi, err := os.Stat(p); err != nil || !fi.Mode().IsRegular() {

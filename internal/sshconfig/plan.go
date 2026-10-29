@@ -35,10 +35,10 @@ type HostPlan struct {
 
 // Unsupported entries that are not plain keywords.
 const (
-	unsupportedMatch        = "Match"
-	unsupportedExtraKeys    = "IdentityFile (only the first is imported)"
-	unsupportedInvalidPort  = "Port (invalid value)"
-	unsupportedUnknownToken = "IdentityFile (unknown % token)"
+	unsupportedMatch          = "Match"
+	unsupportedExtraKeys      = "IdentityFile (only the first is imported)"
+	unsupportedInvalidPort    = "Port (invalid value)"
+	unsupportedUnknownPercent = "IdentityFile (unknown % token)"
 )
 
 // Plan builds the import plan: one host per concrete alias, in the order the
@@ -77,7 +77,7 @@ func (c *Config) Plan() Plan {
 		if len(r.IdentityFiles) > 0 {
 			keyPath, ok := c.expandIdentityFile(r.IdentityFiles[0], a.alias, h)
 			if !ok {
-				hp.Host.Import.Unsupported = append(hp.Host.Import.Unsupported, unsupportedUnknownToken)
+				hp.Host.Import.Unsupported = append(hp.Host.Import.Unsupported, unsupportedUnknownPercent)
 			}
 			if len(r.IdentityFiles) > 1 {
 				hp.Host.Import.Unsupported = append(hp.Host.Import.Unsupported, unsupportedExtraKeys)
