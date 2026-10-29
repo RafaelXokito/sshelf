@@ -1,0 +1,16 @@
+# Binaries
+/sshelf
+/bin/
+/dist/
+*.exe
+*.test
+*.out
+
+# Local vault / config never committed
+*.vault
+.env
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
