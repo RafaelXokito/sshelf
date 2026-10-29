@@ -1,0 +1,205 @@
+package identities
+
+import (
+	"strconv"
+	"strings"
+
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+
+	"github.com/RafaelXokito/sshelf/internal/app"
+	"github.com/RafaelXokito/sshelf/internal/domain"
+	"github.com/RafaelXokito/sshelf/internal/ui/components"
+	"github.com/RafaelXokito/sshelf/internal/ui/keys"
+	"github.com/RafaelXokito/sshelf/internal/ui/modals/confirm"
+)
+
+var (
+	titleStyle    = lipgloss.NewStyle().Bold(true)
+	selectedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("212")).Bold(true)
+	dimStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+)
+
+// AddMsg asks the root model to open the identity form for a new identity.
+type AddMsg struct{}
+
+// EditMsg asks the root model to open the identity form for Info.
+type EditMsg struct{ Info app.IdentityInfo }
+
+// DeleteMsg asks the root model to delete the identity with ID, after the
+// user confirmed.
+type DeleteMsg struct {
+	ID    domain.ID
+	Label string
+}
+
+// BackMsg asks the root model to return to the host list.
+type BackMsg struct{}
+
+// Model is the identities view.
+type Model struct {
+	list    []app.IdentityInfo
+	cursor  int
+	loading bool
+}
+
+// Loading returns the view while the identities are being read.
+func Loading() Model { return Model{loading: true} }
+
+// New returns the view of list, already without hidden identities, with
+// the first one selected.
+func New(list []app.IdentityInfo) Model { return Model{list: list} }
+
+// IsLoading reports whether the view waits for its identities.
+func (m Model) IsLoading() bool { return m.loading }
+
+// List returns the listed identities. The caller must not modify them.
+func (m Model) List() []app.IdentityInfo { return m.list }
+
+// Selected returns the identity under the cursor.
+func (m Model) Selected() (app.IdentityInfo, bool) {
+	if m.cursor < 0 || m.cursor >= len(m.list) {
+		return app.IdentityInfo{}, false
+	}
+	return m.list[m.cursor], true
+}
+
+// Select moves the cursor to the identity with id, if it is listed.
+func (m Model) Select(id domain.ID) Model {
+	for i, info := range m.list {
+		if info.Identity.ID == id {
+			m.cursor = i
+		}
+	}
+	return m
+}
+
+// Update implements components.Screen.
+func (m Model) Update(msg tea.Msg) (components.Screen, tea.Cmd) {
+	k, ok := msg.(tea.KeyPressMsg)
+	if !ok {
+		return m, nil
+	}
+	switch {
+	case key.Matches(k, keys.BackToHosts):
+		return m, func() tea.Msg { return BackMsg{} }
+	case m.loading:
+	case key.Matches(k, keys.Up):
+		if m.cursor > 0 {
+			m.cursor--
+		}
+	case key.Matches(k, keys.Down):
+		if m.cursor < len(m.list)-1 {
+			m.cursor++
+		}
+	case key.Matches(k, keys.AddIdentity):
+		return m, func() tea.Msg { return AddMsg{} }
+	case key.Matches(k, keys.EditIdentity):
+		if info, ok := m.Selected(); ok {
+			return m, func() tea.Msg { return EditMsg{Info: info} }
+		}
+	case key.Matches(k, keys.DeleteIdentity):
+		if info, ok := m.Selected(); ok {
+			ask := confirm.New(DeleteQuestion(info), DeleteMsg{ID: info.Identity.ID, Label: info.Identity.Label})
+			return m, func() tea.Msg { return components.ShowModalMsg{Modal: ask} }
+		}
+	}
+	return m, nil
+}
+
+// View implements components.Screen.
+func (m Model) View() string {
+	var b strings.Builder
+	b.WriteString(titleStyle.Render("Identities") + "\n\n")
+	switch {
+	case m.loading:
+		b.WriteString(dimStyle.Render("Loading…") + "\n")
+	case len(m.list) == 0:
+		b.WriteString(dimStyle.Render("No identities yet.") + "\n")
+	default:
+		for i, info := range m.list {
+			line := Line(info)
+			if i == m.cursor {
+				b.WriteString(selectedStyle.Render("> " + line))
+			} else {
+				b.WriteString("  " + line)
+			}
+			b.WriteString("\n")
+		}
+		if info, ok := m.Selected(); ok {
+			b.WriteString("\n" + Details(info))
+		}
+	}
+	b.WriteString("\n" + components.Help(keys.Up, keys.Down, keys.AddIdentity, keys.EditIdentity, keys.DeleteIdentity, keys.BackToHosts) + "\n")
+	return b.String()
+}
+
+// DeleteQuestion is the delete confirmation, which states how many hosts
+// will be unlinked (FR-IDENT-001), e.g. "Delete identity ops and its
+// stored secrets? 2 linked hosts will be unlinked."
+func DeleteQuestion(info app.IdentityInfo) string {
+	q := "Delete identity " + domain.Sanitize(info.Identity.Label) + " and its secrets? "
+	switch info.LinkedHosts {
+	case 0:
+		return q + "No hosts use it."
+	case 1:
+		return q + "1 linked host will be unlinked."
+	}
+	return q + strconv.Itoa(info.LinkedHosts) + " linked hosts will be unlinked."
+}
+
+// Line renders one identity: its name, username and number of hosts.
+func Line(info app.IdentityInfo) string {
+	id := info.Identity
+	user := id.Username
+	if user == "" {
+		user = "-"
+	}
+	hosts := strconv.Itoa(info.LinkedHosts) + " hosts"
+	if info.LinkedHosts == 1 {
+		hosts = "1 host"
+	}
+	return pad(domain.Sanitize(id.Label), 20) + " " + pad(domain.Sanitize(user), 12) + " " + hosts
+}
+
+// Details renders the selected identity's credentials: each secret only
+// as "set", "not set" or "not set on this device" (SEC-LOG-005), and the
+// key file path.
+func Details(info app.IdentityInfo) string {
+	id := info.Identity
+	rows := [][2]string{
+		{"Password", info.Password.String()},
+		{"Key file", keyFile(id)},
+		{"Stored key", storedKey(info)},
+		{"Passphrase", info.Passphrase.String()},
+	}
+	var b strings.Builder
+	for _, r := range rows {
+		b.WriteString("  " + dimStyle.Render(pad(r[0], 11)) + " " + r[1] + "\n")
+	}
+	return b.String()
+}
+
+// storedKey is the stored key's status, with its type and SHA256
+// fingerprint when known (FR-IDENT-003).
+func storedKey(info app.IdentityInfo) string {
+	if info.Key == app.SecretSet && info.KeyFingerprint != "" {
+		return info.KeyType + " " + info.KeyFingerprint
+	}
+	return info.Key.String()
+}
+
+func keyFile(id domain.Identity) string {
+	if id.KeyPath == "" {
+		return "none"
+	}
+	return domain.Sanitize(id.KeyPath)
+}
+
+func pad(s string, n int) string {
+	if w := lipgloss.Width(s); w < n {
+		return s + strings.Repeat(" ", n-w)
+	}
+	return s
+}

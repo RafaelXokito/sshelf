@@ -2,15 +2,15 @@ sshelf
 
 Add host
 
-> Label     Web-Prod_                     ✗ Label already in use
-  Hostname  my host                       ✗ Hostname cannot contain spaces
-  Port      abc                           ✗ Port must be 1 to 65535
-  Username  optional
-  Identity  (none)
-
-
-
-
+> Label       Web-Prod_                     ✗ Label already in use
+  Hostname    my host                       ✗ Hostname cannot contain spaces
+  Port        abc                           ✗ Port must be 1 to 65535
+  Username    optional
+  Identity    (none)
+  Password    (not set)
+  Key file    optional
+  Stored key  (not set)
+  Passphrase  (not set)
 
 
 

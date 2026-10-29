@@ -106,14 +106,14 @@ Priority: MVP · Status: Draft · Threats: T-2, T-17
 **SEC-CRED-002: Item naming.**
 The system shall store each secret as one generic-password item with service `sshelf` and account
 `<identity-uuid>/<field>`, where `<field>` is `password`, `private-key` or `key-passphrase`.
-Priority: MVP · Status: Draft · Threats: T-9
+Priority: MVP · Status: Implemented · Threats: T-9
 - AC1: A fake-store test asserts the exact keys after creating an identity with all three fields.
 - AC2: Renaming an identity changes no keys. The UUID is stable.
 
 **SEC-CRED-003: Size limit.**
 If a secret exceeds 2800 bytes, then the system shall refuse to store it and suggest referencing the key file
 instead.
-Priority: MVP · Status: Draft · Threats: T-6
+Priority: MVP · Status: Implemented · Threats: T-6
 - AC1: A 2800-byte value is stored and a 2801-byte value returns `secrets.ErrTooLarge` (an RSA-4096 OpenSSH key is
   about 3.4 KB). The message mentions "reference the key file".
 
@@ -121,7 +121,7 @@ Priority: MVP · Status: Draft · Threats: T-6
 When an identity is deleted, or one of its secret fields is cleared, the system shall delete the matching store
 items and, for any delete that fails, show a warning naming the orphaned item (service and account) without
 tracking it.
-Priority: MVP · Status: Draft · Threats: T-9
+Priority: MVP · Status: Implemented · Threats: T-9
 - AC1: Deleting an identity leaves the fake store empty for that UUID.
 - AC2: With a fake that fails `Delete`, the identity is still removed from the config, a warning names
   `sshelf` / `<uuid>/password`, and nothing about the item is written to `config.json`.
@@ -129,17 +129,21 @@ Priority: MVP · Status: Draft · Threats: T-9
 **SEC-CRED-005: Store unavailable.**
 If the credential store is unavailable at startup or on use, then the system shall keep hosts that use key files
 or the agent working, disable the secret fields in forms with an explanation, and never store a secret elsewhere.
-Priority: MVP · Status: Draft · Threats: T-6
+Priority: MVP · Status: Implemented · Threats: T-6
 - AC1: With the fake returning `secrets.ErrUnavailable`, the host list loads, a key-file host connects, the
   password field is disabled with the D-101 message, and no file contains the canary.
 
 **SEC-CRED-006: Access denied or cancelled.**
 If the store denies access or the user cancels an OS unlock prompt, then the system shall abort only the current
 connect or save with a message that names the store, without retrying automatically and without caching the
-failure.
+failure. A store that is not available at all (`ErrUnavailable`) is not a denial: per D-101 a connect does not abort
+but uses the key file and asks for a needed password or passphrase for that connection only, without saving it, and
+a save is refused with the D-101 explanation (SEC-CRED-005).
 Priority: MVP · Status: Implemented · Threats: T-6
 - AC1: Fake returns `ErrDenied` on `Get`: connect fails with the "Access to Keychain was denied" message, makes no
   second `Get` call, and the next connect calls `Get` again.
+- AC2: Fake returns `ErrUnavailable` on every call: a host with a stored password opens the password prompt (noting
+  that the store is not available), connects with the typed value, and nothing is saved.
 
 **SEC-CRED-007: Missing item.**
 If an identity references a secret that the store does not contain (new machine, synced config, manual
@@ -300,7 +304,7 @@ Priority: MVP · Status: Implemented · Threats: T-17, T-5
 **SEC-LOG-005: Secrets never displayed.**
 The system shall show each secret field only as "set", "not set" or "not set on this device", never as its value
 or length.
-Priority: MVP · Status: Draft · Threats: T-17, AC-8
+Priority: MVP · Status: Implemented · Threats: T-17, AC-8
 - AC1: Golden test of the identity form, with a canary password, contains no canary and no run of bullets of the
   same length.
 

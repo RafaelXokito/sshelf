@@ -254,7 +254,7 @@ crash leaves at worst an orphan item, never a dangling reference.
 
 **Connect.** Resolve host → identity. Handshake. Verify the host key (SEC-HOSTKEY-*), with each hop first for jump
 chains. **Only then** `Get` the needed fields (SEC-SESSION-001). On `ErrNotFound`, prompt for the value (SEC-CRED-007);
-offering to save it is v1 (FR-IDENT-005). On `ErrDenied` or `ErrUnavailable`, abort with a message (SEC-CRED-006). Build the auth methods,
+offering to save it is v1 (FR-IDENT-005). On `ErrDenied`, abort with a message (SEC-CRED-006). On `ErrUnavailable` (no store, D-101), skip a stored key and prompt for a password or passphrase for this connection only, without saving it (SEC-CRED-005, SEC-CRED-006). Build the auth methods,
 authenticate, then `Destroy` the secrets and drop the signers (SEC-MEM-009). A key-file identity reads the file
 (after the 0600 check, SEC-FILE-009) and gets the passphrase from the store if one is set.
 

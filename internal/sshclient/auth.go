@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"regexp"
 	"slices"
+	"strings"
 
 	"golang.org/x/crypto/ssh"
 
@@ -32,6 +33,11 @@ var (
 	// credential store does not contain it: "not set on this device"
 	// (SEC-CRED-007, D-108). The user is asked for it instead.
 	ErrCredentialMissing = errors.New("not set on this device")
+	// ErrStoreUnavailable means the identity has the secret but no
+	// credential store can be read on this system (D-101): the user is
+	// asked for it instead, for this connection only. Wrap it with the
+	// store's name, e.g. "Keychain is not available".
+	ErrStoreUnavailable = errors.New("credential store not available")
 	// ErrAuthCancelled means the user cancelled an authentication prompt
 	// (ARCH-CONN-002).
 	ErrAuthCancelled = errors.New("authentication cancelled")
@@ -208,6 +214,8 @@ func (s *authState) stored() (pw string, ok bool, note string, err error) {
 		return "", false, "", nil
 	case errors.Is(err, ErrCredentialMissing):
 		return "", false, "The stored password is not set on this device.", nil
+	case errors.Is(err, ErrStoreUnavailable):
+		return "", false, unavailableNote(err, "password"), nil
 	default:
 		return "", false, "", s.fail(err)
 	}
@@ -283,4 +291,15 @@ func (s *authState) done() {
 	s.creds = nil
 	s.p = nil
 	s.plan = nil
+}
+
+// unavailableNote is the prompt note when the credential store cannot be
+// read (D-101), e.g. "Keychain is not available: the password is used for
+// this connection only and not saved."
+func unavailableNote(err error, what string) string {
+	reason := "The credential store is not available"
+	if msg := err.Error(); strings.HasPrefix(msg, ErrStoreUnavailable.Error()+": ") {
+		reason = strings.TrimPrefix(msg, ErrStoreUnavailable.Error()+": ")
+	}
+	return reason + ": the " + what + " is used for this connection only and not saved."
 }

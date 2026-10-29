@@ -15,7 +15,6 @@ func TestSEC_CRED_006_DeniedNoRetryNoCache(t *testing.T) {
 		want string
 	}{
 		{secrets.ErrDenied, "Access to " + StoreName() + " was denied"},
-		{secrets.ErrUnavailable, StoreName() + " is not available"},
 	} {
 		srv := sshtest.New(t, sshtest.WithPassword("deploy", testPassword))
 		store := newRecStore()

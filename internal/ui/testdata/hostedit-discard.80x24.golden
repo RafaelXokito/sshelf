@@ -2,19 +2,19 @@ sshelf
 
 Edit host web-prod
 
-> Label     web-prod-x_
-  Hostname  10.0.0.10
-  Port      22
-  Username  ubuntu
-  Identity  (none)
+> Label       web-prod-x_
+  Hostname    10.0.0.10
+  Port        22
+  Username    ubuntu
+  Identity    (none)
+  Password    (not set)
+  Key file    optional
+  Stored key  (not set)
+  Passphrase  (not set)
 
 ╭──────────────────────────╮
 │ Discard unsaved changes? │
 ╰──────────────────────────╯
-
-
-
-
 
 
 

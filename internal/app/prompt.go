@@ -24,6 +24,9 @@ var (
 	// ErrStoreDenied is what a *StoreError wraps when the user or the OS
 	// denied access to the credential store (SEC-CRED-006).
 	ErrStoreDenied = secrets.ErrDenied
+	// ErrStoreUnavailable is what a *StoreError wraps when there is no
+	// credential store (D-101, SEC-CRED-005).
+	ErrStoreUnavailable = secrets.ErrUnavailable
 )
 
 // Stage is a step of a connection attempt.

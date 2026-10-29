@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -12,7 +11,6 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/RafaelXokito/sshelf/internal/domain"
 	"github.com/RafaelXokito/sshelf/internal/paths"
@@ -67,9 +65,24 @@ type Service interface {
 	// SaveHost adds h (when h.ID is "") or updates the host with h.ID,
 	// and writes config.json atomically. See App.SaveHost.
 	SaveHost(ctx context.Context, h domain.Host) (SavedHost, error)
+	// Identities returns the identities view. See App.Identities.
+	Identities(ctx context.Context) ([]IdentityInfo, error)
+	// SaveIdentity creates or edits an identity and stores its secrets.
+	// See App.SaveIdentity.
+	SaveIdentity(ctx context.Context, in IdentityInput) (SavedIdentity, error)
+	// DeleteIdentity deletes an identity and its stored secrets. See
+	// App.DeleteIdentity.
+	DeleteIdentity(ctx context.Context, id domain.ID) (DeletedIdentity, error)
 	// DeleteHost removes the host with id and writes config.json. See
 	// App.DeleteHost.
-	DeleteHost(ctx context.Context, id domain.ID) ([]domain.Host, error)
+	DeleteHost(ctx context.Context, id domain.ID) (DeletedHost, error)
+	// SaveHostWithCredentials saves a host and the credentials typed in
+	// its form as its hidden identity (FR-HOST-010). See
+	// App.SaveHostWithCredentials.
+	SaveHostWithCredentials(ctx context.Context, h domain.Host, c HostCredentials) (SavedHost, error)
+	// SecretsAvailable probes the credential store. See
+	// App.SecretsAvailable.
+	SecretsAvailable(ctx context.Context) error
 	// ImportSSHConfig copies ~/.ssh/config into config.json once. See
 	// App.ImportSSHConfig.
 	ImportSSHConfig(ctx context.Context) (ImportReport, error)
@@ -79,6 +92,12 @@ type Service interface {
 type SavedHost struct {
 	Host  domain.Host   // as saved, with its ID
 	Hosts []domain.Host // every host after the save, sorted by label
+	// Identities are every identity after the save, hidden ones
+	// included, sorted by name.
+	Identities []domain.Identity
+	// Warnings name stored items that could not be deleted
+	// (SEC-CRED-004).
+	Warnings []string
 }
 
 // Config wires an App.
@@ -105,7 +124,10 @@ type App struct {
 
 	mu   sync.Mutex
 	data domain.Data
-	send func(any) // delivers prompts to the UI; see SetSend
+	// missing are the secrets the store did not have when a connection
+	// asked for them: "not set on this device" (D-108).
+	missing map[secrets.Ref]bool
+	send    func(any) // delivers prompts to the UI; see SetSend
 
 	khMu sync.Mutex // serialises writes to sshelf's known_hosts
 }
@@ -152,11 +174,7 @@ func (a *App) Load(ctx context.Context) (Loaded, error) {
 	a.mu.Lock()
 	a.data = snap.Data
 	a.mu.Unlock()
-	ids := slices.Clone(snap.Data.Identities)
-	slices.SortStableFunc(ids, func(x, y domain.Identity) int {
-		return cmp.Compare(strings.ToLower(x.Label), strings.ToLower(y.Label))
-	})
-	return Loaded{Hosts: sortedHosts(snap.Data.Hosts), Identities: ids, FirstRun: snap.FirstRun, Notices: notices}, nil
+	return Loaded{Hosts: sortedHosts(snap.Data.Hosts), Identities: sortedIdentities(snap.Data.Identities), FirstRun: snap.FirstRun, Notices: notices}, nil
 }
 
 // sortedHosts returns a copy of hosts sorted by label, case-insensitively.
@@ -168,54 +186,10 @@ func sortedHosts(hosts []domain.Host) []domain.Host {
 	return hosts
 }
 
-// SaveHost implements Service (FR-HOST-001). A new host (h.ID == "") gets
-// a UUIDv7 ID (ARCH-DATA-001). For an existing host only the form's
-// fields (label, hostname, port, user and identity) are taken from h; the
-// rest of the stored host is kept. Label, hostname and user are trimmed.
-// The host is validated against the loaded hosts and identities
-// (FR-HOST-003; the error is a *domain.ValidationError), then config.json
-// is written through store.Save. The in-memory config changes only after
-// that write succeeded, so a host counts as saved only when SaveHost
-// returns nil.
+// SaveHost implements Service (FR-HOST-001): SaveHostWithCredentials
+// with no credentials typed.
 func (a *App) SaveHost(ctx context.Context, h domain.Host) (SavedHost, error) {
-	if err := ctx.Err(); err != nil {
-		return SavedHost{}, err
-	}
-	h.Label = strings.TrimSpace(h.Label)
-	h.Hostname = strings.TrimSpace(h.Hostname)
-	h.User = strings.TrimSpace(h.User)
-
-	a.mu.Lock()
-	defer a.mu.Unlock() // held across the write, so saves never interleave
-	hosts := slices.Clone(a.data.Hosts)
-	now := time.Now().UTC()
-	if h.ID == "" {
-		h.ID = domain.NewID()
-		h.CreatedAt, h.UpdatedAt = now, now
-		hosts = append(hosts, h)
-	} else {
-		i := slices.IndexFunc(hosts, func(o domain.Host) bool { return o.ID == h.ID })
-		if i < 0 {
-			return SavedHost{}, ErrHostNotFound
-		}
-		stored := hosts[i]
-		stored.Label, stored.Hostname, stored.Port, stored.User, stored.IdentityID = h.Label, h.Hostname, h.Port, h.User, h.IdentityID
-		stored.UpdatedAt = now
-		hosts[i], h = stored, stored
-	}
-	data := a.data
-	data.Hosts = hosts
-	if err := domain.ValidateHost(h, data); err != nil {
-		return SavedHost{}, err
-	}
-	file := paths.ConfigFile(a.cfg.Dir)
-	if err := store.Save(file, &store.Snapshot{Data: data}); err != nil {
-		slog.Debug("save host: failed", "host", h.Label, "err", err)
-		return SavedHost{}, fmt.Errorf("could not save %s: %w", filepath.Base(file), err)
-	}
-	a.data = data
-	slog.Debug("save host: saved", "host", h.Label, "id", h.ID)
-	return SavedHost{Host: h, Hosts: sortedHosts(hosts)}, nil
+	return a.SaveHostWithCredentials(ctx, h, HostCredentials{})
 }
 
 // modesNotice is the one-line notice for repaired modes, e.g.
@@ -251,7 +225,7 @@ func (a *App) Connect(ctx context.Context, hostID domain.ID) (Session, error) {
 	if send != nil {
 		ssh.Progress = func(st sshclient.Stage) { send(ConnectProgressMsg{HostID: hostID, Stage: st}) }
 	}
-	creds := Credentials{Store: a.cfg.Secrets, Home: a.cfg.Home, Prompter: a}
+	creds := Credentials{Store: a.cfg.Secrets, Home: a.cfg.Home, Prompter: a, OnMissing: a.markMissing}
 	client, err := ssh.Connect(ctx, target, creds, a)
 	if err != nil {
 		slog.Debug("connect: failed", "host", h.Label, "err", err)

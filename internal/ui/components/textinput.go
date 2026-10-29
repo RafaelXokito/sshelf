@@ -1,6 +1,8 @@
 package components
 
 import (
+	"unicode/utf8"
+
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -64,6 +66,10 @@ type TextInput struct {
 	// cell; 0 means unlimited. A longer value scrolls horizontally to keep
 	// the cursor visible, and a wide rune is never cut in half.
 	Width int
+	// Newlines keeps the newlines of pasted text, for a pasted private
+	// key; use it only with EchoMasked or EchoNone, since View shows one
+	// line.
+	Newlines bool
 
 	value   []rune
 	pos     int // cursor, as an index into value (0..len(value))
@@ -75,6 +81,21 @@ func NewTextInput() *TextInput { return &TextInput{} }
 
 // Value returns the current text.
 func (t *TextInput) Value() string { return string(t.value) }
+
+// Bytes returns a new UTF-8 copy of the value that the caller owns and
+// should clear after use; unlike Value it leaves no string copy of a
+// secret behind.
+func (t *TextInput) Bytes() []byte {
+	n := 0
+	for _, r := range t.value {
+		n += utf8.RuneLen(r)
+	}
+	b := make([]byte, 0, n)
+	for _, r := range t.value {
+		b = utf8.AppendRune(b, r)
+	}
+	return b
+}
 
 // Len returns the length of the value in runes.
 func (t *TextInput) Len() int { return len(t.value) }
@@ -128,12 +149,12 @@ func (t *TextInput) limit() int {
 }
 
 // Insert inserts s at the cursor and moves the cursor past it. s is
-// sanitised; newlines and tabs are dropped; runes beyond the limit are
+// sanitised; tabs, and newlines unless Newlines is set, are dropped; runes beyond the limit are
 // dropped.
 func (t *TextInput) Insert(s string) {
 	var add []rune
 	for _, r := range domain.Sanitize(s) {
-		if r == '\n' || r == '\t' {
+		if r == '\t' || (r == '\n' && !t.Newlines) {
 			continue
 		}
 		if len(t.value)+len(add) >= t.limit() {

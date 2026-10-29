@@ -25,6 +25,7 @@ import (
 	"github.com/RafaelXokito/sshelf/internal/ui/modals/tofu"
 	"github.com/RafaelXokito/sshelf/internal/ui/screens/hostedit"
 	"github.com/RafaelXokito/sshelf/internal/ui/screens/hostlist"
+	"github.com/RafaelXokito/sshelf/internal/ui/screens/identities"
 	importscreen "github.com/RafaelXokito/sshelf/internal/ui/screens/import"
 	"github.com/RafaelXokito/sshelf/internal/ui/screens/loaderror"
 	"github.com/RafaelXokito/sshelf/internal/ui/screens/welcome"
@@ -58,8 +59,10 @@ type ImportFailedMsg struct{ Err error }
 
 // HostDeletedMsg reports that a host was deleted; Hosts are the rest.
 type HostDeletedMsg struct {
-	Label string
-	Hosts []domain.Host
+	Label      string
+	Hosts      []domain.Host
+	Identities []domain.Identity
+	Warnings   []string // stored items of its hidden identity left behind
 }
 
 // HostDeleteFailedMsg reports that a host was not deleted.
@@ -106,6 +109,8 @@ type Model struct {
 
 	identities []domain.Identity // for the host form's picker
 	prev       components.Screen // the screen to return to while a form is open
+	idView     identities.Model  // the identities view to return to from its form
+	noStore    *app.StoreError   // set when no credential store is available (D-101)
 
 	width, height int // terminal size; 0 until the first tea.WindowSizeMsg
 
@@ -122,14 +127,17 @@ func New(svc app.Service) Model {
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd {
 	svc := m.svc
-	return func() tea.Msg {
+	return tea.Batch(func() tea.Msg {
 		l, err := svc.Load(context.Background())
 		return LoadedMsg{Hosts: l.Hosts, Identities: l.Identities, Notices: l.Notices, Err: err}
-	}
+	}, probeStore(svc))
 }
 
 // Update implements tea.Model.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if next, cmd, ok := m.updateIdentities(msg); ok {
+		return next, cmd
+	}
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
@@ -182,9 +190,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.openForm(msg.Host), nil
 
 	case hostedit.SaveMsg:
-		svc, h := m.svc, msg.Host
+		svc, h, c := m.svc, msg.Host, msg.Creds
 		return m, func() tea.Msg {
-			saved, err := svc.SaveHost(context.Background(), h)
+			saved, err := svc.SaveHostWithCredentials(context.Background(), h, c)
 			if err != nil {
 				return HostSaveFailedMsg{Err: err}
 			}
@@ -195,9 +203,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Saved even if the form was cancelled meanwhile: show and select
 		// the host (FR-HOST-001).
 		h := msg.Saved.Host
+		if f, ok := m.screen.(hostedit.Model); ok {
+			f.Destroy()
+		}
+		if msg.Saved.Identities != nil {
+			m.identities = msg.Saved.Identities
+		}
 		m.modals = nil
 		m.screen = m.sized(hostlist.New(msg.Saved.Hosts).Select(h.ID))
-		m.status = domain.Sanitize(h.Label) + ": saved"
+		m.status = domain.Sanitize(strings.Join(append([]string{h.Label + ": saved"}, msg.Saved.Warnings...), "; "))
 		return m, nil
 
 	case HostSaveFailedMsg:
@@ -246,11 +260,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case hostlist.DeleteHostMsg:
 		svc, id, label := m.svc, msg.HostID, msg.Label
 		return m, func() tea.Msg {
-			hosts, err := svc.DeleteHost(context.Background(), id)
+			del, err := svc.DeleteHost(context.Background(), id)
 			if err != nil {
 				return HostDeleteFailedMsg{Label: label, Err: err}
 			}
-			return HostDeletedMsg{Label: label, Hosts: hosts}
+			return HostDeletedMsg{Label: label, Hosts: del.Hosts, Identities: del.Identities, Warnings: del.Warnings}
 		}
 
 	case HostDeletedMsg:
@@ -262,7 +276,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if l, ok := m.screen.(hostlist.Model); ok {
 			m.screen = l.SelectRow(row)
 		}
-		m.status = domain.Sanitize(msg.Label) + ": deleted"
+		if msg.Identities != nil {
+			m.identities = msg.Identities
+		}
+		m.status = domain.Sanitize(strings.Join(append([]string{msg.Label + ": deleted"}, msg.Warnings...), "; "))
 		return m, nil
 
 	case HostDeleteFailedMsg:
@@ -399,7 +416,11 @@ func (m Model) openForm(h domain.Host) Model {
 	}
 	m.prev = m.screen
 	m.status = ""
-	m.screen = m.sized(hostedit.New(h, hosts, m.identities))
+	f := hostedit.New(h, hosts, m.identities)
+	if m.noStore != nil {
+		f = f.WithoutStore(m.noStore.Store)
+	}
+	m.screen = m.sized(f)
 	return m
 }
 
@@ -506,6 +527,7 @@ func endedStatus(label string, err error) string {
 // is truncated to the width with "…" (NFR-UX-002).
 func (m Model) View() tea.View {
 	body, foot := m.screenLines()
+	body = m.withBanner(body)
 	if n := len(m.modals); n > 0 {
 		var ml []string
 		for i, md := range m.modals {

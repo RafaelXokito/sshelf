@@ -269,6 +269,6 @@ func TestHostEditGoldenEdit(t *testing.T) {
 	m := hostedit.New(domain.Host{
 		Meta: domain.Meta{ID: "h1"}, Label: "db-staging", Hostname: "10.0.1.20", Port: 2222, User: "admin", IdentityID: "i2",
 	}, testHosts, testIdentities)
-	// A host's own hidden identity is offered and selected.
+	// A host's own hidden identity shows as "(none)", its secrets below.
 	golden(t, "hostedit-edit", withScreen(m))
 }

@@ -43,11 +43,11 @@ func TestFR_HOST_002_SharedIdentityKept(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(rest) != 1 || rest[0].ID != dbHostID {
+	if len(rest.Hosts) != 1 || rest.Hosts[0].ID != dbHostID {
 		t.Fatalf("remaining hosts %+v", rest)
 	}
 	// The last host using the identity goes too; the identity stays.
-	if rest, err = a.DeleteHost(context.Background(), dbHostID); err != nil || len(rest) != 0 {
+	if rest, err = a.DeleteHost(context.Background(), dbHostID); err != nil || len(rest.Hosts) != 0 {
 		t.Fatalf("second delete: %+v, %v", rest, err)
 	}
 
@@ -83,7 +83,7 @@ func TestFR_HOST_002_DeleteWriteFailureKeepsHost(t *testing.T) {
 		t.Fatal(err)
 	}
 	rest, err := a.DeleteHost(context.Background(), dbHostID)
-	if err != nil || len(rest) != 1 || rest[0].ID != webHostID {
+	if err != nil || len(rest.Hosts) != 1 || rest.Hosts[0].ID != webHostID {
 		t.Fatalf("the failed delete changed the in-memory config: %+v, %v", rest, err)
 	}
 }

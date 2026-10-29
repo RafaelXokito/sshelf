@@ -1,0 +1,24 @@
+sshelf
+
+Identities
+
+> ops                  deploy       2 hosts
+  synced               -            0 hosts
+
+  Password    set
+  Key file    ~/.ssh/id_ed25519
+  Stored key  not set
+  Passphrase  not set
+
+╭───────────────────────────────────────────────────────────────────────╮
+│ Delete identity ops and its secrets? 2 linked hosts will be unlinked. │
+╰───────────────────────────────────────────────────────────────────────╯
+
+
+
+
+
+
+
+
+y yes • n/enter/esc no

@@ -1,8 +1,12 @@
 package components
 
 import (
+	"errors"
+
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/RafaelXokito/sshelf/internal/app"
 )
 
 // Screen is one full-screen view. The root model routes messages to the
@@ -27,4 +31,14 @@ type Modal interface {
 // moves to the footer.
 type Hinter interface {
 	Hints() []key.Binding
+}
+
+// ErrorText is the text a form shows for a failed save. A missing
+// credential store gets the D-101 explanation, which names it and says
+// how to fix it (FR-CRED-002).
+func ErrorText(err error) string {
+	if se, ok := errors.AsType[*app.StoreError](err); ok && errors.Is(err, app.ErrStoreUnavailable) {
+		return "Not saved. " + se.Explain() + "; passwords and keys cannot be saved until then."
+	}
+	return err.Error()
 }

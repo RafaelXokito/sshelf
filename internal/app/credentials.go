@@ -45,6 +45,9 @@ type Credentials struct {
 	// Prompter asks for the passphrase of an encrypted key that has none
 	// stored. nil means encrypted keys need a stored passphrase.
 	Prompter sshclient.Prompter
+	// OnMissing, if set, is told about each secret the store did not
+	// have, so the identity form can show "not set on this device".
+	OnMissing func(secrets.Ref)
 }
 
 var _ sshclient.CredentialSource = Credentials{}
@@ -63,10 +66,11 @@ func (c Credentials) Signers(ctx context.Context, t domain.Target) ([]ssh.Signer
 	switch {
 	case t.HasKey:
 		key, err := c.get(ctx, t, secrets.FieldPrivateKey)
-		if errors.Is(err, secrets.ErrNotFound) {
+		if errors.Is(err, secrets.ErrNotFound) || errors.Is(err, secrets.ErrUnavailable) {
 			// A key cannot be typed in: skip it, and let password or
-			// keyboard-interactive authentication follow (SEC-CRED-007).
-			slog.Debug("connect: stored key not set on this device", "identity", t.IdentityLabel)
+			// keyboard-interactive authentication follow (SEC-CRED-007,
+			// D-101).
+			slog.Debug("connect: stored key not readable", "identity", t.IdentityLabel, "err", err)
 			return nil, nil
 		}
 		if err != nil {
@@ -114,6 +118,8 @@ func (c Credentials) parse(ctx context.Context, t domain.Target, b []byte, name 
 				s.Destroy()
 			case errors.Is(err, secrets.ErrNotFound):
 				note = "The stored passphrase is not set on this device."
+			case errors.Is(err, secrets.ErrUnavailable):
+				note = StoreName() + " is not available: the passphrase is used for this connection only and not saved."
 			default:
 				return nil, err
 			}
@@ -167,6 +173,10 @@ func (c Credentials) Password(ctx context.Context, t domain.Target) (string, err
 	if errors.Is(err, secrets.ErrNotFound) {
 		return "", sshclient.ErrCredentialMissing // asked for instead (SEC-CRED-007)
 	}
+	if errors.Is(err, secrets.ErrUnavailable) {
+		// Asked for instead, never saved (D-101, SEC-CRED-005).
+		return "", fmt.Errorf("%w: %s is not available", sshclient.ErrStoreUnavailable, StoreName())
+	}
 	if err != nil {
 		return "", err
 	}
@@ -175,14 +185,19 @@ func (c Credentials) Password(ctx context.Context, t domain.Target) (string, err
 }
 
 // get reads one of the identity's secrets. The caller must Destroy it. A
-// denied or unavailable store is a *StoreError that aborts the attempt,
+// denied or unavailable store is a *StoreError. Denied aborts the attempt,
 // with no retry and nothing cached, so the next connect asks the store
-// again (SEC-CRED-006).
+// again (SEC-CRED-006); with no store the callers ask the user instead
+// (D-101, SEC-CRED-005).
 func (c Credentials) get(ctx context.Context, t domain.Target, f secrets.Field) (secrets.Secret, error) {
 	if c.Store == nil {
 		return secrets.Secret{}, &StoreError{Store: StoreName(), Err: secrets.ErrUnavailable}
 	}
-	s, err := c.Store.Get(ctx, secrets.Ref{IdentityID: string(t.IdentityID), Field: f})
+	ref := secrets.Ref{IdentityID: string(t.IdentityID), Field: f}
+	s, err := c.Store.Get(ctx, ref)
+	if errors.Is(err, secrets.ErrNotFound) && c.OnMissing != nil {
+		c.OnMissing(ref)
+	}
 	if errors.Is(err, secrets.ErrDenied) || errors.Is(err, secrets.ErrUnavailable) {
 		return secrets.Secret{}, &StoreError{Store: StoreName(), Err: err}
 	}
@@ -204,6 +219,19 @@ func (e *StoreError) Error() string {
 }
 
 func (e *StoreError) Unwrap() error { return e.Err }
+
+// Explain is the one-line D-101 explanation of an unavailable store,
+// naming what is missing and how to fix it, e.g. "No Secret Service
+// found: install or start GNOME Keyring or KWallet" (FR-CRED-002).
+func (e *StoreError) Explain() string {
+	if errors.Is(e.Err, secrets.ErrDenied) {
+		return e.Error()
+	}
+	if e.Store == "Keychain" {
+		return "Keychain is not available: unlock or repair your login keychain"
+	}
+	return "No " + e.Store + " found: install or start GNOME Keyring or KWallet"
+}
 
 // StoreName is the user-facing name of this OS's credential store.
 func StoreName() string {

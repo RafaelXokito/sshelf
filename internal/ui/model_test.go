@@ -58,6 +58,8 @@ type fakeService struct {
 	identities []domain.Identity
 	saveErr    error // returned by SaveHost instead of saving
 
+	fakeIdentities // identities_test.go
+
 	mu        sync.Mutex
 	connected []domain.ID
 	saves     []domain.Host // hosts passed to SaveHost

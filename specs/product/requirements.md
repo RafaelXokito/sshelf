@@ -86,7 +86,7 @@ defined in `SEC-CRED-*`.
 ### FR-CRED-001 · Save secrets without an sshelf password
 When the user saves a password, private key or key passphrase, the system shall store it in the OS credential store without asking for any sshelf-specific password.
 
-- **Priority:** MVP · **Status:** Draft · **Source:** D-002, D-003
+- **Priority:** MVP · **Status:** Implemented · **Source:** D-002, D-003
 - **Acceptance:**
   - sshelf never shows a screen for creating, entering or changing a master password.
   - After a restart, a host whose identity has a saved password connects without a prompt.
@@ -96,7 +96,7 @@ When the user saves a password, private key or key passphrase, the system shall 
 ### FR-CRED-002 · Credential store unavailable
 If the OS credential store is unavailable, then the system shall refuse to save passwords, keys and passphrases, explain why and how to fix it, and keep working for hosts that need no stored secret.
 
-- **Priority:** MVP · **Status:** Draft · **Source:** D-101, SEC-CRED-005
+- **Priority:** MVP · **Status:** Implemented · **Source:** D-101, SEC-CRED-005
 - **Acceptance:**
   - On Linux without a running Secret Service, saving a password shows a message naming the missing service (for example "No Secret Service found: install or start GNOME Keyring or KWallet"), and nothing is written.
   - Hosts with a key file, or authentication through a prompt, still connect.
@@ -125,7 +125,7 @@ When the user submits the host form, the system shall save the host (new or edit
 ### FR-HOST-002 · Delete a host
 When the user confirms deletion of a host, the system shall remove the host.
 
-- **Priority:** MVP · **Status:** Draft
+- **Priority:** MVP · **Status:** Implemented
 - **Acceptance:**
   - The confirmation names the host and defaults to "No".
   - A linked shared identity is not deleted. A hidden per-host identity (FR-HOST-010) is deleted with its stored secrets.
@@ -189,7 +189,7 @@ While the details pane is open, the system shall show the selected host's effect
 ### FR-HOST-010 · Credentials in the host form
 When the user enters a username plus a password or a key (stored or file path) directly in the host form instead of choosing an identity, the system shall save them as a hidden identity linked only to that host.
 
-- **Priority:** MVP · **Status:** Draft · **Source:** ARCH `Identity.Hidden`
+- **Priority:** MVP · **Status:** Implemented · **Source:** ARCH `Identity.Hidden`
 - **Acceptance:**
   - A first-time user adds a host with a username and password and connects without opening the identities view.
   - The hidden identity is not listed in the identities view. Its secrets are stored as in FR-CRED-001.
@@ -275,7 +275,7 @@ place updates every linked host. Secret values are stored per FR-CRED-001.
 ### FR-IDENT-001 · Manage identities
 When the user creates, edits or deletes an identity, the system shall save the change and apply it to every linked host from its next connection on.
 
-- **Priority:** MVP · **Status:** Draft · **Source:** Termius identities
+- **Priority:** MVP · **Status:** Implemented · **Source:** Termius identities
 - **Acceptance:**
   - The fields are name (unique, case-insensitive), username, password (optional), key (optional) and key passphrase (optional). Secret fields do not echo.
   - Changing the password of an identity linked to 3 hosts lets all 3 connect with the new password, with no host edits.
@@ -291,7 +291,7 @@ When a host is linked to an identity, the system shall authenticate that host wi
 ### FR-IDENT-003 · Key from a file or stored in sshelf
 Where an identity has a private key, the system shall take it either from a referenced file path read at connection time or from key contents that the user pasted or imported into sshelf and that are stored in the OS credential store.
 
-- **Priority:** MVP · **Status:** Draft · **Source:** D-004, Termius keychain
+- **Priority:** MVP · **Status:** Implemented · **Source:** D-004, Termius keychain
 - **Acceptance:**
   - A path starting with `~` is expanded. A missing file fails with "key file not found: <path>".
   - After a key file is imported into sshelf, deleting the original file does not stop connections.
@@ -557,7 +557,7 @@ When the user types in the search field, the system shall filter the host list t
 ### FR-NAV-003 · Key bindings
 The system shall provide these bindings in the host list: ↑/↓ or `k`/`j` to move, `g`/`G` for first/last, `/` to search, `Enter` to connect, `a` to add, `e` to edit, `d` to delete, `i` for identities, `I` to import, and `q` or `Ctrl+C` to quit.
 
-- **Priority:** MVP · **Status:** Draft
+- **Priority:** MVP · **Status:** Implemented
 - **Acceptance:**
   - Each binding is covered by a UI test.
   - While the search field is focused, letter keys type into the query.

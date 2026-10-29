@@ -113,5 +113,8 @@ func Maps() []Map {
 		{Name: "host key prompt", Bindings: []key.Binding{TrustAndSave, TOFUCancel, ForceQuit}},
 		{Name: "authentication prompt", Bindings: append([]key.Binding{Submit, NextField, PrevField, Cancel, ForceQuit}, textInput...)},
 		{Name: "changed host key", Bindings: []key.Binding{CloseBlock, ForceQuit}},
+		{Name: "identities", Bindings: []key.Binding{Up, Down, AddIdentity, EditIdentity, DeleteIdentity, BackToHosts, ForceQuit}},
+		{Name: "form secret field", Bindings: append([]key.Binding{ClearSecret}, textInput...)},
+		{Name: "form key file field", Bindings: append([]key.Binding{StoreKeyFile}, textInput...)},
 	}
 }

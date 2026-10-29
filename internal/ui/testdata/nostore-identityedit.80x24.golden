@@ -1,0 +1,24 @@
+sshelf
+
+! No Secret Service found: install or start GNOME Keyring or KWallet
+
+Edit identity ops
+
+> Name        ops_
+  Username    deploy
+  Password    (disabled: no Secret Service)
+  Key file    ~/.ssh/id_ed25519
+  Stored key  (disabled: no Secret Service)
+  Passphrase  (disabled: no Secret Service)
+
+
+
+
+
+
+
+
+
+
+
+tab next field • shift+tab previous field • ctrl+s save • esc cancel
