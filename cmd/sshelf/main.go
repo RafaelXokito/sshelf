@@ -7,18 +7,24 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/RafaelXokito/sshelf/internal/domain"
+	"github.com/RafaelXokito/sshelf/internal/app"
+	"github.com/RafaelXokito/sshelf/internal/paths"
 	"github.com/RafaelXokito/sshelf/internal/ui"
 )
 
 func main() {
-	// Demo data until config.json is loaded (T-004).
-	demo := []domain.Host{
-		{Meta: domain.Meta{ID: domain.NewID()}, Label: "web-prod", Hostname: "10.0.0.10", User: "ubuntu"},
-		{Meta: domain.Meta{ID: domain.NewID()}, Label: "db-staging", Hostname: "10.0.1.20", Port: 2222, User: "admin"},
+	dir, err := paths.ConfigDir()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "sshelf:", err)
+		os.Exit(1)
 	}
+	home, _ := os.UserHomeDir() // "" skips ~/.ssh/known_hosts
+	svc := app.New(app.Config{
+		ConfigPath:      paths.ConfigFile(dir),
+		KnownHostsFiles: paths.KnownHostsFiles(dir, home),
+	})
 
-	if _, err := tea.NewProgram(ui.New(demo)).Run(); err != nil {
+	if _, err := tea.NewProgram(ui.New(svc)).Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "sshelf:", err)
 		os.Exit(1)
 	}

@@ -373,7 +373,7 @@ While an interactive session is active, when the local terminal is resized, the 
 ### FR-CONN-005 · Return to the list on exit
 When an interactive session ends, the system shall restore the host list with the same host selected and show either the remote exit status or the disconnect reason in the status bar.
 
-- **Priority:** MVP · **Status:** Draft
+- **Priority:** MVP · **Status:** Implemented
 - **Acceptance:**
   - `exit 3` shows "web-prod: exited (3)". A server shutdown shows "web-prod: connection lost: <reason>".
   - The terminal is fully restored, with no raw mode and no remote screen remnants.

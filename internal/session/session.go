@@ -103,6 +103,7 @@ type Session struct {
 func New(client *ssh.Client, t Terminal, opts Options) (*Session, error) {
 	sess, err := client.NewSession()
 	if err != nil {
+		_ = client.Close()
 		return nil, err
 	}
 	s := &Session{client: client, sess: sess, term: t}
