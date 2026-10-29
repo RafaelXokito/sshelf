@@ -47,5 +47,8 @@ func (m Model) Update(msg tea.Msg) (components.Modal, tea.Cmd) {
 
 // View implements components.Modal.
 func (m Model) View() string {
-	return boxStyle.Render(titleStyle.Render(m.question) + "\n\n" + components.Help(keys.ConfirmYes, keys.ConfirmNo))
+	return boxStyle.Render(titleStyle.Render(m.question))
 }
+
+// Hints implements components.Hinter: the footer shows the answers.
+func (m Model) Hints() []key.Binding { return []key.Binding{keys.ConfirmYes, keys.ConfirmNo} }

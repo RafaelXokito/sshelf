@@ -8,11 +8,33 @@ Edit host web-prod
   Username  ubuntu
   Identity  (none)
 
-tab next field • shift+tab previous field • ctrl+s save • esc cancel
-
 ╭──────────────────────────╮
 │ Discard unsaved changes? │
-│                          │
-│ y yes • n/enter/esc no   │
 ╰──────────────────────────╯
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+y yes • n/enter/esc no

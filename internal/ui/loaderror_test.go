@@ -19,7 +19,7 @@ func TestFR_CFG_003_SyntaxErrorScreen(t *testing.T) {
 		Err:     errors.New("corrupt"),
 	}}
 	d := newDriver(t, svc)
-	golden(t, "loaderror", d.view())
+	golden(t, "loaderror", d.m)
 
 	// Enter connects nothing, and q quits.
 	d.press(tea.KeyEnter, "")

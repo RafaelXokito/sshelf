@@ -48,8 +48,9 @@ func (m Model) View() string {
 		fmt.Fprintf(&b, "  Line:     %d, column %d\n", m.err.Line, m.err.Column)
 	}
 	fmt.Fprintf(&b, "  Problem:  %s\n\n", m.err.Problem)
-	b.WriteString("sshelf has not changed this file. Fix it and start sshelf again.\n\n")
-	b.WriteString(dimStyle.Render("q quit"))
-	b.WriteString("\n")
+	b.WriteString("sshelf has not changed this file. Fix it and start sshelf again.\n")
 	return b.String()
 }
+
+// Hints implements components.Hinter.
+func (m Model) Hints() []key.Binding { return []key.Binding{keys.Quit} }

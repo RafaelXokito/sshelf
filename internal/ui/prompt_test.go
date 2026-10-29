@@ -129,7 +129,7 @@ func TestARCH_SESS_002_KbdIntModalGolden(t *testing.T) {
 		Questions:   []app.Question{{Text: "Passcode or option (1-3): ", Echo: true}},
 	})
 	m = typeText(m, "12")
-	golden(t, "kbdint", m.View().Content)
+	golden(t, "kbdint", m)
 }
 
 func TestAuthPromptAfterAttemptEnded(t *testing.T) {

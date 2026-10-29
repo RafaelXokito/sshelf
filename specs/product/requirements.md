@@ -567,7 +567,7 @@ The system shall provide these bindings in the host list: ↑/↓ or `k`/`j` to 
 ### FR-NAV-004 · Key hints footer
 The system shall show a one-line footer with the main key bindings of the current view.
 
-- **Priority:** MVP · **Status:** Draft
+- **Priority:** MVP · **Status:** Implemented
 - **Acceptance:**
   - The footer on the host list shows at least the connect, search, add and quit bindings, and it changes when another view opens.
 

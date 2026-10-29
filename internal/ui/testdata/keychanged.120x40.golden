@@ -1,8 +1,8 @@
 sshelf
 
   db-staging           admin@10.0.1.20:2222
-> web-prod             ubuntu@10.0.0.10:22
-  zeta                 10.0.0.30:22
+> web-prod             ubuntu@10.0.0.10
+  zeta                 10.0.0.30
 
 ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
 ┃ WARNING: HOST KEY HAS CHANGED                                        ┃
@@ -22,9 +22,19 @@ sshelf
 ┃   delete line 12 of /home/u/.config/sshelf/known_hosts               ┃
 ┃ or run:                                                              ┃
 ┃   ssh-keygen -R 10.0.0.10 -f /home/u/.config/sshelf/known_hosts      ┃
-┃                                                                      ┃
-┃ esc close                                                            ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-web-prod: host key changed; connection blocked
-↑/↓ move • enter connect • a add • e edit • q quit
+
+
+
+
+
+
+
+
+
+
+
+
+✗ web-prod: host key changed; connection blocked
+esc close

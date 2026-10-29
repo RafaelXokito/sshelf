@@ -1,0 +1,24 @@
+sshelf
+
+sshelf cannot load its configuration
+
+  File:     /home/u/.config/sshelf/config.json
+  Line:     3, column 13
+  Problem:  invalid character '}' looking for beginning of value
+
+sshelf has not changed this file. Fix it and start sshelf again.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+q quit

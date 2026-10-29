@@ -12,6 +12,7 @@ import (
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/RafaelXokito/sshelf/internal/app"
 	"github.com/RafaelXokito/sshelf/internal/domain"
@@ -28,7 +29,7 @@ import (
 )
 
 var (
-	titleStyle  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("212")).MarginBottom(1)
+	titleStyle  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("212"))
 	statusStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
 	dimStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
 )
@@ -46,6 +47,18 @@ type HostSavedMsg struct{ Saved app.SavedHost }
 
 // HostSaveFailedMsg reports that a host was not saved.
 type HostSaveFailedMsg struct{ Err error }
+
+// HostDeletedMsg reports that a host was deleted; Hosts are the rest.
+type HostDeletedMsg struct {
+	Label string
+	Hosts []domain.Host
+}
+
+// HostDeleteFailedMsg reports that a host was not deleted.
+type HostDeleteFailedMsg struct {
+	Label string
+	Err   error
+}
 
 // ConnectedMsg carries an authenticated session, ready for tea.Exec.
 type ConnectedMsg struct {
@@ -84,7 +97,9 @@ type Model struct {
 	exec   execFunc
 
 	identities []domain.Identity // for the host form's picker
-	list       hostlist.Model    // the list to return to while a form is open
+	prev       components.Screen // the screen to return to while a form is open
+
+	width, height int // terminal size; 0 until the first tea.WindowSizeMsg
 
 	attempt     int                // id of the latest connection attempt
 	attemptHost domain.ID          // host of the attempt in progress
@@ -108,6 +123,11 @@ func (m Model) Init() tea.Cmd {
 // Update implements tea.Model.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width, m.height = msg.Width, msg.Height
+		m.screen = m.sized(m.screen)
+		return m, nil
+
 	case tea.KeyPressMsg:
 		if key.Matches(msg, keys.ForceQuit) {
 			if fs, ok := m.screen.(components.FormScreen); ok {
@@ -140,11 +160,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if !ok {
 				le = &app.LoadError{Path: "config.json", Problem: msg.Err.Error(), Err: msg.Err}
 			}
-			m.screen = loaderror.New(le)
+			m.screen = m.sized(loaderror.New(le))
 			return m, nil
 		}
 		m.identities = msg.Identities
-		m.screen = hostlist.New(msg.Hosts)
+		m.screen = m.sized(hostlist.New(msg.Hosts))
 		return m, nil
 
 	case hostlist.AddHostMsg:
@@ -168,7 +188,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// the host (FR-HOST-001).
 		h := msg.Saved.Host
 		m.modals = nil
-		m.screen = hostlist.New(msg.Saved.Hosts).Select(h.ID)
+		m.screen = m.sized(hostlist.New(msg.Saved.Hosts).Select(h.ID))
 		m.status = domain.Sanitize(h.Label) + ": saved"
 		return m, nil
 
@@ -176,15 +196,38 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if f, ok := m.screen.(hostedit.Model); ok {
 			m.screen = f.SaveFailed(msg.Err)
 		} else {
-			m.status = "not saved: " + domain.Sanitize(msg.Err.Error())
+			m.status = components.ErrorPrefix + "not saved: " + domain.Sanitize(msg.Err.Error())
 		}
 		return m, nil
 
 	case hostedit.CancelledMsg:
-		if _, ok := m.screen.(hostedit.Model); ok {
+		if _, ok := m.screen.(hostedit.Model); ok && m.prev != nil {
 			m.modals = nil
-			m.screen = m.list
+			m.screen = m.sized(m.prev)
 		}
+		return m, nil
+
+	case hostlist.DeleteHostMsg:
+		svc, id, label := m.svc, msg.HostID, msg.Label
+		return m, func() tea.Msg {
+			hosts, err := svc.DeleteHost(context.Background(), id)
+			if err != nil {
+				return HostDeleteFailedMsg{Label: label, Err: err}
+			}
+			return HostDeletedMsg{Label: label, Hosts: hosts}
+		}
+
+	case HostDeletedMsg:
+		row := 0
+		if l, ok := m.screen.(hostlist.Model); ok {
+			row = l.Cursor()
+		}
+		m.screen = m.sized(hostlist.New(msg.Hosts).SelectRow(row))
+		m.status = domain.Sanitize(msg.Label) + ": deleted"
+		return m, nil
+
+	case HostDeleteFailedMsg:
+		m.status = components.ErrorPrefix + domain.Sanitize(msg.Label) + ": not deleted: " + domain.Sanitize(msg.Err.Error())
 		return m, nil
 
 	case components.ShowModalMsg:
@@ -278,7 +321,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.cancelAttempt()
 		m.modals = nil
-		m.status = failedStatus(msg.Label, msg.Err)
+		m.status = components.ErrorPrefix + failedStatus(msg.Label, msg.Err)
 		if me, ok := errors.AsType[*app.HostKeyMismatchError](msg.Err); ok {
 			m.modals = append(m.modals, keychanged.New(msg.Label, me))
 		}
@@ -305,16 +348,29 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // openForm shows the host form for h (the zero Host to add one) and keeps
-// the list to return to.
+// the screen to return to.
 func (m Model) openForm(h domain.Host) Model {
 	l, ok := m.screen.(hostlist.Model)
 	if !ok {
 		return m
 	}
-	m.list = l
+	m.prev = l
 	m.status = ""
-	m.screen = hostedit.New(h, l.Hosts(), m.identities)
+	m.screen = m.sized(hostedit.New(h, l.Hosts(), m.identities))
 	return m
+}
+
+// bodyHeight is the number of rows between the title and the status line.
+func (m Model) bodyHeight() int { return max(m.height-4, 1) }
+
+// sized tells s the size of the area it draws in, once the terminal size
+// is known.
+func (m Model) sized(s components.Screen) components.Screen {
+	if s == nil || m.width == 0 {
+		return s
+	}
+	s, _ = s.Update(tea.WindowSizeMsg{Width: m.width, Height: m.bodyHeight()})
+	return s
 }
 
 // startConnect pushes the Connecting modal and starts the connect command.
@@ -391,33 +447,88 @@ func endedStatus(label string, err error) string {
 	return label + ": " + domain.Sanitize(err.Error()) // may carry server text
 }
 
-// View implements tea.Model.
+// View implements tea.Model. The layout is the title, a blank line, the
+// active screen with the modals under it, the status line and the footer.
+// Once the terminal size is known the view fills it exactly: the body is
+// cut or padded so that the footer is always the last line, and every line
+// is truncated to the width with "…" (NFR-UX-002).
 func (m Model) View() tea.View {
-	var b strings.Builder
-	b.WriteString(titleStyle.Render("sshelf"))
-	b.WriteString("\n")
-	if m.screen == nil {
-		b.WriteString(dimStyle.Render("Loading…"))
-		b.WriteString("\n")
-	} else {
-		b.WriteString(m.screen.View())
-	}
-	for _, md := range m.modals {
-		b.WriteString("\n")
-		b.WriteString(md.View())
-		b.WriteString("\n")
-	}
-	b.WriteString("\n")
-	if m.status != "" {
-		b.WriteString(statusStyle.Render(m.status))
-		b.WriteString("\n")
-	}
-	if _, ok := m.screen.(hostlist.Model); ok {
-		b.WriteString(dimStyle.Render("↑/↓ move • enter connect • a add • e edit • q quit"))
-		b.WriteString("\n")
+	body, foot := m.screenLines()
+	if n := len(m.modals); n > 0 {
+		var ml []string
+		for i, md := range m.modals {
+			if i > 0 {
+				ml = append(ml, "")
+			}
+			ml = append(ml, viewLines(md.View())...)
+		}
+		if h, ok := m.modals[n-1].(components.Hinter); ok {
+			foot = components.Help(h.Hints()...)
+		}
+		if m.height == 0 || len(body)+1+len(ml) <= m.bodyHeight() {
+			body = append(append(body, ""), ml...)
+		} else {
+			body = ml // the modals have the keyboard; the screen gives way
+		}
 	}
 
-	v := tea.NewView(b.String())
+	out := []string{titleStyle.Render("sshelf"), ""}
+	if m.height > 0 {
+		h := m.bodyHeight()
+		body = body[:min(len(body), h)]
+		for len(body) < h {
+			body = append(body, "")
+		}
+		out = append(out, body...)
+		out = append(out, statusStyle.Render(m.status))
+	} else {
+		out = append(out, body...)
+		if m.status != "" {
+			out = append(out, "", statusStyle.Render(m.status))
+		}
+	}
+	out = append(out, foot)
+	if m.width > 0 {
+		for i, l := range out {
+			out[i] = ansi.Truncate(l, m.width, "…")
+		}
+	}
+
+	v := tea.NewView(strings.Join(out, "\n"))
 	v.AltScreen = true
 	return v
+}
+
+// footer returns the footer line the view ends with.
+func (m Model) footer() string {
+	_, foot := m.screenLines()
+	if n := len(m.modals); n > 0 {
+		if h, ok := m.modals[n-1].(components.Hinter); ok {
+			foot = components.Help(h.Hints()...)
+		}
+	}
+	return foot
+}
+
+// screenLines returns the active screen's lines and its footer: the hints
+// of a components.Hinter, or else the screen's own last line.
+func (m Model) screenLines() (body []string, foot string) {
+	if m.screen == nil {
+		return []string{dimStyle.Render("Loading…")}, components.Help(keys.Quit)
+	}
+	body = viewLines(m.screen.View())
+	if h, ok := m.screen.(components.Hinter); ok {
+		return body, components.Help(h.Hints()...)
+	}
+	n := len(body)
+	foot, body = body[n-1], body[:n-1]
+	for len(body) > 0 && body[len(body)-1] == "" {
+		body = body[:len(body)-1]
+	}
+	return body, foot
+}
+
+// viewLines splits a view into lines, without the trailing newline.
+func viewLines(s string) []string {
+	return strings.Split(strings.TrimRight(s, "\n"), "\n")
 }

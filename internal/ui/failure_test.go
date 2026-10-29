@@ -50,7 +50,7 @@ func TestFR_CONN_006_ErrorToasts(t *testing.T) {
 			if !strings.Contains(v, tc.want) || len(m.(Model).modals) != 0 {
 				t.Fatalf("want %q and no modal:\n%s", tc.want, v)
 			}
-			golden(t, tc.golden, v)
+			golden(t, tc.golden, m)
 		})
 	}
 }
@@ -65,7 +65,7 @@ func TestFR_CONN_006_StagesShown(t *testing.T) {
 	if !strings.Contains(ansiSeq.ReplaceAllString(v, ""), "✓ dialling → ✓ verifying → › authenticating") {
 		t.Fatalf("view:\n%s", v)
 	}
-	golden(t, "connecting", v)
+	golden(t, "connecting", m)
 }
 
 func TestFR_CONN_006_ServerTextSanitised(t *testing.T) {
