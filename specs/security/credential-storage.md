@@ -166,7 +166,12 @@ var (
 	ErrTooLarge    = errors.New("secrets: secret exceeds 2800 bytes")
 )
 
-const MaxSecretSize = 2800
+const MaxSecretSize = 2800 // SEC-CRED-003
+
+// ErrTooLarge's text names only the limit. The "reference the key file instead"
+// hint of SEC-CRED-003 is the UI message app.MsgKeyTooLarge, shown for an
+// oversized private key: the sentinel also covers passwords and passphrases,
+// for which a key file is no alternative.
 
 type Field string
 

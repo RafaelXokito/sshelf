@@ -115,7 +115,11 @@ If a secret exceeds 2800 bytes, then the system shall refuse to store it and sug
 instead.
 Priority: MVP · Status: Implemented · Threats: T-6
 - AC1: A 2800-byte value is stored and a 2801-byte value returns `secrets.ErrTooLarge` (an RSA-4096 OpenSSH key is
-  about 3.4 KB). The message mentions "reference the key file".
+  about 3.4 KB). The message shown for an oversized private key (`app.MsgKeyTooLarge`, "Key is larger than 2800
+  bytes: reference the key file instead") mentions "reference the key file". Implemented with the hint in the `app`
+  message rather than in the `ErrTooLarge` sentinel text ("secrets: secret exceeds 2800 bytes"), because the
+  sentinel also covers passwords and passphrases, for which a key file is no alternative
+  (`credential-storage.md` §5).
 
 **SEC-CRED-004: Delete with the identity.**
 When an identity is deleted, or one of its secret fields is cleared, the system shall delete the matching store
@@ -194,6 +198,8 @@ Note: `@cert-authority` support is SEC-HOSTKEY-011 (`Later`).
 Priority: MVP · Status: Implemented · Threats: T-10, T-11
 - AC1: A hashed fixture entry connects without a prompt.
 - AC2: A key marked `@revoked` fails even when sshelf's file trusts it, and the UI offers no trust action.
+  Implemented as a status-bar line ("`<label>`: host key revoked (`<file>` line `<n>`); connection refused") rather
+  than a block screen, because there is nothing to compare and no action to offer (design §9.1).
 
 **SEC-HOSTKEY-004: TOFU prompt.**
 When a server presents a host key that no source knows, the system shall show host, port, key type and SHA-256
@@ -217,6 +223,9 @@ of those keys.
 Priority: MVP · Status: Implemented · Threats: T-12
 - AC1: With a stored ed25519 key, `HostKeyAlgorithms` contains only ed25519 algorithms. An RSA-only server fails
   without a TOFU prompt.
+- AC2: With a stored RSA key, `HostKeyAlgorithms` contains only `rsa-sha2-512` and `rsa-sha2-256`. Implemented
+  without SHA-1 `ssh-rsa` in the pinned list, because the list is drawn from x/crypto's supported (not insecure)
+  algorithms, which SEC-SESSION-004 requires.
 
 **SEC-HOSTKEY-011: Host certificate authorities.**
 Where a trusted known-hosts file lists a CA with `@cert-authority`, the system shall accept a host certificate
@@ -267,7 +276,7 @@ Priority: MVP · Status: Implemented · Threats: T-7, T-4
 **SEC-MEM-008: No secrets to child processes.**
 The system shall never pass a secret through argv or environment variables, and the only child process that may
 receive secrets is `/usr/bin/security`, invoked by `zalando/go-keyring` on macOS through stdin and stdout (D-008).
-Priority: MVP · Status: Draft · Threats: T-17
+Priority: MVP · Status: Implemented · Threats: T-17
 - AC1: The import-rule test (`internal/archtest`, ADR-009) finds no import of `os/exec` in any sshelf package, so
   sshelf itself starts no child process that could receive a secret.
 - AC2: A dependency review confirms the keyring library uses `security -i` (stdin) for set operations.

@@ -266,42 +266,64 @@ configuration (D-007).
 ### ADR-010: `~/.ssh/config` import copies data once and references keys by path
 
 **Decision.** Import is a one-way copy with a preview (D-103), parsed by
-`github.com/kevinburke/ssh_config`, with `Include` expanded and the
-`%h`/`%p`/`%r`/`~` tokens resolved. An `IdentityFile` becomes an identity
+sshelf's own small parser in `internal/sshconfig` (stdlib only), with `Include` expanded and the
+`%h`/`%p`/`%r`/`~` tokens resolved. `Match` blocks are skipped and listed in the
+preview, never evaluated. Implemented as an in-house parser instead of
+`github.com/kevinburke/ssh_config` (the original choice) because that library
+resolves `Include` against the real home directory, which makes fixture tests
+impossible, and it evaluates `Match`; the parser takes the home directory as
+an option. An `IdentityFile` becomes an identity
 **referencing the key file by path**. Import does not copy the key into the
 keychain, because it should never silently duplicate secrets. Afterwards the
 identity screen offers "Store key in keychain" (D-004), which leaves the
 original file untouched. sshelf never writes to
 `~/.ssh/config`.
 
+### ADR-011: Own text input instead of Bubbles `textinput`
+
+**Context.** Bubbles v2 `textinput` imports a clipboard package for its paste
+binding. SEC-CLIP-005 forbids any clipboard package, and `archtest` fails on
+one.
+
+**Decision.** Implemented as sshelf's own `components.TextInput`
+(`internal/ui/components/textinput.go`) instead of Bubbles `textinput`,
+because the Bubbles component pulls in a clipboard package. Paste arrives
+from the terminal as `tea.PasteMsg` and needs no clipboard access. The input
+passes typed and pasted text through `domain.Sanitize`, supports plain,
+masked and no-echo modes (FR-IDENT-004), zeroes its runes on `Reset` and
+never leaves an unzeroed copy behind, so it can hold a secret. Every form and
+modal (host form, identity form, prompt modal) uses it. Bubbles packages that
+need no clipboard, such as `key`, are still used.
+
 ---
 
 ## 4. Architecture requirements
 
-Every requirement has the status **Draft**. "The system" means the sshelf
+Each `MVP` requirement shows its status next to its priority; every other
+requirement is **Draft**. "The system" means the sshelf
 binary. IDs are never reused, so gaps in the numbering are requirements
 removed in revision 2.
 
 ### 4.1 Sessions (`ARCH-SESS`)
 
 **ARCH-SESS-001**: The system shall open SSH sessions in process with `golang.org/x/crypto/ssh` and shall start no child process other than the `/usr/bin/security` calls made by `zalando/go-keyring` on macOS (D-008).
-- Priority: MVP
+- Priority: MVP · Status: Implemented
 - Acceptance: `archtest` finds no import of `os/exec` in any sshelf package. A connect test against the in-process server passes on a machine without OpenSSH installed.
 
 **ARCH-SESS-002**: When the user connects to a host, the system shall finish dialling, host-key verification and authentication before it releases the terminal to the session.
-- Priority: MVP
+- Priority: MVP · Status: Implemented
 - Acceptance: A keyboard-interactive prompt appears as a TUI modal (golden file). If auth fails, the user returns to the host list with an error, and `tea.Exec` is never invoked.
 
 **ARCH-SESS-003**: While a session is attached, the system shall put the terminal into raw mode and relay input and output unchanged, except for the escape sequences in ARCH-SESS-006 (v1).
-- Priority: MVP
+- Priority: MVP · Status: Implemented
 - Acceptance: In an integration test, 256 random bytes (excluding the escape character at line start) arrive at the server unchanged, and binary output from the server reaches the writer unchanged.
 
 **ARCH-SESS-004**: When the local terminal is resized while a session is attached, the system shall send an SSH `window-change` request with the new size within 100 ms.
-- Priority: MVP
+- Priority: MVP · Status: Implemented
 - Acceptance: A fake `Terminal` emits a resize event, and the test server records the matching `window-change`. A burst of resize events within 50 ms produces at most 2 requests.
 
 **ARCH-SESS-005**: When an attached session ends for any reason (remote exit, network error, `~.`, or a panic in a session goroutine), the system shall restore the saved terminal state, write the reset sequence in §8.6, and return control to the TUI.
-- Priority: MVP
+- Priority: MVP · Status: Implemented
 - Acceptance: A PTY test (creack/pty) runs each case. Afterwards `stty -a` matches its value before the session, the host list redraws, and the next keystroke reaches the TUI.
 
 **ARCH-SESS-006**: When the user types the escape character (default `~`) at the start of a line, the system shall treat the next character as a command: `.` disconnects, `?` shows help, `~` sends a literal `~`, and `d` detaches (Later).
@@ -339,55 +361,55 @@ removed in revision 2.
 ### 4.2 Connection and authentication (`ARCH-CONN`)
 
 **ARCH-CONN-001**: The system shall offer only the authentication methods that the identity configures, in this order: the identity's explicit key (stored or file), then (v1) the ssh-agent if allowed, then password or keyboard-interactive, whichever the server offers.
-- Priority: MVP (the agent step is v1)
+- Priority: MVP (the agent step is v1) · Status: Implemented
 - Acceptance: A table test over identity configurations checks the `[]ssh.AuthMethod` built. The test server confirms the order of attempts: key before password in the MVP, and key, agent, password in v1.
 
 **ARCH-CONN-002**: When the server sends a keyboard-interactive challenge, the system shall answer a single no-echo prompt matching `/password/i` with the identity's stored password, and show every other prompt, such as an OTP, in a TUI modal.
-- Priority: MVP · Source: FR-CONN-008
+- Priority: MVP · Status: Implemented · Source: FR-CONN-008
 - Acceptance: A server that accepts passwords only through keyboard-interactive connects with the stored password and no modal. A test server with a password plus OTP challenge: the password is filled automatically and the OTP modal appears. Cancelling the modal aborts with `ErrAuthCancelled`.
 
 **ARCH-CONN-003**: When the server presents a host key that no known_hosts file knows, the system shall show a TOFU modal with the key type and SHA256 fingerprint and the two choices "Trust and save" and "Cancel", and continue only after "Trust and save".
-- Priority: MVP · Source: FR-KH-001 ("Trust once" is v1, FR-KH-007)
+- Priority: MVP · Status: Implemented · Source: FR-KH-001 ("Trust once" is v1, FR-KH-007)
 - Acceptance: Golden file of the modal. "Trust and save" appends one line to `<configDir>/known_hosts`. Enter, Esc and "Cancel" all fail with `ErrHostKeyRejected` and write nothing. Neither action changes `~/.ssh/known_hosts` (its size and mtime are unchanged).
 
 **ARCH-CONN-004**: If a presented host key does not match a known key for that host, then the system shall abort before authenticating and show the old and new fingerprints, with no "accept" shortcut.
-- Priority: MVP
+- Priority: MVP · Status: Implemented
 - Acceptance: The test server records zero auth attempts. The modal shows the path and line number of the stale entry and how to remove it (FR-KH-002).
 
 **ARCH-CONN-005**: The system shall pass a `context.Context` to every network and keychain operation of a connection attempt so that the user can cancel it with `esc`.
-- Priority: MVP
+- Priority: MVP · Status: Implemented
 - Acceptance: Cancelling during dial and during auth returns to the host list within 200 ms. `goleak` passes.
 
 ### 4.3 Secrets and safety (`ARCH-SEC`)
 
 **ARCH-SEC-001**: The system shall not write any secret to the config file, known_hosts, logs, crash reports, environment variables or temporary files.
-- Priority: MVP
+- Priority: MVP · Status: Draft
 - Acceptance: An integration test with `secrets.MemStore` holding a canary password and key does a connect, an edit and a save, then scans the config dir, the log dir, the temp dir and `os.Environ()`. The canary appears zero times.
 
 **ARCH-SEC-002**: The system shall give the SSH layer credentials only through the `CredentialSource` interface, and `internal/sshclient` shall not import `internal/secrets` or `internal/store`.
-- Priority: MVP
+- Priority: MVP · Status: Implemented
 - Acceptance: `archtest` passes.
 
 **ARCH-SEC-006**: If no OS credential store is available, then the system shall still start and connect hosts that use key files, and shall disable saving passwords and keys with a visible explanation.
-- Priority: MVP
+- Priority: MVP · Status: Implemented
 - Acceptance: With a `secrets.Store` that returns `ErrUnavailable`, a key-file host connects, the password field is read-only with an explanatory hint (golden file), and nothing is written anywhere.
 
 **ARCH-SEC-004**: The system shall run a panic handler in `main` and a recovering wrapper around every goroutine it starts, each of which restores the terminal before it writes a crash report that contains no secrets.
-- Priority: MVP
+- Priority: MVP · Status: Implemented
 - Acceptance: A panic forced in a session goroutine and one forced in `Update` (behind the `sshelf_faultinject` build tag) both leave the terminal in cooked mode (PTY test). The canary scan of the crash report is clean.
 
 ### 4.4 Packages and data (`ARCH-PKG`, `ARCH-DATA`)
 
 **ARCH-PKG-001**: The system shall follow the package layout and import rules in §5, enforced by `internal/archtest`.
-- Priority: MVP
+- Priority: MVP · Status: Implemented
 - Acceptance: A deliberately forbidden import makes the test fail.
 
 **ARCH-PKG-002**: The system shall resolve file locations only through `internal/paths` (ADR-005), creating directories with mode 0700 and files with mode 0600.
-- Priority: MVP
+- Priority: MVP · Status: Implemented
 - Acceptance: Table tests with an injected environment cover Linux, Linux with XDG set, macOS, macOS with XDG set, and `--config`. A permission check runs after the first save.
 
 **ARCH-DATA-001**: The system shall identify every entity by an immutable UUIDv7 and reference other entities only by ID.
-- Priority: MVP
+- Priority: MVP · Status: Implemented
 - Acceptance: Renaming an identity changes no host record. Deleting an identity that hosts still reference requires confirmation and clears those references.
 
 **ARCH-DATA-005**: If `config.json` changed on disk since it was loaded, then the system shall refuse to save and offer to reload.
@@ -399,17 +421,17 @@ removed in revision 2.
 - Acceptance: Fixture configs cover `Include`, `Host *` defaults, wildcard-only patterns (skipped with a note), `ProxyJump`, `ProxyCommand` and `Match` (both flagged). Golden file of the preview.
 
 **ARCH-DATA-004**: When an identity is deleted, or one of its secrets is cleared, the system shall delete the matching keychain items and show a warning naming any item it could not delete, without tracking it (SEC-CRED-004).
-- Priority: MVP
+- Priority: MVP · Status: Implemented
 - Acceptance: With `secrets.MemStore`, deleting an identity leaves no `Ref` with that identity's ID. With a failing `Delete`, a warning names the item and nothing is written to `config.json`.
 
 ### 4.5 UI (`ARCH-UI`)
 
 **ARCH-UI-001**: The system shall run one root Bubble Tea model that routes messages to one active screen and a stack of modal overlays, as defined in §9.
-- Priority: MVP
+- Priority: MVP · Status: Draft
 - Acceptance: A teatest walk-through (start, list, edit, save, connect, TOFU, stub session, back) matches its golden files.
 
 **ARCH-UI-002**: The system shall perform all I/O (config, keychain, SSH, filesystem) in `tea.Cmd` values or goroutines that report back with messages, never inside `Update`.
-- Priority: MVP
+- Priority: MVP · Status: Implemented
 - Acceptance: In UI tests, `app.Service` is a fake that panics if it is called synchronously from `Update` (it checks a goroutine marker).
 
 **ARCH-UI-003**: The system shall filter the host list with fuzzy matching over label, hostname, user, group and tags, within 16 ms for 5,000 hosts.
@@ -417,13 +439,13 @@ removed in revision 2.
 - Acceptance: `BenchmarkFilter5k` stays under 16 ms per operation on the CI runner.
 
 **ARCH-UI-004**: The system shall define every keybinding in a single `ui/keys` keymap, and the help screen and footer shall be generated from it.
-- Priority: MVP
+- Priority: MVP · Status: Implemented
 - Acceptance: A test checks that every binding has help text and that no two bindings in the same screen share a key.
 
 ### 4.6 Testing (`ARCH-TEST`)
 
 **ARCH-TEST-001**: The system shall have an in-process SSH test server (`internal/testutil/sshtest`) that supports password, public key, keyboard-interactive, PTY, window-change and exec requests (and `direct-tcpip`, `tcpip-forward` and agent forwarding in v1), and records every request.
-- Priority: MVP
+- Priority: MVP · Status: Implemented
 - Acceptance: CI runs the integration suite with `-race` on Linux and macOS, using loopback only and no real keychain.
 
 ---
@@ -439,10 +461,12 @@ cmd/sshelf/                 main: process hardening first (an unexported functio
                             paths → store → secrets → app → ui.
 internal/
   domain/                   Pure types: Host, Group, Identity, Snippet, ForwardRule, Settings, ID.
-                            Validation and inheritance resolution. Stdlib only. (Replaces internal/hosts.)
+                            Validation and inheritance resolution. Stdlib plus github.com/google/uuid
+                            (ADR-008). (Replaces internal/hosts.)
   store/                    Load/Save of config.json (atomic, 0600, mtime conflict check) ⇄ domain.Data.
   secrets/                  Store interface (Get/Set/Delete/Available by Ref), zalando/go-keyring adapter
                             (item naming per security/credential-storage.md), MemStore for tests.
+                            Uses term.SafeGo for the goroutine that bounds each keyring call.
   paths/                    Resolve the config dir and log dir (ADR-005).
   app/                      Use cases: CRUD, import, connect orchestration, TOFU write-back.
                             Implements sshclient.CredentialSource and sshclient.Prompter.
@@ -451,20 +475,30 @@ internal/
                             keyboard-interactive bridge, keepalive, agent (v1), forwarding (v1).
   session/                  Session (a channel with a PTY) implementing tea.ExecCommand: raw mode, pumps,
                             SIGWINCH, escape parser (v1). Later: Manager, shadow emulator (x/vt).
-  sshconfig/                Parse ~/.ssh/config (Include, tokens) into an import plan.
+  sshconfig/                Parse ~/.ssh/config (Include, tokens) into an import plan. Own parser,
+                            stdlib only (ADR-010).
   search/                   Fuzzy matching and ranking (sahilm/fuzzy).
-  term/                     Terminal state save/restore, reset sequence, safego.Go.
+  term/                     Terminal state save/restore, reset sequence, term.SafeGo (panic-safe
+                            goroutines, ARCH-SEC-004).
   ui/                       Root model, router, modal stack.
-    keys/  theme/  components/
-    screens/welcome|hostlist|hostedit|identities|identityedit|groups(v1)|sessions(Later)|settings|import/
-    modals/connecting|tofu|prompt|disconnected|confirm|help/
+    keys/  theme/  components/        components holds TextInput, Form and the secret field (ADR-011).
+    screens/welcome|hostlist|hostedit|identities|identityedit|loaderror|groups(v1)|sessions(Later)|settings|import/
+    modals/connecting|tofu|prompt|keychanged|disconnected|confirm|help/
   testutil/sshtest/         In-process SSH server for tests.
   archtest/                 Import rule test (ADR-009).
 ```
 
 Compared with revision 1, the `vault`, `crypto`, `config`, `cli` and `logx`
-packages are gone. Logging is a few lines of `log/slog` setup in `main`, off unless `SSHELF_DEBUG=1` is set (SEC-LOG-003), and
-needs no package of its own (D-007).
+packages are gone. Logging is a few lines of `log/slog` setup in `main`
+(`cmd/sshelf/log.go`) and needs no package of its own (D-007). It is off unless
+the environment variable `SSHELF_DEBUG` is exactly `1` (SEC-LOG-003): then
+records go to `<stateDir>/` (ADR-005) in a 0600 file rotated at 5 MiB with one
+`.1` backup. Otherwise every record is discarded and no file or state
+directory is created.
+
+`screens/import` is the directory; its package is named `importscreen`
+because `import` is a Go keyword. `screens/settings`, `modals/help` and
+`modals/disconnected` are empty placeholders until their v1 features.
 
 ### 5.2 Dependency rules
 
@@ -472,9 +506,9 @@ needs no package of its own (D-007).
 flowchart TD
     main[cmd/sshelf] --> app
     main --> ui
-    main --> store
     main --> secrets
     main --> paths
+    main --> term
     ui --> app
     ui --> domain
     ui --> search
@@ -485,8 +519,10 @@ flowchart TD
     app --> session
     app --> sshconfig
     app --> domain
+    app --> paths
+    app --> term
     store --> domain
-    secrets --> domain
+    secrets --> term
     sshclient --> domain
     session --> sshclient
     session --> term
@@ -496,13 +532,25 @@ flowchart TD
 
 | Package | May import (internal) | Must NOT import |
 |---|---|---|
-| `domain` | none | any other `internal/` package, `x/crypto/ssh` |
-| `store`, `secrets` | `domain` | `ui`, `app`, `sshclient`, `session` |
+| `domain` | none (external: stdlib and `google/uuid` only) | any other `internal/` package, `x/crypto/ssh` |
+| `store` | `domain` | `ui`, `app`, `sshclient`, `session` |
+| `secrets` | `domain`, `term` | `ui`, `app`, `sshclient`, `session` |
 | `sshclient` | `domain` | `secrets`, `store`, `ui`, `app`, Bubble Tea |
 | `session` | `sshclient`, `term` | `secrets`, `store`, `ui`, `app`. It satisfies `tea.ExecCommand` structurally, so it does not import Bubble Tea. |
 | `ui/...` | `app` (interfaces), `domain`, `search`, `session` (the handle type only), `ui/*` | `secrets`, `store`, `sshclient`, `x/crypto/ssh` |
 | `app` | everything except `ui` | `ui` |
-| any sshelf package | | `os/exec` (D-008's `/usr/bin/security` call happens inside `zalando/go-keyring`) |
+| `sshconfig`, `search` | `domain` | (no extra rule; not checked by `archtest`) |
+| `paths`, `term` | none | (no extra rule; not checked by `archtest`) |
+| any sshelf package | | `os/exec` (D-008's `/usr/bin/security` call happens inside `zalando/go-keyring`), any clipboard package (SEC-CLIP-005) |
+
+Implemented with `secrets` allowed to import `term`, because the OS store
+runs each keyring call in a goroutine bounded by a timeout, and every goroutine
+sshelf starts must go through `term.SafeGo` (ARCH-SEC-004). `term` imports no
+other `internal/` package, so the edge cannot create a cycle. `main` wires
+`store` through `app`, so it no longer imports `store` directly. `ui` may
+import `session` but currently does not: it receives the session handle as
+an `app` type. The rows above match the `rules` table in
+`internal/archtest/archtest_test.go`.
 
 ---
 
@@ -750,7 +798,11 @@ sequenceDiagram
    context closes the connection, which also unblocks the handshake.
 5. **Host key.** `HostKeyAlgorithms` is set to the key types already known for
    that host, the same trick OpenSSH uses, so a host with a known ed25519 key
-   is not reported as unknown when it offers RSA first.
+   is not reported as unknown when it offers RSA first. The list is taken from
+   `ssh.SupportedAlgorithms().HostKeys` in x/crypto's preference order, so a
+   known RSA key pins `rsa-sha2-256` and `rsa-sha2-512` only: SHA-1 `ssh-rsa`
+   (and DSA) is never offered (SEC-SESSION-004, SEC-HOSTKEY-007). With no
+   known key the list is left empty and x/crypto's defaults apply.
 6. **Auth.** `ssh.PublicKeysCallback`, `ssh.KeyboardInteractive(bridge)` and
    `ssh.PasswordCallback`. If an encrypted key has no stored passphrase, the
    user gets a prompt. A "save to keychain" checkbox on that prompt is v1
@@ -866,7 +918,9 @@ stateDiagram-v2
     TOFU --> HostList : enter / esc (cancel)
     Connecting --> Prompt : PromptMsg(kbd-int / passphrase / missing secret)
     Prompt --> Connecting : submit
-    Connecting --> HostList : error / esc
+    Connecting --> HostList : error / esc / revoked key (status line)
+    Connecting --> KeyChanged : ErrHostKeyMismatch
+    KeyChanged --> HostList : esc / enter / q
     Connecting --> Session : ConnectedMsg → tea.Exec
     Session --> HostList : SessionEndedMsg(ok)
     Session --> Disconnected : SessionEndedMsg(net err) (v1)
@@ -880,8 +934,14 @@ stateDiagram-v2
   and offers `I` import and `a` add host.
 - If the keychain is unavailable (ARCH-SEC-006), a one-line banner says so on
   the host list and in the identity editor.
-- Connecting, TOFU, Prompt, Disconnected, Confirm and Help are **modals**
+- Connecting, TOFU, Prompt, KeyChanged, Disconnected, Confirm and Help are **modals**
   stacked over the current screen.
+- A changed host key (`ErrHostKeyMismatch`) opens the **KeyChanged** block
+  modal (FR-KH-002, ARCH-CONN-004), which only closes back to the host list.
+  A revoked key (`ErrHostKeyRevoked`) is implemented as a status-bar line,
+  "`<label>`: host key revoked (`<file>` line `<n>`); connection refused",
+  rather than a block screen, because there are no two fingerprints to
+  compare and no action to offer (SEC-HOSTKEY-003 AC2).
 - **Session** is not rendered. It is the window during which `tea.Exec` holds
   the terminal.
 
@@ -931,8 +991,8 @@ defined in `ui/keys`. FR-NAV-003 is authoritative for the host list.
 |---|---|---|
 | Unit | `testing`, table tests | `domain.Resolve`, validation, auth method building, escape parser, `sshconfig` mapping, `paths` with an injected env and OS, fuzzy ranking, `store` round-trip and conflict detection |
 | Fuzz | `go test -fuzz` | the ssh_config mapper and the escape parser |
-| UI | `charmbracelet/x/exp/teatest` + golden files | every screen at 80×24 and 120×40 with a fake `app.Service`. ASCII colour profile for goldens. |
-| Integration | `internal/testutil/sshtest` on `charmbracelet/ssh` + `wish/testsession`, using `secrets.MemStore` | auth methods, keyboard-interactive password and OTP, TOFU trust-and-save, cancel and mismatch, window-change, exit status. In v1: keepalive timeout, jump hosts, forwarding and agent. |
+| UI | `testing` + golden files | every screen at 80×24 and 120×40 with a fake `app.Service`. The shared helper `golden(t, name, model)` in `internal/ui/golden_test.go` sends a `tea.WindowSizeMsg`, renders `View()`, strips ANSI sequences and trailing spaces (what the ASCII colour profile renders), checks the layout (NFR-UX-002) and compares with `internal/ui/testdata/<name>.<w>x<h>.golden`, for example `hostlist.80x24.golden`. `go test ./internal/ui -update` rewrites them. Implemented without `teatest` because rendering the root model directly is enough and adds no dependency (D-007). |
+| Integration | `internal/testutil/sshtest`, built directly on `golang.org/x/crypto/ssh` (no `charmbracelet/ssh` or `wish` dependency), using `secrets.MemStore` | auth methods, keyboard-interactive password and OTP, TOFU trust-and-save, cancel and mismatch, window-change, exit status. In v1: keepalive timeout, jump hosts, forwarding and agent. |
 | Terminal E2E | `creack/pty` on Linux and macOS | runs the real binary with only MVP features: the config directory comes from the default location or from an `XDG_CONFIG_HOME`/`HOME` override pointing at a temp dir. It connects to sshtest, ends the session with `exit` in the remote shell, then asserts that the `stty` state is restored and the next key reaches the TUI. Panic injection behind the `sshelf_faultinject` build tag. The same steps, run by hand in a real terminal, are the T-0 exit check for ADR-007. |
 | Keychain | build tag `integration_keyring` | the real `secrets.NewOSStore` Set/Get/Delete round-trip on throwaway keychains, as specified in `security/credential-storage.md` §8. Never touches the user's login keychain. |
 | Architecture and hygiene | `archtest`, `-race`, `goleak`, `govulncheck`, `golangci-lint` | on every PR |
