@@ -24,11 +24,12 @@ jobs:
         run: |
           go vet ./...
           go vet -tags devcheck ./...
+          go vet -tags integration_keyring ./...
       - name: golangci-lint (NFR-QUAL-002)
         uses: golangci/golangci-lint-action@v8
         with:
           version: latest
-          args: --build-tags=devcheck
+          args: --build-tags=devcheck,integration_keyring
       - name: govulncheck (SEC-SESSION-004)
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
@@ -70,3 +71,70 @@ jobs:
               file "$bin" | grep -q 'statically linked' || { echo "$bin: not statically linked"; exit 1; }
             fi
           done
+
+  # Real OS credential-store tests (T-010, credential-storage §8). They run
+  # only here, never on a developer machine, and never touch a login
+  # keychain: each job uses a throwaway store and a random
+  # sshelf-test-<hex> service.
+  keyring-macos:
+    runs-on: macos-latest
+    env:
+      SSHELF_KEYRING_TESTS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Throwaway keychain as the only keychain in the search list
+        run: |
+          set -eu
+          security create-keychain -p x sshelf-ci.keychain
+          security set-keychain-settings sshelf-ci.keychain
+          security unlock-keychain -p x sshelf-ci.keychain
+          security list-keychains -d user -s sshelf-ci.keychain
+          security default-keychain -d user -s sshelf-ci.keychain
+          security list-keychains -d user
+          security default-keychain -d user
+      - name: go test -tags integration_keyring (SEC-CRED-003, FR-CRED-001)
+        run: go test -race -count=1 -v -tags integration_keyring ./internal/secrets
+      - name: Delete the throwaway keychain
+        if: always()
+        run: security delete-keychain sshelf-ci.keychain || true
+
+  keyring-linux:
+    runs-on: ubuntu-latest
+    env:
+      SSHELF_KEYRING_TESTS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install gnome-keyring and dbus
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gnome-keyring dbus
+      - name: go test -tags integration_keyring under dbus-run-session (SEC-CRED-003, FR-CRED-001)
+        run: |
+          dbus-run-session -- sh -c '
+            set -eu
+            echo x | gnome-keyring-daemon --unlock --components=secrets
+            go test -race -count=1 -v -tags integration_keyring ./internal/secrets
+          '
+
+  # Headless Linux: a container has no session bus, no dbus-launch and no
+  # Secret Service, so every call must be ErrUnavailable (SEC-CRED-005).
+  keyring-linux-nobus:
+    runs-on: ubuntu-latest
+    container: golang:1.26
+    env:
+      SSHELF_KEYRING_TESTS: "1"
+      SSHELF_KEYRING_NO_BUS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check there is no session bus
+        run: |
+          if [ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then echo "session bus present"; exit 1; fi
+          if command -v dbus-launch; then echo "dbus-launch present"; exit 1; fi
+      - name: go test -tags integration_keyring without a session bus (SEC-CRED-005)
+        run: go test -count=1 -v -tags integration_keyring -run 'TestSEC_CRED_005_' ./internal/secrets
