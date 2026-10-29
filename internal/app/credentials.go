@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"golang.org/x/crypto/ssh"
@@ -173,12 +174,43 @@ func (c Credentials) Password(ctx context.Context, t domain.Target) (string, err
 	return string(s.Bytes()), nil
 }
 
-// get reads one of the identity's secrets. The caller must Destroy it.
+// get reads one of the identity's secrets. The caller must Destroy it. A
+// denied or unavailable store is a *StoreError that aborts the attempt,
+// with no retry and nothing cached, so the next connect asks the store
+// again (SEC-CRED-006).
 func (c Credentials) get(ctx context.Context, t domain.Target, f secrets.Field) (secrets.Secret, error) {
 	if c.Store == nil {
-		return secrets.Secret{}, secrets.ErrUnavailable
+		return secrets.Secret{}, &StoreError{Store: StoreName(), Err: secrets.ErrUnavailable}
 	}
-	return c.Store.Get(ctx, secrets.Ref{IdentityID: string(t.IdentityID), Field: f})
+	s, err := c.Store.Get(ctx, secrets.Ref{IdentityID: string(t.IdentityID), Field: f})
+	if errors.Is(err, secrets.ErrDenied) || errors.Is(err, secrets.ErrUnavailable) {
+		return secrets.Secret{}, &StoreError{Store: StoreName(), Err: err}
+	}
+	return s, err
+}
+
+// StoreError reports that the OS credential store denied access or is not
+// available (SEC-CRED-006). Its message names the store.
+type StoreError struct {
+	Store string // "Keychain" or "Secret Service"
+	Err   error  // secrets.ErrDenied or secrets.ErrUnavailable
+}
+
+func (e *StoreError) Error() string {
+	if errors.Is(e.Err, secrets.ErrDenied) {
+		return "Access to " + e.Store + " was denied"
+	}
+	return e.Store + " is not available"
+}
+
+func (e *StoreError) Unwrap() error { return e.Err }
+
+// StoreName is the user-facing name of this OS's credential store.
+func StoreName() string {
+	if runtime.GOOS == "darwin" {
+		return "Keychain"
+	}
+	return "Secret Service"
 }
 
 // readKeyFile expands, checks and reads a key file. The caller clears the

@@ -137,7 +137,7 @@ Priority: MVP · Status: Draft · Threats: T-6
 If the store denies access or the user cancels an OS unlock prompt, then the system shall abort only the current
 connect or save with a message that names the store, without retrying automatically and without caching the
 failure.
-Priority: MVP · Status: Draft · Threats: T-6
+Priority: MVP · Status: Implemented · Threats: T-6
 - AC1: Fake returns `ErrDenied` on `Get`: connect fails with the "Access to Keychain was denied" message, makes no
   second `Get` call, and the next connect calls `Get` again.
 

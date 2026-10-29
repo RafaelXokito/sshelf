@@ -77,6 +77,28 @@ type Config struct {
 	// KnownHostsFiles are read, in order, to verify host keys. Missing files
 	// are skipped. sshclient never writes them.
 	KnownHostsFiles []string
+	// Dial opens the TCP connection; nil means a net.Dialer. Tests use it
+	// to stall or fail the dial.
+	Dial func(ctx context.Context, network, addr string) (net.Conn, error)
+	// Progress, if set, is told each stage the attempt reaches.
+	Progress func(Stage)
+}
+
+// Stage is a step of a connection attempt, shown in the Connecting modal
+// (design §9.2).
+type Stage string
+
+// The stages, in order.
+const (
+	StageDialling       Stage = "dialling"
+	StageVerifying      Stage = "verifying"
+	StageAuthenticating Stage = "authenticating"
+)
+
+func (c Config) stage(s Stage) {
+	if c.Progress != nil {
+		c.Progress(s)
+	}
 }
 
 // Connect dials t, verifies its host key and authenticates with the
@@ -86,6 +108,13 @@ type Config struct {
 // types of the keys already known for the host (SEC-HOSTKEY-007). A changed
 // key fails with *HostKeyMismatchError and a revoked one with
 // *HostKeyRevokedError, both before any credential is used.
+//
+// Every network wait is bounded by t.ConnectTimeout (10 s by default,
+// FR-CONN-006); time spent waiting for the user or the credential store
+// does not count. Failures are classified (FR-CONN-006): ErrNameResolution,
+// ErrConnectionRefused, ErrTimedOut, the host-key errors, ErrAuthCancelled
+// and ErrAuthFailed, all usable with errors.Is. A cancelled ctx returns
+// ctx.Err().
 func (c Config) Connect(ctx context.Context, t domain.Target, creds CredentialSource, p Prompter) (*ssh.Client, error) {
 	if p == nil {
 		p = RejectUnknownHosts{}
@@ -99,28 +128,46 @@ func (c Config) Connect(ctx context.Context, t domain.Target, creds CredentialSo
 		port = 22
 	}
 	addr := net.JoinHostPort(t.Hostname, strconv.Itoa(port))
-	auth := newAuthState(ctx, t, creds, p)
-	defer auth.done()
-	cfg := clientConfig(t, auth, hostKeyCallback(ctx, known, p))
-	cfg.HostKeyAlgorithms = hostKeyAlgorithms(known, addr)
 	timeout := t.ConnectTimeout
-	if timeout == 0 {
+	if timeout <= 0 {
 		timeout = DefaultConnectTimeout
 	}
 	// Never log credentials: only the address, user, stages and errors.
 	log := slog.With("addr", addr, "user", t.User)
 	log.Debug("connect: dialling", "timeout", timeout)
-	d := net.Dialer{Timeout: timeout}
-	conn, err := d.DialContext(ctx, "tcp", addr)
+	c.stage(StageDialling)
+	conn, err := c.dial(ctx, addr, timeout)
 	if err != nil {
 		log.Debug("connect: dial failed", "err", err)
-		return nil, err
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		return nil, classify(err)
 	}
 	log.Debug("connect: handshake (verifying host key, then authenticating)")
-	// Closing the connection on cancel also unblocks the handshake and any
-	// callback waiting on the network.
+	c.stage(StageVerifying)
+	// Closing the connection on cancel or on timeout also unblocks the
+	// handshake and any callback waiting on the network.
+	wd := newWatchdog(timeout, func() { _ = conn.Close() })
 	stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
+	pp := pausingPrompter{p: p, wd: wd}
+	var pc CredentialSource
+	if creds != nil {
+		pc = pausingCreds{c: creds, wd: wd}
+	}
+	auth := newAuthState(ctx, t, pc, pp)
+	defer auth.done()
+	verify := hostKeyCallback(ctx, known, pp)
+	cfg := clientConfig(t, auth, func(host string, remote net.Addr, key ssh.PublicKey) error {
+		if err := verify(host, remote, key); err != nil {
+			return err
+		}
+		c.stage(StageAuthenticating)
+		return nil
+	})
+	cfg.HostKeyAlgorithms = hostKeyAlgorithms(known, addr)
 	sc, chans, reqs, err := ssh.NewClientConn(conn, addr, cfg)
+	timedOut := wd.stop()
 	stopped := stop()
 	if err != nil {
 		_ = conn.Close()
@@ -128,16 +175,34 @@ func (c Config) Connect(ctx context.Context, t domain.Target, creds CredentialSo
 			log.Debug("connect: cancelled", "err", ctx.Err())
 			return nil, ctx.Err()
 		}
-		log.Debug("connect: handshake failed", "err", err)
-		return nil, err
+		log.Debug("connect: handshake failed", "err", err, "timed_out", timedOut)
+		if timedOut {
+			return nil, fmt.Errorf("%w after %v", ErrTimedOut, timeout)
+		}
+		return nil, classify(err)
 	}
-	if !stopped {
+	if !stopped || timedOut {
 		_ = sc.Close()
-		log.Debug("connect: cancelled", "err", ctx.Err())
-		return nil, ctx.Err()
+		if !stopped {
+			log.Debug("connect: cancelled", "err", ctx.Err())
+			return nil, ctx.Err()
+		}
+		return nil, fmt.Errorf("%w after %v", ErrTimedOut, timeout)
 	}
 	log.Debug("connect: authenticated")
 	return ssh.NewClient(sc, chans, reqs), nil
+}
+
+// dial opens the TCP connection within timeout.
+func (c Config) dial(ctx context.Context, addr string, timeout time.Duration) (net.Conn, error) {
+	dctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	dial := c.Dial
+	if dial == nil {
+		var d net.Dialer
+		dial = d.DialContext
+	}
+	return dial(dctx, "tcp", addr)
 }
 
 // clientConfig builds the x/crypto client configuration. It leaves every

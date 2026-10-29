@@ -21,6 +21,9 @@ type answerPrompts struct {
 
 func (p *answerPrompts) install(a *App, answer func(AuthPromptMsg) []string) {
 	a.SetSend(func(msg any) {
+		if _, progress := msg.(ConnectProgressMsg); progress {
+			return
+		}
 		m, ok := msg.(AuthPromptMsg)
 		if !ok {
 			panic("unexpected prompt")

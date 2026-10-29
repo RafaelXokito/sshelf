@@ -128,6 +128,9 @@ func credApp(t *testing.T, store secrets.Store, srvs []*sshtest.Server, identiti
 func cancelPrompts(a *App) *atomic.Int32 {
 	var n atomic.Int32
 	a.SetSend(func(msg any) {
+		if _, progress := msg.(ConnectProgressMsg); progress {
+			return
+		}
 		n.Add(1)
 		switch m := msg.(type) {
 		case AuthPromptMsg:
@@ -142,6 +145,9 @@ func cancelPrompts(a *App) *atomic.Int32 {
 // failOnPrompt makes any prompt fail the test (and cancels it).
 func failOnPrompt(t *testing.T, a *App) {
 	a.SetSend(func(msg any) {
+		if _, progress := msg.(ConnectProgressMsg); progress {
+			return
+		}
 		t.Errorf("unexpected prompt %T", msg)
 		if m, ok := msg.(AuthPromptMsg); ok {
 			m.Cancel()

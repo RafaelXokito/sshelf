@@ -74,8 +74,9 @@ type Model struct {
 	status string
 	exec   execFunc
 
-	attempt int                // id of the latest connection attempt
-	cancel  context.CancelFunc // cancels the attempt in progress; nil if none
+	attempt     int                // id of the latest connection attempt
+	attemptHost domain.ID          // host of the attempt in progress
+	cancel      context.CancelFunc // cancels the attempt in progress; nil if none
 }
 
 // New returns the root model. It does no I/O; Init loads the config.
@@ -149,6 +150,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.modals = append(m.modals, tofu.New(msg))
+		return m, nil
+
+	case app.ConnectProgressMsg:
+		if m.cancel != nil && msg.HostID == m.attemptHost && len(m.modals) > 0 {
+			if c, ok := m.modals[0].(connecting.Model); ok {
+				m.modals[0] = c.WithStage(msg.Stage)
+			}
+		}
 		return m, nil
 
 	case app.AuthPromptMsg:
@@ -229,6 +238,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) startConnect(hostID domain.ID, label string) (tea.Model, tea.Cmd) {
 	ctx, cancel := context.WithCancel(context.Background())
 	m.attempt++
+	m.attemptHost = hostID
 	m.cancel = cancel
 	m.modals = append(m.modals, connecting.New(label))
 	m.status = ""
@@ -263,6 +273,18 @@ func failedStatus(label string, err error) string {
 	}
 	if errors.Is(err, app.ErrAuthFailed) {
 		return label + ": authentication failed"
+	}
+	if errors.Is(err, app.ErrNameResolution) {
+		return label + ": name resolution failed"
+	}
+	if errors.Is(err, app.ErrConnectionRefused) {
+		return label + ": connection refused"
+	}
+	if errors.Is(err, app.ErrTimedOut) {
+		return label + ": timed out"
+	}
+	if se, ok := errors.AsType[*app.StoreError](err); ok {
+		return label + ": " + se.Error()
 	}
 	if errors.Is(err, app.ErrHostKeyRejected) {
 		return label + ": host key not trusted; connection cancelled"

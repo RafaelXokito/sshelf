@@ -4,11 +4,13 @@ sshelf
   web-prod             ubuntu@10.0.0.10:22
   zeta                 10.0.0.30:22
 
-╭─────────────────────────╮
-│ Connecting to web-prod… │
-│                         │
-│ esc cancel              │
-╰─────────────────────────╯
+╭─────────────────────────────────────────────╮
+│ Connecting to web-prod…                     │
+│                                             │
+│ › dialling → · verifying → · authenticating │
+│                                             │
+│ esc cancel                                  │
+╰─────────────────────────────────────────────╯
 
 ╭───────────────────────────────╮
 │ Prompt from 10.0.0.10         │

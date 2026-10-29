@@ -381,7 +381,7 @@ When an interactive session ends, the system shall restore the host list with th
 ### FR-CONN-006 · Connection failure reporting
 If a connection cannot be established within the connect timeout, then the system shall abort it and report one of: name resolution failed, connection refused, timed out, host key rejected, or authentication failed.
 
-- **Priority:** MVP · **Status:** Draft
+- **Priority:** MVP · **Status:** Implemented
 - **Acceptance:**
   - Each cause is reproduced in a test and shows its own message.
   - The timeout is 10 s. Esc cancels a pending connection immediately.

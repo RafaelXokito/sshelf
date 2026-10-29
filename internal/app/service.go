@@ -165,7 +165,13 @@ func (a *App) Connect(ctx context.Context, hostID domain.ID) (Session, error) {
 	a.mu.Unlock()
 
 	slog.Debug("connect: start", "host", h.Label, "id", hostID)
+	a.mu.Lock()
+	send := a.send
+	a.mu.Unlock()
 	ssh := sshclient.Config{KnownHostsFiles: a.cfg.KnownHostsFiles}
+	if send != nil {
+		ssh.Progress = func(st sshclient.Stage) { send(ConnectProgressMsg{HostID: hostID, Stage: st}) }
+	}
 	creds := Credentials{Store: a.cfg.Secrets, Home: a.cfg.Home, Prompter: a}
 	client, err := ssh.Connect(ctx, target, creds, a)
 	if err != nil {

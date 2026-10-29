@@ -3,6 +3,8 @@ package app
 import (
 	"context"
 
+	"github.com/RafaelXokito/sshelf/internal/domain"
+	"github.com/RafaelXokito/sshelf/internal/secrets"
 	"github.com/RafaelXokito/sshelf/internal/sshclient"
 )
 
@@ -14,7 +16,32 @@ var (
 	// ErrAuthFailed means the server rejected every credential, or the
 	// user failed three times (FR-CONN-003).
 	ErrAuthFailed = sshclient.ErrAuthFailed
+	// ErrNameResolution, ErrConnectionRefused and ErrTimedOut are the
+	// network failures of FR-CONN-006.
+	ErrNameResolution    = sshclient.ErrNameResolution
+	ErrConnectionRefused = sshclient.ErrConnectionRefused
+	ErrTimedOut          = sshclient.ErrTimedOut
+	// ErrStoreDenied is what a *StoreError wraps when the user or the OS
+	// denied access to the credential store (SEC-CRED-006).
+	ErrStoreDenied = secrets.ErrDenied
 )
+
+// Stage is a step of a connection attempt.
+type Stage = sshclient.Stage
+
+// The stages, in order.
+const (
+	StageDialling       = sshclient.StageDialling
+	StageVerifying      = sshclient.StageVerifying
+	StageAuthenticating = sshclient.StageAuthenticating
+)
+
+// ConnectProgressMsg tells the UI which stage the connection attempt to
+// HostID reached (design §9.2).
+type ConnectProgressMsg struct {
+	HostID domain.ID
+	Stage  Stage
+}
 
 type (
 	// PromptKind says what an AuthPromptMsg asks for.
