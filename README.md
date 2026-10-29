@@ -3,7 +3,7 @@
 A terminal UI for managing and connecting to your SSH hosts, inspired by Termius.
 
 - Keep all your VMs in one place, with labels, groups and tags
-- Credentials stored in a local vault encrypted with a master password (Argon2id + AES-GCM)
+- Passwords and keys stored in your OS keychain (macOS Keychain / Linux Secret Service) — no master password
 - Connect to any host from a keyboard-driven list
 
 > Status: early development.
@@ -14,15 +14,10 @@ A terminal UI for managing and connecting to your SSH hosts, inspired by Termius
 go run ./cmd/sshelf
 ```
 
-## Roadmap
+## Specs
 
-- [x] Project skeleton and host list UI
-- [ ] Encrypted vault (master password, Argon2id + AES-GCM)
-- [ ] Add / edit / delete hosts from the UI
-- [ ] Interactive SSH sessions (password and key auth)
-- [ ] Groups, tags and search
-- [ ] Jump hosts and port forwarding
-- [ ] Vault export / import
+sshelf is built spec-first. Requirements, design, decisions and the task plan
+live in [`specs/`](specs/README.md); the MVP plan is [`specs/tasks.md`](specs/tasks.md).
 
 ## License
 
