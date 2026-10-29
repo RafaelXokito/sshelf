@@ -97,7 +97,7 @@ connection" prompt (not achievable from a plain Go binary, see credential-storag
 **SEC-CRED-001: Secrets only in the OS credential store.**
 The system shall store passwords, private keys and key passphrases only in the OS credential store through the
 `secrets` package, and shall never write them to `config.json`, `known_hosts`, backups, logs or any other file.
-Priority: MVP · Status: Draft · Threats: T-2, T-17
+Priority: MVP · Status: Implemented · Threats: T-2, T-17
 - AC1: Save an identity with canary password, key and passphrase values. Byte-search every file under the config,
   state and temp dirs: zero hits. The fake store holds all three.
 - AC2: A reflection test asserts that the config schema structs contain no `[]byte`, `secrets.Secret`, or string
@@ -293,7 +293,7 @@ Priority: MVP · Status: Implemented · Threats: T-4, T-7
 **SEC-LOG-001: Never log secrets.**
 The system shall never write a secret to a log, error message, panic report, stdout or stderr, and shall send no
 telemetry.
-Priority: MVP · Status: Draft · Threats: T-17
+Priority: MVP · Status: Implemented · Threats: T-17
 - AC1: A canary harness runs these flows with debug logging on: create an identity, connect (success, wrong
   password, host-key mismatch), store denied, store unavailable. It captures stdout, stderr and the log, and finds
   zero canary hits.

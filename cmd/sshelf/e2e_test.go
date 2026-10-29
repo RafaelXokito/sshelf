@@ -147,6 +147,15 @@ func stty(t *testing.T, tty *os.File) string {
 	return string(out)
 }
 
+// stateDir is sshelf's state dir (log and crash reports) for HOME home,
+// with XDG_STATE_HOME unset (ADR-005).
+func stateDir(home string) string {
+	if runtime.GOOS == "darwin" {
+		return filepath.Join(home, "Library", "Logs", "sshelf")
+	}
+	return filepath.Join(home, ".local", "state", "sshelf")
+}
+
 // startSlice starts sshelf with env added to its minimal environment.
 func startSlice(t *testing.T, env ...string) *slice {
 	t.Helper()
@@ -191,11 +200,7 @@ func startSliceBin(t *testing.T, bin string, env ...string) *slice {
 		t.Fatal(err)
 	}
 	s := &slice{t: t, srv: srv, master: master, tty: tty, out: &syncBuffer{}, exited: make(chan struct{}), cfgDir: cfgDir, home: home}
-	// ADR-005, with XDG_STATE_HOME unset.
-	s.state = filepath.Join(home, ".local", "state", "sshelf")
-	if runtime.GOOS == "darwin" {
-		s.state = filepath.Join(home, "Library", "Logs", "sshelf")
-	}
+	s.state = stateDir(home)
 	s.before = stty(t, tty)
 
 	drained := make(chan struct{})
