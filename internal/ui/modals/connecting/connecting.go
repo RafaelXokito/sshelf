@@ -66,5 +66,8 @@ func (m Model) View() string {
 			parts[i] = dimStyle.Render("· " + string(s))
 		}
 	}
-	return boxStyle.Render("Connecting to " + m.label + "…\n\n" + strings.Join(parts, " → ") + "\n\n" + dimStyle.Render("esc cancel"))
+	return boxStyle.Render("Connecting to " + m.label + "…\n\n" + strings.Join(parts, " → "))
 }
+
+// Hints implements components.Hinter.
+func (m Model) Hints() []key.Binding { return []key.Binding{keys.Cancel} }

@@ -43,7 +43,7 @@ func TestFormFocusDirtyAndEvents(t *testing.T) {
 	if !f.FocusFirstError() || f.Focused() != 1 {
 		t.Fatal("FocusFirstError")
 	}
-	if l := strings.Split(plain(f.View()), "\n")[1]; l != "> B  _           bad" {
+	if l := strings.Split(plain(f.View()), "\n")[1]; l != "> B  _           ✗ bad" {
 		t.Fatalf("error row %q", l)
 	}
 	f.ClearErrors()

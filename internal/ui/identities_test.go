@@ -159,15 +159,15 @@ func TestFR_NAV_003_IOpensIdentities(t *testing.T) {
 	if len(v.List()) != 2 || strings.Contains(view, "zeta ") {
 		t.Fatalf("listed %+v", v.List())
 	}
-	golden(t, "identities", view)
+	golden(t, "identities", d.m)
 	d.esc()
 	if _, ok := d.root().screen.(hostlist.Model); !ok {
 		t.Fatalf("esc did not return to the host list:\n%s", d.view())
 	}
 	// The message the host list's keymap can send works too.
-	d.send(identities.OpenMsg{})
+	d.send(hostlist.IdentitiesMsg{})
 	if _, ok := d.onIdentities(); !ok {
-		t.Fatal("OpenMsg did not open the identities")
+		t.Fatal("IdentitiesMsg did not open the identities")
 	}
 }
 
@@ -188,7 +188,7 @@ func TestFR_IDENT_004_FormShowsSetNotSet(t *testing.T) {
 	if !strings.Contains(lineWith(v, "Key file"), "~/.ssh/id_ed25519") {
 		t.Fatalf("key file not shown:\n%s", v)
 	}
-	golden(t, "identityedit-edit", v)
+	golden(t, "identityedit-edit", d.m)
 	d.esc()
 
 	d.press('j', "j") // synced: its password is not on this device
@@ -220,7 +220,7 @@ func TestSEC_LOG_005_GoldenHasNoCanaryOrBullets(t *testing.T) {
 	if !strings.Contains(lineWith(v, "Password"), components.Mask) {
 		t.Fatalf("no mask:\n%s", v)
 	}
-	golden(t, "identityedit-secret", v)
+	golden(t, "identityedit-secret", d.m)
 	d.save()
 	if d.inIdentityForm() {
 		t.Fatalf("not saved:\n%s", d.view())

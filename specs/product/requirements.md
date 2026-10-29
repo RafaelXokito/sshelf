@@ -538,7 +538,7 @@ When the unknown-host-key prompt is shown, the system shall also offer "Trust on
 ### FR-NAV-001 · Host list
 The system shall display each host as one line showing the label and `user@hostname:port`, sorted by label.
 
-- **Priority:** MVP · **Status:** Draft
+- **Priority:** MVP · **Status:** Implemented
 - **Acceptance:**
   - Port 22 is omitted from the display.
   - Lines wider than the terminal are truncated with `…`.
@@ -547,7 +547,7 @@ The system shall display each host as one line showing the label and `user@hostn
 ### FR-NAV-002 · Fuzzy search
 When the user types in the search field, the system shall filter the host list to hosts whose label, hostname or username fuzzy-matches the query, ordered by match score, and Enter shall connect to the selected result.
 
-- **Priority:** MVP · **Status:** Draft · **Source:** sshs, lazyssh
+- **Priority:** MVP · **Status:** Implemented · **Source:** sshs, lazyssh
 - **Acceptance:**
   - `/` focuses search. `wbprd` matches `web-prod`, and `10.0.1` matches `10.0.1.20`. Matching is case-insensitive.
   - Typing `wbprd` and pressing Enter connects to `web-prod` when it is the top match.
@@ -557,7 +557,7 @@ When the user types in the search field, the system shall filter the host list t
 ### FR-NAV-003 · Key bindings
 The system shall provide these bindings in the host list: ↑/↓ or `k`/`j` to move, `g`/`G` for first/last, `/` to search, `Enter` to connect, `a` to add, `e` to edit, `d` to delete, `i` for identities, `I` to import, and `q` or `Ctrl+C` to quit.
 
-- **Priority:** MVP · **Status:** Draft
+- **Priority:** MVP · **Status:** Implemented
 - **Acceptance:**
   - Each binding is covered by a UI test.
   - While the search field is focused, letter keys type into the query.
@@ -567,7 +567,7 @@ The system shall provide these bindings in the host list: ↑/↓ or `k`/`j` to 
 ### FR-NAV-004 · Key hints footer
 The system shall show a one-line footer with the main key bindings of the current view.
 
-- **Priority:** MVP · **Status:** Draft
+- **Priority:** MVP · **Status:** Implemented
 - **Acceptance:**
   - The footer on the host list shows at least the connect, search, add and quit bindings, and it changes when another view opens.
 
@@ -630,7 +630,7 @@ Where mouse support is enabled, the system shall select a host on click, connect
 ### FR-NAV-013 · Welcome screen
 While `config.json` contains no hosts, the system shall show a Welcome screen offering "Import from ~/.ssh/config" and "Add host" instead of the host list.
 
-- **Priority:** MVP · **Status:** Draft
+- **Priority:** MVP · **Status:** Implemented
 - **Acceptance:**
   - The first launch with no config directory shows the Welcome screen.
   - `I` starts the import (FR-IMPORT-001) and `a` opens the host form. `q` quits.
@@ -815,7 +815,7 @@ Imports are a one-time copy. sshelf does not keep watching `~/.ssh/config`
 ### FR-IMPORT-001 · Import from `~/.ssh/config`
 When the user triggers import, the system shall create one host for each `Host` alias in `~/.ssh/config` that has no wildcard, mapping `HostName`, `User`, `Port` and `IdentityFile`, and linking hosts that share the same user and key files to a single identity.
 
-- **Priority:** MVP · **Status:** Draft · **Source:** Termius, sshs, lazyssh
+- **Priority:** MVP · **Status:** Implemented · **Source:** Termius, sshs, lazyssh
 - **Acceptance:**
   - `Host web` with `HostName 10.0.0.10`, `User ubuntu` and `IdentityFile ~/.ssh/id_ed25519` creates host `web` linked to an identity with user `ubuntu` and that key path.
   - An alias without `HostName` uses the alias as the hostname. `Host a b` creates hosts `a` and `b`.
@@ -833,7 +833,7 @@ When importing, the system shall follow `Include` directives and apply values fr
 ### FR-IMPORT-003 · Import report
 When an import finishes, the system shall show how many hosts and identities were created and list the aliases skipped because the label already exists and the directives not imported per host.
 
-- **Priority:** MVP · **Status:** Draft
+- **Priority:** MVP · **Status:** Implemented
 - **Acceptance:**
   - Importing the same file twice creates nothing the second time and reports every alias as skipped.
   - `Match`, `ProxyCommand`, `ProxyJump` and the `*Forward` directives are listed as "not imported" (`ProxyJump` and forwards are mapped in v1 by FR-IMPORT-005).
@@ -933,7 +933,7 @@ Where session logging is enabled for a host, the system shall write the session'
 ### FR-CFG-001 · Config directory
 The system shall keep its hosts, identities (without secrets), settings and `known_hosts` file in the sshelf config directory defined in ADR-005 of `../architecture/design.md`, creating it on first launch.
 
-- **Priority:** MVP · **Status:** Draft · **Source:** D-003
+- **Priority:** MVP · **Status:** Implemented · **Source:** D-003
 - **Acceptance:**
   - sshelf starts with no existing config directory and shows the Welcome screen (FR-NAV-013).
   - The directory and files are created with the permissions set in SEC-FILE-001 (0700 directory, 0600 files).

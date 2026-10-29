@@ -29,7 +29,7 @@ func TestARCH_CONN_004_BlockGolden(t *testing.T) {
 	svc := &fakeService{hosts: testHosts, connectErr: mismatchErr()}
 	d := newDriver(t, svc)
 	connectSecond(d)
-	golden(t, "keychanged", d.view())
+	golden(t, "keychanged", d.m)
 	if d.execs != 0 {
 		t.Fatal("a session ran after a changed key")
 	}

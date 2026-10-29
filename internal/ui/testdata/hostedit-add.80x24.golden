@@ -1,0 +1,24 @@
+sshelf
+
+Add host
+
+  Label     api
+  Hostname  10.0.0.40
+  Port      22
+  Username  root
+> Identity  ‹ (none) ›
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+← previous choice • → next choice • tab next field • ctrl+s save • esc cancel

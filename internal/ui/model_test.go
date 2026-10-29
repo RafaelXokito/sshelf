@@ -192,7 +192,7 @@ func selected(t *testing.T, d *driver) domain.Host {
 func TestModelNavigatesAndQuits(t *testing.T) {
 	d := newDriver(t, &fakeService{hosts: testHosts})
 	view := d.view()
-	for _, want := range []string{"> db-staging", "admin@10.0.1.20:2222", "ubuntu@10.0.0.10:22"} {
+	for _, want := range []string{"> db-staging", "admin@10.0.1.20:2222", "ubuntu@10.0.0.10\n"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("view does not contain %q:\n%s", want, view)
 		}

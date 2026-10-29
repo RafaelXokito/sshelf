@@ -51,7 +51,7 @@ func TestFR_IDENT_001_DeleteStatesLinkedCount(t *testing.T) {
 	if !strings.Contains(v, "Delete identity ops and its secrets? 2 linked hosts will be unlinked.") {
 		t.Fatalf("view:\n%s", v)
 	}
-	golden(t, "identity-delete", v)
+	golden(t, "identity-delete", d.m)
 	d.press(tea.KeyEnter, "") // the default is No
 	if len(svc.identities) != 3 || len(d.root().modals) != 0 {
 		t.Fatalf("enter deleted: %+v", svc.identities)

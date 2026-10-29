@@ -4,12 +4,11 @@ import (
 	"context"
 	"strings"
 
-	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/RafaelXokito/sshelf/internal/app"
 	"github.com/RafaelXokito/sshelf/internal/domain"
-	"github.com/RafaelXokito/sshelf/internal/ui/keys"
+	"github.com/RafaelXokito/sshelf/internal/ui/components"
 	"github.com/RafaelXokito/sshelf/internal/ui/screens/hostlist"
 	"github.com/RafaelXokito/sshelf/internal/ui/screens/identities"
 	"github.com/RafaelXokito/sshelf/internal/ui/screens/identityedit"
@@ -24,7 +23,7 @@ type IdentitiesMsg struct {
 // IdentitySavedMsg reports that an identity was saved.
 type IdentitySavedMsg struct{ Saved app.SavedIdentity }
 
-// IdentitySaveFailedMsg reports that an identity was not saved.
+// IdentitySaveFailedMsg reports that an identity was not saved or deleted.
 type IdentitySaveFailedMsg struct{ Err error }
 
 // IdentityDeletedMsg reports that an identity was deleted.
@@ -38,38 +37,26 @@ type IdentityDeletedMsg struct {
 // messages it does not handle.
 func (m Model) updateIdentities(msg tea.Msg) (Model, tea.Cmd, bool) {
 	switch msg := msg.(type) {
-	case tea.KeyPressMsg:
-		// i on the host list opens the identities (FR-NAV-003). The host
-		// list's own keymap (T-016) can take this over by sending
-		// identities.OpenMsg instead.
-		if _, ok := m.screen.(hostlist.Model); !ok || len(m.modals) > 0 || !key.Matches(msg, keys.Identities) {
-			return m, nil, false
-		}
-		m, cmd := m.openIdentities()
-		return m, cmd, true
-
-	case identities.OpenMsg:
-		if _, ok := m.screen.(hostlist.Model); !ok {
-			return m, nil, true
-		}
+	case hostlist.IdentitiesMsg:
+		// i on the host list (FR-NAV-003).
 		m, cmd := m.openIdentities()
 		return m, cmd, true
 
 	case IdentitiesMsg:
 		if v, ok := m.screen.(identities.Model); ok && v.IsLoading() {
 			if msg.Err != nil {
-				m.status = "identities: " + domain.Sanitize(msg.Err.Error())
-				m.screen = m.list
+				m.status = components.ErrorPrefix + "identities: " + domain.Sanitize(msg.Err.Error())
+				m.screen = m.sized(m.prev)
 				return m, nil, true
 			}
-			m.screen = identities.New(msg.List)
+			m.screen = m.sized(identities.New(msg.List))
 		}
 		return m, nil, true
 
 	case identities.BackMsg:
-		if _, ok := m.screen.(identities.Model); ok {
+		if _, ok := m.screen.(identities.Model); ok && m.prev != nil {
 			m.status = ""
-			m.screen = m.list
+			m.screen = m.sized(m.prev)
 		}
 		return m, nil, true
 
@@ -96,7 +83,7 @@ func (m Model) updateIdentities(msg tea.Msg) (Model, tea.Cmd, bool) {
 		}
 		m.modals = nil
 		id := msg.Saved.Identity
-		m.screen = identities.New(msg.Saved.List).Select(id.ID)
+		m.screen = m.sized(identities.New(msg.Saved.List).Select(id.ID))
 		m.status = domain.Sanitize(strings.Join(append([]string{id.Label + ": saved"}, msg.Saved.Warnings...), "; "))
 		return m, nil, true
 
@@ -104,7 +91,7 @@ func (m Model) updateIdentities(msg tea.Msg) (Model, tea.Cmd, bool) {
 		if f, ok := m.screen.(identityedit.Model); ok {
 			m.screen = f.SaveFailed(msg.Err)
 		} else {
-			m.status = "not saved: " + domain.Sanitize(msg.Err.Error())
+			m.status = components.ErrorPrefix + "not saved: " + domain.Sanitize(msg.Err.Error())
 		}
 		return m, nil, true
 
@@ -122,13 +109,17 @@ func (m Model) updateIdentities(msg tea.Msg) (Model, tea.Cmd, bool) {
 		d := msg.Deleted
 		m.identities = d.Identities
 		// Hosts that used the identity are unlinked; keep the selection.
-		l := hostlist.New(d.Hosts)
-		if h, ok := m.list.Selected(); ok {
-			l = l.Select(h.ID)
+		prev := hostsScreen(d.Hosts)
+		if old, ok := m.prev.(hostlist.Model); ok {
+			if l, ok := prev.(hostlist.Model); ok {
+				if h, ok := old.Selected(); ok {
+					prev = l.Select(h.ID)
+				}
+			}
 		}
-		m.list = l
+		m.prev = prev
 		if _, ok := m.screen.(identities.Model); ok {
-			m.screen = identities.New(d.List)
+			m.screen = m.sized(identities.New(d.List))
 		}
 		m.status = domain.Sanitize(strings.Join(append([]string{msg.Label + ": deleted"}, d.Warnings...), "; "))
 		return m, nil, true
@@ -137,7 +128,7 @@ func (m Model) updateIdentities(msg tea.Msg) (Model, tea.Cmd, bool) {
 		if f, ok := m.screen.(identityedit.Model); ok {
 			f.Destroy()
 			m.modals = nil
-			m.screen = m.idView
+			m.screen = m.sized(m.idView)
 		}
 		return m, nil, true
 	}
@@ -146,13 +137,12 @@ func (m Model) updateIdentities(msg tea.Msg) (Model, tea.Cmd, bool) {
 
 // openIdentities shows the identities view, loading, and reads it.
 func (m Model) openIdentities() (Model, tea.Cmd) {
-	l, ok := m.screen.(hostlist.Model)
-	if !ok {
+	if _, ok := m.screen.(hostlist.Model); !ok {
 		return m, nil
 	}
-	m.list = l
+	m.prev = m.screen
 	m.status = ""
-	m.screen = identities.Loading()
+	m.screen = m.sized(identities.Loading())
 	svc := m.svc
 	return m, func() tea.Msg {
 		list, err := svc.Identities(context.Background())
@@ -169,6 +159,6 @@ func (m Model) openIdentityForm(info app.IdentityInfo) Model {
 	}
 	m.idView = v
 	m.status = ""
-	m.screen = identityedit.New(info, m.identities)
+	m.screen = m.sized(identityedit.New(info, m.identities))
 	return m
 }

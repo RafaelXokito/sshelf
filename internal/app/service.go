@@ -75,6 +75,12 @@ type Service interface {
 	// DeleteIdentity deletes an identity and its stored secrets. See
 	// App.DeleteIdentity.
 	DeleteIdentity(ctx context.Context, id domain.ID) (DeletedIdentity, error)
+	// DeleteHost removes the host with id and writes config.json. See
+	// App.DeleteHost.
+	DeleteHost(ctx context.Context, id domain.ID) ([]domain.Host, error)
+	// ImportSSHConfig copies ~/.ssh/config into config.json once. See
+	// App.ImportSSHConfig.
+	ImportSSHConfig(ctx context.Context) (ImportReport, error)
 }
 
 // SavedHost is the result of Service.SaveHost.

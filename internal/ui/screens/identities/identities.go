@@ -21,10 +21,6 @@ var (
 	dimStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
 )
 
-// OpenMsg asks the root model to open the identities view from the host
-// list (FR-NAV-003 `i`).
-type OpenMsg struct{}
-
 // AddMsg asks the root model to open the identity form for a new identity.
 type AddMsg struct{}
 
@@ -86,7 +82,7 @@ func (m Model) Update(msg tea.Msg) (components.Screen, tea.Cmd) {
 		return m, nil
 	}
 	switch {
-	case key.Matches(k, keys.Back):
+	case key.Matches(k, keys.BackToHosts):
 		return m, func() tea.Msg { return BackMsg{} }
 	case m.loading:
 	case key.Matches(k, keys.Up):
@@ -135,7 +131,7 @@ func (m Model) View() string {
 			b.WriteString("\n" + Details(info))
 		}
 	}
-	b.WriteString("\n" + components.Help(keys.Up, keys.Down, keys.AddIdentity, keys.EditIdentity, keys.DeleteIdentity, keys.Back) + "\n")
+	b.WriteString("\n" + components.Help(keys.Up, keys.Down, keys.AddIdentity, keys.EditIdentity, keys.DeleteIdentity, keys.BackToHosts) + "\n")
 	return b.String()
 }
 

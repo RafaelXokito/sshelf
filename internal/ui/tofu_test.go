@@ -101,7 +101,7 @@ func TestFR_KH_001_NoTrustOnceOption(t *testing.T) {
 
 func TestARCH_CONN_003_TofuGolden(t *testing.T) {
 	m, _ := tofuModel(t)
-	golden(t, "tofu", m.View().Content)
+	golden(t, "tofu", m)
 }
 
 func TestTofuPromptAfterAttemptEnded(t *testing.T) {
