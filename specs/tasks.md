@@ -18,8 +18,11 @@ outlined at the end without task detail.
   traceability matrix lists every task for each ID.
 - **Tests** are the acceptance tests to write. They are named after the ID
   (`TestFR_KH_002_ChangedKeyBlocks`), so that the `scripts/tracecheck` gate in
-  T-030 (NFR-QUAL-001) can find them. "Golden" means a teatest golden file at
-  80×24 and 120×40 rendered with the ASCII colour profile (design §10).
+  T-030 (NFR-QUAL-001) can find them. "Golden" means a golden file at
+  80×24 and 120×40 rendered with the ASCII colour profile, stored as
+  `internal/ui/testdata/<name>.<w>x<h>.golden` and checked by the shared
+  `golden` helper (design §10). Implemented without `teatest`, because
+  rendering the root model directly needs no extra dependency.
 - **E2E** tests run the real binary in a PTY (`creack/pty`) with
   `XDG_CONFIG_HOME` pointing at a temp dir (`--config` is v1, FR-CLI-002) and
   `secrets.MemStore` injected through a test-only build tag, against the
@@ -284,7 +287,7 @@ outlined at the end without task detail.
 
 ### T-024 · `~/.ssh/config` parser and import plan
 
-- **Delivers:** `internal/sshconfig` on `kevinburke/ssh_config`: concrete aliases (`Host a b` → 2 hosts), `Include` relative to `~/.ssh` with globs, wildcard blocks with first-value-wins, `%h`/`%p`/`%r`/`~` tokens; an import plan of hosts, identities deduplicated by user plus key files (named `user (keyfile)`), and unsupported directives per host. Nothing is ever executed.
+- **Delivers:** `internal/sshconfig`, an in-house stdlib parser (implemented as its own parser instead of `kevinburke/ssh_config` because the library resolves `Include` against the real home directory, which blocks fixture tests, and evaluates `Match`; see ADR-010): concrete aliases (`Host a b` → 2 hosts), `Include` relative to `~/.ssh` with globs, wildcard blocks with first-value-wins, `%h`/`%p`/`%r`/`~` tokens; an import plan of hosts, identities deduplicated by user plus key files (named `user (keyfile)`), and unsupported directives per host. Nothing is ever executed.
 - **Satisfies:** FR-IMPORT-002, FR-IMPORT-001 (partial: mapping)
 - **Depends on:** T-000
 - **Tests:** `TestFR_IMPORT_002_IncludeRelativeToSSHDir`, `TestFR_IMPORT_002_MatchesSSHG` (expected values generated once with `ssh -G` against the fixtures with `HOME` set to the fixture dir and committed; re-checked live when `ssh` is on `PATH`), `TestFR_IMPORT_001_MapsFields`, `TestFR_IMPORT_001_AliasWithoutHostName`, `TestFR_IMPORT_001_MultipleAliases`, `TestFR_IMPORT_001_SharedIdentityDedup`, `FuzzSSHConfigMapper`.

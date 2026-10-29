@@ -13,6 +13,11 @@ runner" means the GitHub-hosted `ubuntu-latest` (Linux amd64) runner, and
 timing checks take the median of 5 runs to absorb runner noise. Test names
 follow the `TestNFR_<AREA>_NNN_...` / `BenchmarkNFR_<AREA>_NNN_...` pattern.
 
+Each `MVP` requirement shows its status next to its priority; every other
+requirement is `Draft`. Checks that are CI steps rather than Go tests
+(NFR-SIZE-002, NFR-BUILD-001, NFR-PORT-001, NFR-REL-001, NFR-QUAL-002) are
+`Implemented` once the step runs in `.github/workflows/ci.yml`.
+
 Areas: `PERF` speed · `SIZE` memory and binary size · `BUILD` build and release
 · `PORT` operating systems, terminals and servers · `UX` keyboard, colour and
 small terminals · `PRIV` network behaviour · `REL` reliability · `QUAL` code
@@ -25,19 +30,19 @@ quality and CI.
 ### NFR-PERF-001 · Startup time
 When sshelf starts with a `config.json` holding 1,000 hosts, the system shall render the interactive host list within 150 ms, without reading any secret from the OS credential store.
 
-- **Priority:** MVP
+- **Priority:** MVP · **Status:** Implemented
 - **Check:** `TestNFR_PERF_001_Startup1k` (PTY E2E) launches the real binary against a 1,000-host fixture config directory and measures the time from `exec` to the first frame that contains the first label: median of 5 runs ≤ 150 ms on the CI runner. The credential-store availability probe runs asynchronously and does not delay the first frame. A unit test with `secrets.MemStore` asserts `Calls("get") == 0` after startup.
 
 ### NFR-PERF-002 · Search latency
 When the user types a character into the search field with 5,000 hosts loaded, the system shall compute the new filtered and ranked list within 16 ms.
 
-- **Priority:** MVP
+- **Priority:** MVP · **Status:** Implemented
 - **Check:** `BenchmarkNFR_PERF_002_Filter5k` over a generated 5,000-host fixture with 1- to 6-character queries. `TestNFR_PERF_002_Filter5k` runs it through `testing.Benchmark` and fails if ns/op exceeds 16,000,000 on the CI runner.
 
 ### NFR-PERF-003 · Connect overhead
 When the user presses Enter on a host, the system shall send the SSH client version string within 100 ms, excluding name resolution and credential-store time.
 
-- **Priority:** MVP
+- **Priority:** MVP · **Status:** Implemented
 - **Check:** `TestNFR_PERF_003_ConnectOverhead` drives the root model with a host at `127.0.0.1` and `secrets.MemStore`. The time from `ConnectRequestMsg` to the in-process test server recording the client version banner is ≤ 100 ms (median of 10 runs).
 
 ### NFR-PERF-004 · Session passthrough latency
@@ -59,7 +64,7 @@ While sshelf is idle with 5,000 hosts loaded and no session open, the system sha
 ### NFR-SIZE-002 · Binary size
 The system shall produce a release binary of no more than 20 MB for each supported target.
 
-- **Priority:** MVP
+- **Priority:** MVP · **Status:** Implemented
 - **Check:** The CI build step builds each target with `-trimpath -ldflags "-s -w"` and fails if any binary exceeds 20,971,520 bytes.
 
 ---
@@ -69,7 +74,7 @@ The system shall produce a release binary of no more than 20 MB for each support
 ### NFR-BUILD-001 · Static, cgo-free binaries
 The system shall build with `CGO_ENABLED=0` for `linux/amd64`, `linux/arm64`, `darwin/amd64` and `darwin/arm64` from a single Linux runner.
 
-- **Priority:** MVP · **Source:** D-008
+- **Priority:** MVP · **Status:** Implemented · **Source:** D-008
 - **Check:** The CI cross-compile job builds all 4 targets on `ubuntu-latest` with `CGO_ENABLED=0`. `go version -m` on each binary reports `CGO_ENABLED=0`, and `file` reports the Linux binaries as statically linked.
 
 ### NFR-BUILD-002 · Release artefacts
@@ -85,13 +90,13 @@ When a version tag is pushed, the system's release pipeline shall publish one ar
 ### NFR-PORT-001 · Operating systems
 The system shall pass its full test suite, including the race detector, on Linux amd64 and macOS arm64.
 
-- **Priority:** MVP · **Source:** README scope (Windows is `Later`)
+- **Priority:** MVP · **Status:** Implemented · **Source:** README scope (Windows is `Later`)
 - **Check:** The CI test job runs `go test -race ./...` on `ubuntu-latest` and `macos-latest`, and both must pass for a PR to merge.
 
 ### NFR-PORT-002 · Terminal types
 The system shall start, render the host list, run a session and restore the terminal under each of the `TERM` values `xterm`, `xterm-256color`, `screen-256color`, `tmux-256color`, `xterm-kitty` and `linux`.
 
-- **Priority:** MVP
+- **Priority:** MVP · **Status:** Implemented
 - **Check:** `TestNFR_PORT_002_TermMatrix` (PTY E2E, table-driven over the `TERM` values) launches the binary, connects to the in-process test server, exits the remote shell, and asserts that the host list is redrawn and `stty -a` matches its value before launch. The list of named emulators (iTerm2, Terminal.app, kitty, WezTerm, Alacritty, Ghostty, GNOME Terminal, Konsole, xterm, tmux, screen) is a manual release checklist item, not a CI check.
 
 ### NFR-PORT-003 · SSH server interoperability
@@ -107,19 +112,19 @@ The system shall connect with password, keyboard-interactive and public-key auth
 ### NFR-UX-001 · Keyboard only
 The system shall make every action reachable from the keyboard and shall never enable terminal mouse tracking.
 
-- **Priority:** MVP · **Source:** FR-NAV-012 (mouse is `Later` and off by default)
+- **Priority:** MVP · **Status:** Implemented · **Source:** FR-NAV-012 (mouse is `Later` and off by default)
 - **Check:** `TestNFR_UX_001_EveryActionBound` asserts that every action of every screen in `ui/keys` has at least one key binding. `TestNFR_UX_001_NoMouseTracking` (PTY E2E) scans all output for `ESC[?1000h`, `ESC[?1002h`, `ESC[?1003h` and `ESC[?1006h` and finds none.
 
 ### NFR-UX-002 · Layout at the minimum size
 While the terminal is at least 80 columns by 24 rows, the system shall render every screen and modal with no line wider than the terminal and with the key-hints footer visible.
 
-- **Priority:** MVP · **Source:** design §10 (goldens at 80×24 and 120×40). Behaviour below 60×12 is FR-NAV-007 (v1).
+- **Priority:** MVP · **Status:** Implemented · **Source:** design §10 (goldens at 80×24 and 120×40). Behaviour below 60×12 is FR-NAV-007 (v1).
 - **Check:** Golden tests of every screen and modal at 80×24 and 120×40 run through a shared helper that fails if any rendered line exceeds the width (measured with `lipgloss.Width`) or if the last line is not the footer.
 
 ### NFR-UX-003 · Not colour alone
 The system shall convey selection, focus, errors and warnings with a glyph or text marker in addition to any colour.
 
-- **Priority:** MVP · **Source:** accessibility. `NO_COLOR` support is FR-CFG-005 (v1).
+- **Priority:** MVP · **Status:** Implemented · **Source:** accessibility. `NO_COLOR` support is FR-CFG-005 (v1).
 - **Check:** `TestNFR_UX_003_AsciiProfile` renders every golden with the ASCII colour profile and asserts that the selected row carries the selection glyph, the focused field carries the focus glyph, and errors and warnings carry their text prefix.
 
 ---
@@ -129,7 +134,7 @@ The system shall convey selection, focus, errors and warnings with a glyph or te
 ### NFR-PRIV-001 · No unsolicited network traffic
 The system shall make no network connection other than the SSH connections the user starts, and shall send no telemetry and perform no update checks.
 
-- **Priority:** MVP
+- **Priority:** MVP · **Status:** Implemented
 - **Check:** `TestNFR_PRIV_001_NoHTTPClient` in `internal/archtest` asserts that `go list -deps ./cmd/sshelf` contains no `net/http`, and that `net.Dial`/`net.Dialer` are referenced only from `internal/sshclient` (checked with `go/packages`).
 
 ---
@@ -139,7 +144,7 @@ The system shall make no network connection other than the SSH connections the u
 ### NFR-REL-001 · Race-free and leak-free
 The system shall have no data races and no leaked goroutines in its test suite.
 
-- **Priority:** MVP
+- **Priority:** MVP · **Status:** Implemented
 - **Check:** CI runs `go test -race ./...` (NFR-PORT-001). Every package that starts goroutines (`app`, `sshclient`, `session`, `secrets`, `ui`) calls `goleak.VerifyTestMain`, so a leaked goroutine fails the package.
 
 ---
@@ -149,19 +154,19 @@ The system shall have no data races and no leaked goroutines in its test suite.
 ### NFR-QUAL-001 · Tests traced to requirements
 The system shall have, for every `MVP` requirement (`FR-*`, `SEC-*`, `ARCH-*`, `NFR-*`), at least one automated test whose name contains the requirement ID with `-` replaced by `_`, or an entry in the manual release checklist.
 
-- **Priority:** MVP
+- **Priority:** MVP · **Status:** Draft
 - **Check:** `scripts/tracecheck` extracts the MVP IDs from the spec files and the test names from `go test -list . ./...`, plus the IDs in `docs/release-checklist.md`. CI fails on any MVP ID with neither.
 
 ### NFR-QUAL-002 · Static analysis
 The system shall pass `gofmt`, `go vet`, `golangci-lint` (with at least `staticcheck`, `errcheck`, `gosec` and `govet` enabled) and `govulncheck` on every pull request.
 
-- **Priority:** MVP · **Source:** SEC-SESSION-004 (govulncheck)
+- **Priority:** MVP · **Status:** Implemented · **Source:** SEC-SESSION-004 (govulncheck)
 - **Check:** The CI lint job runs each tool and fails on any finding. `gofmt -l .` must print nothing.
 
 ### NFR-QUAL-003 · Test coverage
 The system shall keep statement coverage at 80 % or more in `domain`, `store`, `secrets`, `paths`, `sshclient`, `sshconfig` and `search`, and at 70 % or more across the module.
 
-- **Priority:** MVP
+- **Priority:** MVP · **Status:** Draft
 - **Check:** CI runs `go test -coverprofile` and a script reads `go tool cover -func` output and fails below either threshold.
 
 ---
