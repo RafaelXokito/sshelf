@@ -121,7 +121,7 @@ Priority: MVP · Status: Draft · Threats: T-6
 When an identity is deleted, or one of its secret fields is cleared, the system shall delete the matching store
 items and, for any delete that fails, show a warning naming the orphaned item (service and account) without
 tracking it.
-Priority: MVP · Status: Draft · Threats: T-9
+Priority: MVP · Status: Implemented · Threats: T-9
 - AC1: Deleting an identity leaves the fake store empty for that UUID.
 - AC2: With a fake that fails `Delete`, the identity is still removed from the config, a warning names
   `sshelf` / `<uuid>/password`, and nothing about the item is written to `config.json`.

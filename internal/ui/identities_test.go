@@ -24,6 +24,8 @@ type fakeIdentities struct {
 	idSaveErr error
 	idSaves   []app.IdentityInput // metadata only; secrets are destroyed
 	idSecrets map[string][]byte   // "<id>/<field>" → value
+
+	idDeleteWarnings []string // returned by DeleteIdentity
 }
 
 func (f *fakeService) Identities(context.Context) ([]app.IdentityInfo, error) {

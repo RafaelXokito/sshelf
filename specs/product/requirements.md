@@ -275,7 +275,7 @@ place updates every linked host. Secret values are stored per FR-CRED-001.
 ### FR-IDENT-001 · Manage identities
 When the user creates, edits or deletes an identity, the system shall save the change and apply it to every linked host from its next connection on.
 
-- **Priority:** MVP · **Status:** Draft · **Source:** Termius identities
+- **Priority:** MVP · **Status:** Implemented · **Source:** Termius identities
 - **Acceptance:**
   - The fields are name (unique, case-insensitive), username, password (optional), key (optional) and key passphrase (optional). Secret fields do not echo.
   - Changing the password of an identity linked to 3 hosts lets all 3 connect with the new password, with no host edits.

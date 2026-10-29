@@ -27,6 +27,12 @@ type IdentitySavedMsg struct{ Saved app.SavedIdentity }
 // IdentitySaveFailedMsg reports that an identity was not saved.
 type IdentitySaveFailedMsg struct{ Err error }
 
+// IdentityDeletedMsg reports that an identity was deleted.
+type IdentityDeletedMsg struct {
+	Label   string
+	Deleted app.DeletedIdentity
+}
+
 // updateIdentities routes the identities view and the identity form
 // (design §9.1: HostList → Identities → IdentityEdit). ok is false for
 // messages it does not handle.
@@ -91,7 +97,7 @@ func (m Model) updateIdentities(msg tea.Msg) (Model, tea.Cmd, bool) {
 		m.modals = nil
 		id := msg.Saved.Identity
 		m.screen = identities.New(msg.Saved.List).Select(id.ID)
-		m.status = strings.Join(append([]string{domain.Sanitize(id.Label) + ": saved"}, msg.Saved.Warnings...), "; ")
+		m.status = domain.Sanitize(strings.Join(append([]string{id.Label + ": saved"}, msg.Saved.Warnings...), "; "))
 		return m, nil, true
 
 	case IdentitySaveFailedMsg:
@@ -100,6 +106,31 @@ func (m Model) updateIdentities(msg tea.Msg) (Model, tea.Cmd, bool) {
 		} else {
 			m.status = "not saved: " + domain.Sanitize(msg.Err.Error())
 		}
+		return m, nil, true
+
+	case identities.DeleteMsg:
+		svc, id, label := m.svc, msg.ID, msg.Label
+		return m, func() tea.Msg {
+			deleted, err := svc.DeleteIdentity(context.Background(), id)
+			if err != nil {
+				return IdentitySaveFailedMsg{Err: err}
+			}
+			return IdentityDeletedMsg{Label: label, Deleted: deleted}
+		}, true
+
+	case IdentityDeletedMsg:
+		d := msg.Deleted
+		m.identities = d.Identities
+		// Hosts that used the identity are unlinked; keep the selection.
+		l := hostlist.New(d.Hosts)
+		if h, ok := m.list.Selected(); ok {
+			l = l.Select(h.ID)
+		}
+		m.list = l
+		if _, ok := m.screen.(identities.Model); ok {
+			m.screen = identities.New(d.List)
+		}
+		m.status = domain.Sanitize(strings.Join(append([]string{msg.Label + ": deleted"}, d.Warnings...), "; "))
 		return m, nil, true
 
 	case identityedit.CancelledMsg:

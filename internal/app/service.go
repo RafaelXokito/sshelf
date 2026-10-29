@@ -72,6 +72,9 @@ type Service interface {
 	// SaveIdentity creates or edits an identity and stores its secrets.
 	// See App.SaveIdentity.
 	SaveIdentity(ctx context.Context, in IdentityInput) (SavedIdentity, error)
+	// DeleteIdentity deletes an identity and its stored secrets. See
+	// App.DeleteIdentity.
+	DeleteIdentity(ctx context.Context, id domain.ID) (DeletedIdentity, error)
 }
 
 // SavedHost is the result of Service.SaveHost.

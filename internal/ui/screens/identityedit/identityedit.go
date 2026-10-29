@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 
+	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
@@ -149,6 +150,9 @@ func (m Model) submit() (components.Screen, tea.Cmd) {
 		KeyPath:    m.keyPath.Value(),
 		Password:   app.NewSecret(m.password.Bytes()),
 		Passphrase: app.NewSecret(m.passphrase.Bytes()),
+
+		ClearPassword:   m.password.Cleared(),
+		ClearPassphrase: m.passphrase.Cleared(),
 	}
 	return m, func() tea.Msg { return SaveMsg{Input: in} }
 }
@@ -191,6 +195,15 @@ func (m Model) View() string {
 	case m.err != "":
 		b.WriteString(errStyle.Render(m.err) + "\n")
 	}
-	b.WriteString(components.Help(keys.NextField, keys.PrevField, keys.Save, keys.Cancel) + "\n")
+	b.WriteString(components.Help(m.help()...) + "\n")
 	return b.String()
+}
+
+// help is the key hint line for the focused field; it fits 80 columns.
+func (m Model) help() []key.Binding {
+	switch m.form.Focused() {
+	case rowPassword, rowPassphrase:
+		return []key.Binding{keys.NextField, keys.Save, keys.Cancel, keys.ClearSecret}
+	}
+	return []key.Binding{keys.NextField, keys.PrevField, keys.Save, keys.Cancel}
 }

@@ -74,6 +74,11 @@ type IdentityInput struct {
 	Password   Secret
 	Key        Secret
 	Passphrase Secret
+	// Clear* delete a stored secret (SEC-CRED-004); a new value for the
+	// same field wins.
+	ClearPassword   bool
+	ClearKey        bool
+	ClearPassphrase bool
 }
 
 // Destroy zeroes the input's secrets.
@@ -170,7 +175,9 @@ func (a *App) markMissing(ref secrets.Ref) {
 // secret that holds a value is checked against the 2800-byte limit and
 // written to the store with Set; a secret left empty is not touched or
 // read. The has_* flags then record what is stored, and config.json is
-// written last. If a Set or the config write fails, the items this call
+// written; a cleared secret is deleted from the store only after that,
+// with a warning naming any item that could not be deleted
+// (SEC-CRED-004). If a Set or the config write fails, the items this call
 // created are deleted again and the config is left as it was. Linked
 // hosts use the new values from their next connection on, since every
 // connection reads the store afresh.
@@ -182,98 +189,125 @@ func (a *App) SaveIdentity(ctx context.Context, in IdentityInput) (SavedIdentity
 	a.mu.Lock()
 	defer a.mu.Unlock() // held across the store and the config write, so saves never interleave
 
-	data := a.data
-	data.Identities = slices.Clone(a.data.Identities)
+	ch, err := a.prepareIdentity(ctx, a.data, in, false)
+	if err != nil {
+		return SavedIdentity{}, err
+	}
+	warnings, err := a.commit(ctx, ch.data, ch)
+	if err != nil {
+		return SavedIdentity{}, err
+	}
+	slog.Debug("save identity: saved", "identity", ch.id.Label, "id", ch.id.ID)
+	return SavedIdentity{
+		Identity:   ch.id,
+		Identities: sortedIdentities(a.data.Identities),
+		List:       a.identityList(a.data),
+		Warnings:   warnings,
+	}, nil
+}
+
+// identityChange is a created or edited identity whose new secrets are
+// stored but whose config is not written yet.
+type identityChange struct {
+	data domain.Data     // the config with the identity added or replaced
+	id   domain.Identity // as it will be saved
+	old  domain.Identity // as it was, for the warnings of cleared fields
+	// created are the items this change added (not the ones it
+	// overwrote, whose old values are gone); rollback deletes them.
+	created []secrets.Ref
+	cleared []secrets.Field // deleted once the config is written
+}
+
+// prepareIdentity applies in to a copy of d: it validates the identity,
+// stores its new secrets (deleting them again if one fails) and sets its
+// flags. hidden marks a new identity as a per-host one (FR-HOST-010).
+// a.mu must be held.
+func (a *App) prepareIdentity(ctx context.Context, d domain.Data, in IdentityInput, hidden bool) (identityChange, error) {
+	d.Identities = slices.Clone(d.Identities)
 	now := time.Now().UTC()
 	var id domain.Identity
 	i := -1
 	if in.ID == "" {
-		id = domain.Identity{Meta: domain.Meta{ID: domain.NewID(), CreatedAt: now}}
+		id = domain.Identity{Meta: domain.Meta{ID: domain.NewID(), CreatedAt: now}, Hidden: hidden}
 	} else {
-		i = slices.IndexFunc(data.Identities, func(o domain.Identity) bool { return o.ID == in.ID })
+		i = slices.IndexFunc(d.Identities, func(o domain.Identity) bool { return o.ID == in.ID })
 		if i < 0 {
-			return SavedIdentity{}, ErrIdentityNotFound
+			return identityChange{}, ErrIdentityNotFound
 		}
-		id = data.Identities[i]
+		id = d.Identities[i]
 	}
+	ch := identityChange{old: id}
 	id.Label = strings.TrimSpace(in.Name)
 	id.Username = strings.TrimSpace(in.Username)
 	id.KeyPath = strings.TrimSpace(in.KeyPath)
 	id.UpdatedAt = now
-	if err := domain.ValidateIdentity(id, data); err != nil {
-		return SavedIdentity{}, err
+	if err := domain.ValidateIdentity(id, d); err != nil {
+		return identityChange{}, err
 	}
 
-	w := secretWrite{
-		password: in.Password, key: in.Key, passphrase: in.Passphrase,
-	}
-	id, rollback, err := a.writeSecrets(ctx, id, w)
-	if err != nil {
-		return SavedIdentity{}, err
-	}
-	if i < 0 {
-		data.Identities = append(data.Identities, id)
-	} else {
-		data.Identities[i] = id
-	}
-	if err := a.saveConfig(data); err != nil {
-		rollback(ctx)
-		return SavedIdentity{}, err
-	}
-	a.data = data
-	slog.Debug("save identity: saved", "identity", id.Label, "id", id.ID)
-	return SavedIdentity{
-		Identity:   id,
-		Identities: sortedIdentities(data.Identities),
-		List:       a.identityList(data),
-	}, nil
-}
-
-// secretWrite is the secrets of one save; an empty Secret is unchanged.
-type secretWrite struct {
-	password, key, passphrase Secret
-}
-
-// writeSecrets stores the non-empty secrets of w for id, sets id's flags
-// for what was stored, and returns id. On failure it deletes the items it
-// created and returns the error. rollback deletes the items this call
-// created (not the ones it overwrote, whose old values are gone), for when
-// the config write fails afterwards. a.mu must be held.
-func (a *App) writeSecrets(ctx context.Context, id domain.Identity, w secretWrite) (domain.Identity, func(context.Context), error) {
-	type field struct {
-		f    secrets.Field
-		s    Secret
-		flag *bool
-	}
-	fields := []field{
-		{secrets.FieldPassword, w.password, &id.HasPassword},
-		{secrets.FieldPrivateKey, w.key, &id.HasKey},
-		{secrets.FieldKeyPassphrase, w.passphrase, &id.HasPassphrase},
-	}
-	var created []secrets.Ref
-	rollback := func(ctx context.Context) {
-		for _, r := range created {
-			if err := a.cfg.Secrets.Delete(ctx, r); err != nil {
-				slog.Debug("save identity: rollback delete failed", "account", r.Account(), "err", err)
-			}
-		}
-	}
-	for _, fl := range fields {
+	for _, fl := range []struct {
+		f     secrets.Field
+		s     Secret
+		clear bool
+		flag  *bool
+	}{ // in allSecretFields order
+		{secrets.FieldPassword, in.Password, in.ClearPassword, &id.HasPassword},
+		{secrets.FieldPrivateKey, in.Key, in.ClearKey, &id.HasKey},
+		{secrets.FieldKeyPassphrase, in.Passphrase, in.ClearPassphrase, &id.HasPassphrase},
+	} {
 		if fl.s.Len() == 0 {
+			if fl.clear {
+				ch.cleared = append(ch.cleared, fl.f)
+				*fl.flag = false
+			}
 			continue
 		}
 		ref := secrets.Ref{IdentityID: string(id.ID), Field: fl.f}
 		if err := a.setSecret(ctx, ref, fl.s); err != nil {
-			rollback(ctx)
-			return domain.Identity{}, nil, err
+			a.rollback(ctx, ch)
+			return identityChange{}, err
 		}
 		if !*fl.flag {
-			created = append(created, ref)
+			ch.created = append(ch.created, ref)
 		}
 		*fl.flag = true
 		delete(a.missing, ref)
 	}
-	return id, rollback, nil
+	if i < 0 {
+		d.Identities = append(d.Identities, id)
+	} else {
+		d.Identities[i] = id
+	}
+	ch.data, ch.id = d, id
+	return ch, nil
+}
+
+// commit writes data, which includes the changes chs prepared, to
+// config.json and makes it the loaded config, then deletes the secrets the
+// changes cleared and returns a warning for each one left behind. If the
+// write fails, it rolls the changes back. a.mu must be held.
+func (a *App) commit(ctx context.Context, data domain.Data, chs ...identityChange) ([]string, error) {
+	if err := a.saveConfig(data); err != nil {
+		for _, ch := range chs {
+			a.rollback(ctx, ch)
+		}
+		return nil, err
+	}
+	a.data = data
+	var warnings []string
+	for _, ch := range chs {
+		warnings = append(warnings, a.deleteSecrets(ctx, ch.old, ch.cleared...)...)
+	}
+	return warnings, nil
+}
+
+// rollback deletes the items ch created. a.mu must be held.
+func (a *App) rollback(ctx context.Context, ch identityChange) {
+	for _, r := range ch.created {
+		if err := a.cfg.Secrets.Delete(ctx, r); err != nil {
+			slog.Debug("save identity: rollback delete failed", "account", r.Account(), "err", err)
+		}
+	}
 }
 
 // fieldName is how a secret field is named in messages.
@@ -316,4 +350,124 @@ func (a *App) saveConfig(data domain.Data) error {
 		return fmt.Errorf("could not save %s: %w", filepath.Base(file), err)
 	}
 	return nil
+}
+
+// SecretsService is the credential-store service sshelf's items are
+// stored under (SEC-CRED-002); warnings name it.
+const SecretsService = "sshelf"
+
+// DeletedIdentity is the result of DeleteIdentity.
+type DeletedIdentity struct {
+	// Hosts are every host after the delete, sorted by label; the ones
+	// that used the identity are unlinked.
+	Hosts []domain.Host
+	// Identities are every identity left, hidden ones included.
+	Identities []domain.Identity
+	// List is the identities view after the delete.
+	List []IdentityInfo
+	// Warnings name the stored items that could not be deleted
+	// (SEC-CRED-004).
+	Warnings []string
+}
+
+// DeleteIdentity deletes an identity (FR-IDENT-001): it unlinks every
+// host that uses it (ARCH-DATA-001), writes config.json, and only then
+// deletes the identity's three items from the credential store
+// (credential-storage §7: a crash leaves at worst an orphaned item, never
+// a dangling reference). An item that cannot be deleted is named in a
+// warning and recorded nowhere (SEC-CRED-004, ARCH-DATA-004).
+func (a *App) DeleteIdentity(ctx context.Context, id domain.ID) (DeletedIdentity, error) {
+	if err := ctx.Err(); err != nil {
+		return DeletedIdentity{}, err
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	data, gone, err := withoutIdentity(a.data, id)
+	if err != nil {
+		return DeletedIdentity{}, err
+	}
+	if err := a.saveConfig(data); err != nil {
+		return DeletedIdentity{}, err
+	}
+	a.data = data
+	warnings := a.deleteSecrets(ctx, gone, allSecretFields...)
+	slog.Debug("delete identity: deleted", "identity", gone.Label, "id", id, "warnings", len(warnings))
+	return DeletedIdentity{
+		Hosts:      sortedHosts(data.Hosts),
+		Identities: sortedIdentities(data.Identities),
+		List:       a.identityList(data),
+		Warnings:   warnings,
+	}, nil
+}
+
+// withoutIdentity returns a copy of d without identity id and with the
+// hosts that used it unlinked, and the removed identity.
+func withoutIdentity(d domain.Data, id domain.ID) (domain.Data, domain.Identity, error) {
+	i := slices.IndexFunc(d.Identities, func(o domain.Identity) bool { return o.ID == id })
+	if i < 0 {
+		return d, domain.Identity{}, ErrIdentityNotFound
+	}
+	gone := d.Identities[i]
+	d.Identities = slices.Delete(slices.Clone(d.Identities), i, i+1)
+	d.Hosts = slices.Clone(d.Hosts)
+	now := time.Now().UTC()
+	for j := range d.Hosts {
+		if d.Hosts[j].IdentityID == id {
+			d.Hosts[j].IdentityID = ""
+			d.Hosts[j].UpdatedAt = now
+		}
+	}
+	return d, gone, nil
+}
+
+var allSecretFields = []secrets.Field{secrets.FieldPassword, secrets.FieldPrivateKey, secrets.FieldKeyPassphrase}
+
+// deleteSecrets deletes the given fields of id from the store and returns
+// a warning for each item that may be left behind: any failed delete of a
+// field the config marked as set, and any failure other than a missing
+// store. a.mu must be held.
+func (a *App) deleteSecrets(ctx context.Context, id domain.Identity, fields ...secrets.Field) []string {
+	var warnings []string
+	for _, f := range fields {
+		ref := secrets.Ref{IdentityID: string(id.ID), Field: f}
+		delete(a.missing, ref)
+		err := error(&StoreError{Store: StoreName(), Err: secrets.ErrUnavailable})
+		if a.cfg.Secrets != nil {
+			err = a.cfg.Secrets.Delete(ctx, ref)
+		}
+		if err == nil {
+			continue
+		}
+		slog.Debug("delete secret: failed", "account", ref.Account(), "err", err)
+		if hasField(id, f) || !errors.Is(err, secrets.ErrUnavailable) {
+			warnings = append(warnings, orphanWarning(ref, err))
+		}
+	}
+	return warnings
+}
+
+func hasField(id domain.Identity, f secrets.Field) bool {
+	switch f {
+	case secrets.FieldPassword:
+		return id.HasPassword
+	case secrets.FieldPrivateKey:
+		return id.HasKey
+	}
+	return id.HasPassphrase
+}
+
+// orphanWarning names an item that could not be deleted, by service and
+// account (SEC-CRED-004), e.g. `could not delete "sshelf" /
+// "0192…/password" from Keychain (access denied); remove it with the OS
+// tools`.
+func orphanWarning(ref secrets.Ref, err error) string {
+	reason := "error"
+	switch {
+	case errors.Is(err, secrets.ErrDenied):
+		reason = "access denied"
+	case errors.Is(err, secrets.ErrUnavailable):
+		reason = "not available"
+	}
+	return fmt.Sprintf("could not delete %q / %q from %s (%s); remove it with the OS tools",
+		SecretsService, ref.Account(), StoreName(), reason)
 }

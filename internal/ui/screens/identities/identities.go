@@ -12,6 +12,7 @@ import (
 	"github.com/RafaelXokito/sshelf/internal/domain"
 	"github.com/RafaelXokito/sshelf/internal/ui/components"
 	"github.com/RafaelXokito/sshelf/internal/ui/keys"
+	"github.com/RafaelXokito/sshelf/internal/ui/modals/confirm"
 )
 
 var (
@@ -29,6 +30,13 @@ type AddMsg struct{}
 
 // EditMsg asks the root model to open the identity form for Info.
 type EditMsg struct{ Info app.IdentityInfo }
+
+// DeleteMsg asks the root model to delete the identity with ID, after the
+// user confirmed.
+type DeleteMsg struct {
+	ID    domain.ID
+	Label string
+}
 
 // BackMsg asks the root model to return to the host list.
 type BackMsg struct{}
@@ -95,6 +103,11 @@ func (m Model) Update(msg tea.Msg) (components.Screen, tea.Cmd) {
 		if info, ok := m.Selected(); ok {
 			return m, func() tea.Msg { return EditMsg{Info: info} }
 		}
+	case key.Matches(k, keys.DeleteIdentity):
+		if info, ok := m.Selected(); ok {
+			ask := confirm.New(DeleteQuestion(info), DeleteMsg{ID: info.Identity.ID, Label: info.Identity.Label})
+			return m, func() tea.Msg { return components.ShowModalMsg{Modal: ask} }
+		}
 	}
 	return m, nil
 }
@@ -122,8 +135,22 @@ func (m Model) View() string {
 			b.WriteString("\n" + Details(info))
 		}
 	}
-	b.WriteString("\n" + components.Help(keys.Up, keys.Down, keys.AddIdentity, keys.EditIdentity, keys.Back) + "\n")
+	b.WriteString("\n" + components.Help(keys.Up, keys.Down, keys.AddIdentity, keys.EditIdentity, keys.DeleteIdentity, keys.Back) + "\n")
 	return b.String()
+}
+
+// DeleteQuestion is the delete confirmation, which states how many hosts
+// will be unlinked (FR-IDENT-001), e.g. "Delete identity ops and its
+// stored secrets? 2 linked hosts will be unlinked."
+func DeleteQuestion(info app.IdentityInfo) string {
+	q := "Delete identity " + domain.Sanitize(info.Identity.Label) + " and its secrets? "
+	switch info.LinkedHosts {
+	case 0:
+		return q + "No hosts use it."
+	case 1:
+		return q + "1 linked host will be unlinked."
+	}
+	return q + strconv.Itoa(info.LinkedHosts) + " linked hosts will be unlinked."
 }
 
 // Line renders one identity: its name, username and number of hosts.
