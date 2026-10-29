@@ -284,7 +284,7 @@ When the user creates, edits or deletes an identity, the system shall save the c
 ### FR-IDENT-002 · Link a host to an identity
 When a host is linked to an identity, the system shall authenticate that host with the identity's credentials, using the host's own username when the host sets one and the identity's username otherwise.
 
-- **Priority:** MVP · **Status:** Draft · **Rationale:** avoids Royal TSX's need for duplicate credentials per username.
+- **Priority:** MVP · **Status:** Implemented · **Rationale:** avoids Royal TSX's need for duplicate credentials per username.
 - **Acceptance:**
   - Identity `ops` (user `deploy`, key K) on host A, which has no username, connects as `deploy` with K. Host B, linked to `ops` with username `root`, connects as `root` with K.
 
@@ -349,7 +349,7 @@ When the user presses Enter on a host, the system shall open an interactive SSH 
 ### FR-CONN-002 · Authenticate with stored credentials
 Where the effective identity has a private key or a password, the system shall authenticate with it without prompting, trying the key (stored or file) first and then password or keyboard-interactive (FR-CONN-008).
 
-- **Priority:** MVP · **Status:** Draft
+- **Priority:** MVP · **Status:** Implemented
 - **Acceptance:**
   - A host accepting only the identity's key connects without a prompt when the key is unencrypted or its passphrase is stored.
   - Given both a key and a password, against a server accepting both, the key is used (visible in the debug log).

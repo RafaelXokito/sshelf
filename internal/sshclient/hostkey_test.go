@@ -37,7 +37,7 @@ func newTrustSetup(t *testing.T, opts ...sshtest.Option) trustSetup {
 		fixture: fixture{
 			srv:    srv,
 			creds:  &fakeCreds{signer: signer},
-			target: domain.Target{Label: "web-prod", Hostname: srv.Host(), Port: srv.Port(), User: "alice"},
+			target: domain.Target{Label: "web-prod", Hostname: srv.Host(), Port: srv.Port(), User: "alice", HasKey: true},
 			kh:     filepath.Join(dir, "sshelf_known_hosts"),
 		},
 		openssh: filepath.Join(dir, "openssh_known_hosts"),

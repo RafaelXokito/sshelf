@@ -37,6 +37,10 @@ func (f *fakeCreds) Signers(_ context.Context, t domain.Target) ([]ssh.Signer, e
 	return []ssh.Signer{f.signer}, nil
 }
 
+func (f *fakeCreds) Password(context.Context, domain.Target) (string, error) {
+	return "", ErrNoCredential
+}
+
 func (f *fakeCreds) callCount() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -77,7 +81,7 @@ func newFixture(t *testing.T, trusted bool) fixture {
 	return fixture{
 		srv:    srv,
 		creds:  &fakeCreds{signer: signer},
-		target: domain.Target{Label: "web-prod", Hostname: srv.Host(), Port: srv.Port(), User: "alice"},
+		target: domain.Target{Label: "web-prod", Hostname: srv.Host(), Port: srv.Port(), User: "alice", HasKey: true},
 		kh:     kh,
 	}
 }
@@ -159,7 +163,7 @@ func TestSEC_HOSTKEY_001_ChangedKeyFailsWithoutPrompt(t *testing.T) {
 }
 
 func TestSEC_SESSION_004_NoLegacyAlgorithms(t *testing.T) {
-	cfg := clientConfig(context.Background(), domain.Target{}, nil, nil)
+	cfg := clientConfig(domain.Target{}, newAuthState(context.Background(), domain.Target{}, nil), nil)
 	if cfg.Ciphers != nil || cfg.KeyExchanges != nil || cfg.MACs != nil || cfg.HostKeyAlgorithms != nil {
 		t.Fatalf("client config overrides the default algorithms: %+v", cfg.Config)
 	}
@@ -204,8 +208,9 @@ func TestARCH_SEC_002_CredentialsOnlyViaInterface(t *testing.T) {
 			k := field.Type.Kind()
 			bad := field.Type.Implements(reflect.TypeFor[ssh.Signer]()) ||
 				(k == reflect.Slice && field.Type.Elem().Kind() == reflect.Uint8) ||
-				strings.Contains(strings.ToLower(field.Name), "password") ||
-				strings.Contains(strings.ToLower(field.Name), "passphrase")
+				(k != reflect.Bool && // Has* flags only say which secrets exist
+					(strings.Contains(strings.ToLower(field.Name), "password") ||
+						strings.Contains(strings.ToLower(field.Name), "passphrase")))
 			if bad {
 				t.Errorf("%s.%s can carry a credential", typ.Name(), field.Name)
 			}

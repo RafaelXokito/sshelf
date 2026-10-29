@@ -271,7 +271,7 @@ Priority: MVP · Status: Draft · Threats: T-17
 **SEC-MEM-009: Just-in-time secrets.**
 When connecting, the system shall read the identity's secrets from the store only for that connection attempt,
 and shall destroy them (and drop any parsed `ssh.Signer`) once authentication completes or fails.
-Priority: MVP · Status: Draft · Threats: T-4, T-7
+Priority: MVP · Status: Implemented · Threats: T-4, T-7
 - AC1: The fake store counts `Get` calls: zero at startup, one per needed field per connect.
 - AC2: After auth, the `Secret` buffers are zero (test hook).
 
@@ -354,7 +354,7 @@ Priority: MVP · Status: Implemented · Threats: T-5
 **SEC-SESSION-001: Credentials only to verified owners.**
 The system shall offer a credential only to the hosts linked to its identity, and only after that connection's
 host key has been verified.
-Priority: MVP · Status: Draft · Threats: T-16
+Priority: MVP · Status: Implemented · Threats: T-16
 - AC1: With a rejected host key, no store `Get` and no auth callback happens. Host A's password is never sent to
   host B.
 

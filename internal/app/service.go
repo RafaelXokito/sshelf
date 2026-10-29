@@ -13,6 +13,7 @@ import (
 
 	"github.com/RafaelXokito/sshelf/internal/domain"
 	"github.com/RafaelXokito/sshelf/internal/paths"
+	"github.com/RafaelXokito/sshelf/internal/secrets"
 	"github.com/RafaelXokito/sshelf/internal/session"
 	"github.com/RafaelXokito/sshelf/internal/sshclient"
 	"github.com/RafaelXokito/sshelf/internal/store"
@@ -67,8 +68,12 @@ type Config struct {
 	// KnownHostsFiles are the files host keys are checked against, from
 	// paths.KnownHostsFiles(Dir, home).
 	KnownHostsFiles []string
-	// Creds defaults to KeyFileSource.
-	Creds sshclient.CredentialSource
+	// Secrets is the OS credential store the identities' secrets are read
+	// from at connect time. nil means none is configured.
+	Secrets secrets.Store
+	// Home is the directory "~" in key paths expands to; "" means
+	// os.UserHomeDir.
+	Home string
 	// Terminal is the local terminal sessions attach to; default os.Stdin.
 	Terminal session.Terminal
 }
@@ -86,9 +91,6 @@ type App struct {
 
 // New returns an App. It does no I/O.
 func New(cfg Config) *App {
-	if cfg.Creds == nil {
-		cfg.Creds = KeyFileSource{}
-	}
 	if cfg.Terminal == nil {
 		cfg.Terminal = term.NewTTY(os.Stdin)
 	}
@@ -162,7 +164,8 @@ func (a *App) Connect(ctx context.Context, hostID domain.ID) (Session, error) {
 	a.mu.Unlock()
 
 	ssh := sshclient.Config{KnownHostsFiles: a.cfg.KnownHostsFiles}
-	client, err := ssh.Connect(ctx, target, a.cfg.Creds, a)
+	creds := Credentials{Store: a.cfg.Secrets, Home: a.cfg.Home}
+	client, err := ssh.Connect(ctx, target, creds, a)
 	if err != nil {
 		return nil, err
 	}

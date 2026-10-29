@@ -1,6 +1,9 @@
 package domain
 
-import "time"
+import (
+	"os"
+	"time"
+)
 
 // Built-in defaults used by Resolve.
 const (
@@ -10,11 +13,13 @@ const (
 
 // Resolve turns a host into the Target sshclient connects to (design §7.2).
 //
-// This is the minimal version (T-004): hostname, port (host, then 22), user
-// (host, then identity), key path (identity) and connect timeout (Settings,
-// then 10 s). Group inheritance and the $USER fallback come later (T-012).
+// It resolves the MVP fields. The username follows FR-IDENT-002: the
+// host's, then the linked identity's, then $USER. The port is the host's,
+// then 22. The connect timeout is the host's option, then Settings, then
+// 10 s (FR-CONN-006). The key path and the secret flags come from the
+// linked identity. Group inheritance is v1, so groups is not used yet.
 func Resolve(h Host, groups []Group, identities []Identity, s Settings) Target {
-	_ = groups // group chain inheritance is not implemented yet
+	_ = groups // group chain inheritance is v1
 	t := Target{
 		HostID:         h.ID,
 		Label:          h.Label,
@@ -24,21 +29,31 @@ func Resolve(h Host, groups []Group, identities []Identity, s Settings) Target {
 		IdentityID:     h.IdentityID,
 		ConnectTimeout: s.ConnectTimeout,
 	}
+	if h.Options.ConnectTimeout != nil && *h.Options.ConnectTimeout > 0 {
+		t.ConnectTimeout = *h.Options.ConnectTimeout
+	}
 	if t.Port == 0 {
 		t.Port = DefaultPort
 	}
-	if t.ConnectTimeout == 0 {
+	if t.ConnectTimeout <= 0 {
 		t.ConnectTimeout = DefaultConnectTimeout
 	}
 	for _, id := range identities {
 		if id.ID != h.IdentityID || h.IdentityID == "" {
 			continue
 		}
+		t.IdentityLabel = id.Label
 		t.KeyPath = id.KeyPath
+		t.HasKey = id.HasKey
+		t.HasPassword = id.HasPassword
+		t.HasPassphrase = id.HasPassphrase
 		if t.User == "" {
 			t.User = id.Username
 		}
 		break
+	}
+	if t.User == "" {
+		t.User = os.Getenv("USER")
 	}
 	return t
 }
