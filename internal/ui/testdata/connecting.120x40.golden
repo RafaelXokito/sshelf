@@ -1,15 +1,40 @@
 sshelf
 
 > db-staging           admin@10.0.1.20:2222
-  web-prod             ubuntu@10.0.0.10:22
-  zeta                 10.0.0.30:22
+  web-prod             ubuntu@10.0.0.10
+  zeta                 10.0.0.30
 
 ╭─────────────────────────────────────────────╮
 │ Connecting to web-prod…                     │
 │                                             │
 │ ✓ dialling → ✓ verifying → › authenticating │
-│                                             │
-│ esc cancel                                  │
 ╰─────────────────────────────────────────────╯
 
-↑/↓ move • enter connect • a add • e edit • q quit
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+esc cancel

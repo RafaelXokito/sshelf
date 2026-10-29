@@ -67,6 +67,12 @@ type Service interface {
 	// SaveHost adds h (when h.ID is "") or updates the host with h.ID,
 	// and writes config.json atomically. See App.SaveHost.
 	SaveHost(ctx context.Context, h domain.Host) (SavedHost, error)
+	// DeleteHost removes the host with id and writes config.json. See
+	// App.DeleteHost.
+	DeleteHost(ctx context.Context, id domain.ID) ([]domain.Host, error)
+	// ImportSSHConfig copies ~/.ssh/config into config.json once. See
+	// App.ImportSSHConfig.
+	ImportSSHConfig(ctx context.Context) (ImportReport, error)
 }
 
 // SavedHost is the result of Service.SaveHost.

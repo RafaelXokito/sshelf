@@ -1,0 +1,40 @@
+sshelf
+
+Import from /home/u/.ssh/config
+
+Created 2 hosts and 1 identity.
+Key files are referenced by path; nothing was copied into the credential store.
+
+Skipped (1):
+  db: label already exists
+
+Not imported:
+  web: Match
+  bastion: ProxyCommand, ProxyJump, LocalForward, ForwardAgent, Match
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+enter/esc back to hosts

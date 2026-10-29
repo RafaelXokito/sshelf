@@ -1,0 +1,40 @@
+sshelf
+
+> api                  api.internal
+  ipv6                 root@[2001:db8::1]:2222
+  very-long-label-very-long-label-very-long-label-very-long-label- someone-with-a-long-name@long.example.com
+  Web-Prod             ubuntu@10.0.0.10
+  zeta                 10.0.0.30
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+enter connect • / search • a add • e edit • d delete • I import • q quit

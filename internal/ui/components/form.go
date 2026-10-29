@@ -18,6 +18,10 @@ var (
 	choiceArrowStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("212"))
 )
 
+// ErrorPrefix starts every error message, so errors do not rely on colour
+// alone (NFR-UX-003).
+const ErrorPrefix = "✗ "
+
 // FormScreen is a screen that holds a form. Ctrl+C cancels it instead of
 // quitting the app (FR-NAV-003): the root model closes any modals and
 // handles the message Cancel returns as if the screen had sent it.
@@ -209,7 +213,7 @@ func (f *Form) View() string {
 		v := r.field.View()
 		if r.err != "" {
 			b.WriteString(pad(v, f.FieldWidth))
-			b.WriteString("  " + formErrorStyle.Render(r.err))
+			b.WriteString("  " + formErrorStyle.Render(ErrorPrefix+r.err))
 		} else {
 			b.WriteString(v)
 		}

@@ -1,0 +1,24 @@
+sshelf
+
+/ wbprd_
+> web-prod             ubuntu@10.0.0.10
+  web-prod-eu          deploy@eu.example.com
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+enter connect • esc clear search • ↑ up • ↓ down

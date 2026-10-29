@@ -67,3 +67,6 @@ func (m Model) View() string {
 	b.WriteString(dimStyle.Render("No credentials are sent until you choose."))
 	return boxStyle.Render(b.String())
 }
+
+// Hints implements components.Hinter.
+func (m Model) Hints() []key.Binding { return []key.Binding{keys.TrustAndSave, keys.TOFUCancel} }

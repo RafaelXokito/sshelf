@@ -75,9 +75,7 @@ func (m Model) View() string {
 			files[s.File] = false
 		}
 	}
-	b.WriteString("\n")
-	b.WriteString(dimStyle.Render("esc close"))
-	return boxStyle.Render(b.String())
+	return boxStyle.Render(strings.TrimSuffix(b.String(), "\n"))
 }
 
 // quote quotes s for a POSIX shell when it needs it.
@@ -90,3 +88,6 @@ func quote(s string) string {
 	}
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
+
+// Hints implements components.Hinter.
+func (m Model) Hints() []key.Binding { return []key.Binding{keys.CloseBlock} }

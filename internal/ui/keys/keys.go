@@ -2,8 +2,9 @@ package keys
 
 import "charm.land/bubbles/v2/key"
 
-// The keymap (ARCH-UI-004). Only the bindings of the MVP slice exist so
-// far; T-016 completes it and generates the footer from it.
+// The keymap (ARCH-UI-004). Every binding sshelf reacts to is defined here
+// with its help text; Maps groups them by view, and footers are generated
+// from them (FR-NAV-004).
 var (
 	Up        = key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "up"))
 	Down      = key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down"))
@@ -37,10 +38,36 @@ var (
 	DeleteToEnd   = key.NewBinding(key.WithKeys("ctrl+k"), key.WithHelp("ctrl+k", "delete to end"))
 )
 
-// Host list: open the host form.
+// Host list (FR-NAV-003). The groups key of design §9.3 is v1 and stays
+// unassigned; g is First.
 var (
-	AddHost  = key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "add"))
-	EditHost = key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "edit"))
+	First      = key.NewBinding(key.WithKeys("g", "home"), key.WithHelp("g", "first"))
+	Last       = key.NewBinding(key.WithKeys("G", "end"), key.WithHelp("G", "last"))
+	Search     = key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "search"))
+	AddHost    = key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "add"))
+	EditHost   = key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "edit"))
+	DeleteHost = key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "delete"))
+	Identities = key.NewBinding(key.WithKeys("i"), key.WithHelp("i", "identities"))
+	Import     = key.NewBinding(key.WithKeys("I"), key.WithHelp("I", "import"))
+)
+
+// Search field (FR-NAV-002): letters type into the query, so only the
+// arrows move the selection.
+var (
+	SearchUp    = key.NewBinding(key.WithKeys("up"), key.WithHelp("↑", "up"))
+	SearchDown  = key.NewBinding(key.WithKeys("down"), key.WithHelp("↓", "down"))
+	ClearSearch = key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "clear search"))
+)
+
+// Welcome screen (FR-NAV-013).
+var (
+	WelcomeImport = key.NewBinding(key.WithKeys("I"), key.WithHelp("I", "import ~/.ssh/config"))
+	WelcomeAdd    = key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "add host"))
+)
+
+// Import report (FR-IMPORT-003): any of these returns to the host list.
+var (
+	Back = key.NewBinding(key.WithKeys("esc", "enter"), key.WithHelp("enter/esc", "back to hosts"))
 )
 
 // Forms (design §9.3): tab/shift+tab move between fields (NextField,
@@ -58,3 +85,33 @@ var (
 	ConfirmYes = key.NewBinding(key.WithKeys("y"), key.WithHelp("y", "yes"))
 	ConfirmNo  = key.NewBinding(key.WithKeys("n", "enter", "esc"), key.WithHelp("n/enter/esc", "no"))
 )
+
+// Map is the keymap of one view: every binding active while it has the
+// keyboard. Within a Map no two bindings share a key (ARCH-UI-004).
+type Map struct {
+	Name     string
+	Bindings []key.Binding
+}
+
+// textInput are the bindings of a focused components.TextInput.
+var textInput = []key.Binding{CursorLeft, CursorRight, CursorHome, CursorEnd, DeleteBack, DeleteForward, DeleteToStart, DeleteToEnd}
+
+// Maps returns the keymap of every view. The help overlay (FR-NAV-006,
+// v1) is generated from it; footers show a subset.
+func Maps() []Map {
+	return []Map{
+		{Name: "host list", Bindings: []key.Binding{Up, Down, First, Last, Search, Connect, AddHost, EditHost, DeleteHost, Identities, Import, Quit, ForceQuit}},
+		{Name: "search", Bindings: append([]key.Binding{SearchUp, SearchDown, Connect, ClearSearch, ForceQuit}, textInput...)},
+		{Name: "welcome", Bindings: []key.Binding{WelcomeImport, WelcomeAdd, Quit, ForceQuit}},
+		{Name: "form", Bindings: []key.Binding{NextField, PrevField, Save, Cancel, ForceQuit}},
+		{Name: "form text field", Bindings: textInput},
+		{Name: "form choice field", Bindings: []key.Binding{ChoicePrev, ChoiceNext}},
+		{Name: "import report", Bindings: []key.Binding{Back, Up, Down, ForceQuit}},
+		{Name: "load error", Bindings: []key.Binding{Quit, ForceQuit}},
+		{Name: "confirm", Bindings: []key.Binding{ConfirmYes, ConfirmNo, ForceQuit}},
+		{Name: "connecting", Bindings: []key.Binding{Cancel, ForceQuit}},
+		{Name: "host key prompt", Bindings: []key.Binding{TrustAndSave, TOFUCancel, ForceQuit}},
+		{Name: "authentication prompt", Bindings: append([]key.Binding{Submit, NextField, PrevField, Cancel, ForceQuit}, textInput...)},
+		{Name: "changed host key", Bindings: []key.Binding{CloseBlock, ForceQuit}},
+	}
+}

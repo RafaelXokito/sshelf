@@ -122,7 +122,7 @@ func TestFR_HOST_001_EscDiscards(t *testing.T) {
 	if _, ok := d.root().modals[0].(confirm.Model); !ok || !strings.Contains(d.view(), "Discard unsaved changes?") {
 		t.Fatalf("no confirm:\n%s", d.view())
 	}
-	golden(t, "hostedit-discard", d.view())
+	golden(t, "hostedit-discard", d.m)
 	d.press(tea.KeyEnter, "")
 	if !d.inForm() || len(d.root().modals) != 0 || !strings.Contains(d.view(), "web-prod-x") {
 		t.Fatalf("enter did not keep editing:\n%s", d.view())
@@ -181,7 +181,7 @@ func TestFR_HOST_003_ErrorsNextToFields(t *testing.T) {
 			t.Errorf("%q not on the %s line:\n%s", msg, field, v)
 		}
 	}
-	golden(t, "hostedit-errors", v)
+	golden(t, "hostedit-errors", d.m)
 
 	// The first invalid field has focus. Fixing the fields saves; 65535
 	// is a valid port.
@@ -251,7 +251,7 @@ func TestFR_HOST_001_IdentityPicker(t *testing.T) {
 	d.tab()
 	d.typeText("root")
 	d.tab()
-	golden(t, "hostedit-add", d.view())
+	golden(t, "hostedit-add", d.m)
 	if strings.Contains(d.view(), "per-host secret") {
 		t.Fatal("a hidden identity is offered")
 	}
@@ -270,5 +270,5 @@ func TestHostEditGoldenEdit(t *testing.T) {
 		Meta: domain.Meta{ID: "h1"}, Label: "db-staging", Hostname: "10.0.1.20", Port: 2222, User: "admin", IdentityID: "i2",
 	}, testHosts, testIdentities)
 	// A host's own hidden identity is offered and selected.
-	golden(t, "hostedit-edit", m.View())
+	golden(t, "hostedit-edit", withScreen(m))
 }

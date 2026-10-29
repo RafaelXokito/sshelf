@@ -137,10 +137,13 @@ func (m Model) View() string {
 	for i, q := range p.Questions {
 		fmt.Fprintf(&b, "%s %s\n", strings.TrimRight(domain.Sanitize(q.Text), " "), m.inputs[i].View())
 	}
-	help := "enter submit • esc cancel"
+	return boxStyle.Render(strings.TrimSuffix(b.String(), "\n"))
+}
+
+// Hints implements components.Hinter.
+func (m Model) Hints() []key.Binding {
 	if len(m.inputs) > 1 {
-		help = "tab next field • " + help
+		return []key.Binding{keys.Submit, keys.NextField, keys.Cancel}
 	}
-	b.WriteString("\n" + dimStyle.Render(help))
-	return boxStyle.Render(b.String())
+	return []key.Binding{keys.Submit, keys.Cancel}
 }
