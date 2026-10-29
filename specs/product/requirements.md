@@ -358,7 +358,7 @@ Where the effective identity has a private key or a password, the system shall a
 ### FR-CONN-003 · Prompt for missing secrets
 If the server requests a password, or a key passphrase is needed, and none is stored, then the system shall prompt for it with a non-echoing field and continue authentication.
 
-- **Priority:** MVP · **Status:** Draft
+- **Priority:** MVP · **Status:** Implemented
 - **Acceptance:**
   - The prompt shows `user@host` and what is needed ("password" or "passphrase for <key>").
   - Esc cancels and returns to the list. 3 failed attempts end with "authentication failed".
@@ -398,7 +398,7 @@ Where the `SSH_AUTH_SOCK` environment variable points to a running agent, the sy
 ### FR-CONN-008 · Keyboard-interactive authentication
 When the server sends keyboard-interactive challenges, the system shall answer a single non-echoing password prompt with the identity's stored password and show every other prompt, such as an OTP, to the user, echoing input only when the server allows it.
 
-- **Priority:** MVP · **Status:** Draft · **Rationale:** many servers accept passwords only through keyboard-interactive; OTP and 2FA bastions. **Source:** SEC-SESSION-002, ARCH-CONN-002
+- **Priority:** MVP · **Status:** Implemented · **Rationale:** many servers accept passwords only through keyboard-interactive; OTP and 2FA bastions. **Source:** SEC-SESSION-002, ARCH-CONN-002
 - **Acceptance:**
   - A server that accepts passwords only through keyboard-interactive connects with the stored password and no prompt.
   - A test server with a password prompt and an OTP prompt fills the password and shows only the OTP prompt. The OTP field echoes only when the server sets echo.

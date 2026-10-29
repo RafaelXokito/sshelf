@@ -58,6 +58,10 @@ func (p *recordingPrompter) HostKey(_ context.Context, hp HostKeyPrompt) (bool, 
 	return p.trust, nil
 }
 
+func (p *recordingPrompter) Ask(context.Context, AuthPrompt) ([]string, error) {
+	return nil, ErrAuthCancelled
+}
+
 type fixture struct {
 	srv    *sshtest.Server
 	creds  *fakeCreds
@@ -163,7 +167,7 @@ func TestSEC_HOSTKEY_001_ChangedKeyFailsWithoutPrompt(t *testing.T) {
 }
 
 func TestSEC_SESSION_004_NoLegacyAlgorithms(t *testing.T) {
-	cfg := clientConfig(domain.Target{}, newAuthState(context.Background(), domain.Target{}, nil), nil)
+	cfg := clientConfig(domain.Target{}, newAuthState(context.Background(), domain.Target{}, nil, nil), nil)
 	if cfg.Ciphers != nil || cfg.KeyExchanges != nil || cfg.MACs != nil || cfg.HostKeyAlgorithms != nil {
 		t.Fatalf("client config overrides the default algorithms: %+v", cfg.Config)
 	}
@@ -250,6 +254,12 @@ func (p blockingPrompter) HostKey(ctx context.Context, _ HostKeyPrompt) (bool, e
 	close(p.asked)
 	<-ctx.Done()
 	return false, ctx.Err()
+}
+
+func (p blockingPrompter) Ask(ctx context.Context, _ AuthPrompt) ([]string, error) {
+	close(p.asked)
+	<-ctx.Done()
+	return nil, ctx.Err()
 }
 
 func TestARCH_CONN_005_CancelClosesConnection(t *testing.T) {

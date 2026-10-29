@@ -46,12 +46,11 @@ func TestARCH_CONN_001_AuthMethodTable(t *testing.T) {
 		t    domain.Target
 		want []string
 	}{
-		{"no identity", domain.Target{}, nil},
-		{"key file", domain.Target{KeyPath: "~/.ssh/id"}, []string{"publickey"}},
-		{"stored key", domain.Target{HasKey: true, HasPassphrase: true}, []string{"publickey"}},
-		{"password", domain.Target{HasPassword: true}, []string{"password"}},
-		{"key and password", domain.Target{HasKey: true, HasPassword: true}, []string{"publickey", "password"}},
-		{"key file and password", domain.Target{KeyPath: "/k", HasPassword: true}, []string{"publickey", "password"}},
+		{"no identity", domain.Target{}, []string{"password", "keyboard-interactive"}},
+		{"key file", domain.Target{KeyPath: "~/.ssh/id"}, []string{"publickey", "password", "keyboard-interactive"}},
+		{"stored key", domain.Target{HasKey: true, HasPassphrase: true}, []string{"publickey", "password", "keyboard-interactive"}},
+		{"password", domain.Target{HasPassword: true}, []string{"password", "keyboard-interactive"}},
+		{"key and password", domain.Target{HasKey: true, HasPassword: true}, []string{"publickey", "password", "keyboard-interactive"}},
 	} {
 		if got := authPlan(tc.t); !slices.Equal(got, tc.want) {
 			t.Errorf("%s: plan = %v, want %v", tc.name, got, tc.want)

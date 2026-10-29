@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"golang.org/x/crypto/ssh"
@@ -122,9 +123,33 @@ func credApp(t *testing.T, store secrets.Store, srvs []*sshtest.Server, identiti
 	return a
 }
 
-// failOnPrompt makes any prompt fail the test.
+// cancelPrompts makes App refuse every prompt, and returns how many
+// were shown.
+func cancelPrompts(a *App) *atomic.Int32 {
+	var n atomic.Int32
+	a.SetSend(func(msg any) {
+		n.Add(1)
+		switch m := msg.(type) {
+		case AuthPromptMsg:
+			m.Cancel()
+		case HostKeyPromptMsg:
+			m.Answer(false)
+		}
+	})
+	return &n
+}
+
+// failOnPrompt makes any prompt fail the test (and cancels it).
 func failOnPrompt(t *testing.T, a *App) {
-	a.SetSend(func(msg any) { t.Errorf("unexpected prompt %T", msg) })
+	a.SetSend(func(msg any) {
+		t.Errorf("unexpected prompt %T", msg)
+		if m, ok := msg.(AuthPromptMsg); ok {
+			m.Cancel()
+		}
+		if m, ok := msg.(HostKeyPromptMsg); ok {
+			m.Answer(false)
+		}
+	})
 }
 
 func connectOK(t *testing.T, a *App, hostID string) {
@@ -314,7 +339,7 @@ func TestSEC_SESSION_001_PasswordNotSentToOtherHost(t *testing.T) {
 		`[{"id": "ia", "name": "a", "has_password": true}, {"id": "ib", "name": "b", "has_password": true}]`,
 		`[{"id": "ha", "label": "a", "hostname": %[1]q, "port": %[2]d, "user": "deploy", "identity_id": "ia"},
 		  {"id": "hb", "label": "b", "hostname": %[3]q, "port": %[4]d, "user": "deploy", "identity_id": "ib"}]`)
-	failOnPrompt(t, a)
+	cancelPrompts(a) // B rejects its password, then asks the user: cancelled
 	if s, err := a.Connect(context.Background(), "hb"); err == nil {
 		_ = s.Close()
 		t.Fatal("host B accepted a password it was never given")

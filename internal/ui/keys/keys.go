@@ -17,6 +17,11 @@ var (
 	TrustAndSave = key.NewBinding(key.WithKeys("y"), key.WithHelp("y", "trust and save"))
 	TOFUCancel   = key.NewBinding(key.WithKeys("enter", "esc"), key.WithHelp("enter/esc", "cancel"))
 
+	// Prompt modal: enter moves to the next field and submits on the last.
+	Submit    = key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "submit"))
+	NextField = key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "next field"))
+	PrevField = key.NewBinding(key.WithKeys("shift+tab"), key.WithHelp("shift+tab", "previous field"))
+
 	// Changed-host-key block screen: closing is the only action.
 	CloseBlock = key.NewBinding(key.WithKeys("esc", "enter", "q"), key.WithHelp("esc", "close"))
 )

@@ -144,7 +144,7 @@ Priority: MVP · Status: Draft · Threats: T-6
 **SEC-CRED-007: Missing item.**
 If an identity references a secret that the store does not contain (new machine, synced config, manual
 deletion), then the system shall show the field as "not set on this device" and ask for the value at connect time.
-Priority: MVP · Status: Draft · Threats: T-6, T-9
+Priority: MVP · Status: Implemented · Threats: T-6, T-9
 - AC1: Config with a password reference and an empty fake: connect opens the password prompt, and the typed value
   is used for that connection only. Offering to save it is v1 (FR-IDENT-005).
 
@@ -362,14 +362,14 @@ Priority: MVP · Status: Implemented · Threats: T-16
 When a server sends keyboard-interactive prompts, the system shall auto-answer only a single echo-off prompt
 matching `/password/i` with the identity's stored password, and shall show every other prompt (such as an OTP) to
 the user labelled "Prompt from <host>" with control characters stripped.
-Priority: MVP · Status: Draft · Threats: T-14
+Priority: MVP · Status: Implemented · Threats: T-14
 - AC1: A password-only keyboard-interactive server gets the stored password with no user prompt. Two prompts get
   no auto-answer. An instruction containing `\x1b]52;` renders escaped.
 
 **SEC-SESSION-003: Sanitize untrusted strings.**
 The system shall strip C0 controls (except `\t` and `\n`), C1 controls and ANSI escape sequences from
 server-supplied and imported strings before rendering them in sshelf's UI.
-Priority: MVP · Status: Draft · Threats: T-15
+Priority: MVP · Status: Implemented · Threats: T-15
 - AC1: Fuzz `Sanitize`: the output never contains runes U+0000–U+0008, U+000B–U+001F, U+007F or U+0080–U+009F.
 
 **SEC-SESSION-004: Algorithms and dependencies.**

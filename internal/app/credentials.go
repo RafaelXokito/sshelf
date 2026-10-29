@@ -1,11 +1,14 @@
 package app
 
 import (
+	"bytes"
 	"context"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -38,13 +41,16 @@ type Credentials struct {
 	Store secrets.Store
 	// Home is the directory "~" expands to. "" means os.UserHomeDir.
 	Home string
+	// Prompter asks for the passphrase of an encrypted key that has none
+	// stored. nil means encrypted keys need a stored passphrase.
+	Prompter sshclient.Prompter
 }
 
 var _ sshclient.CredentialSource = Credentials{}
 
 // Signers returns the identity's key: the stored key if the identity has
-// one, otherwise its key file. A stored passphrase decrypts an encrypted
-// key. It returns no signer when the identity has no key.
+// one, otherwise its key file. It returns no signer when the identity has
+// no key, or when its stored key is not set on this device.
 func (c Credentials) Signers(ctx context.Context, t domain.Target) ([]ssh.Signer, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -56,6 +62,12 @@ func (c Credentials) Signers(ctx context.Context, t domain.Target) ([]ssh.Signer
 	switch {
 	case t.HasKey:
 		key, err := c.get(ctx, t, secrets.FieldPrivateKey)
+		if errors.Is(err, secrets.ErrNotFound) {
+			// A key cannot be typed in: skip it, and let password or
+			// keyboard-interactive authentication follow (SEC-CRED-007).
+			slog.Debug("connect: stored key not set on this device", "identity", t.IdentityLabel)
+			return nil, nil
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -78,29 +90,68 @@ func (c Credentials) Signers(ctx context.Context, t domain.Target) ([]ssh.Signer
 	return []ssh.Signer{signer}, nil
 }
 
-// parse parses a private key, decrypting it with the stored passphrase
-// when it is encrypted.
+// parse parses a private key. An encrypted key is decrypted with the
+// stored passphrase, if there is one, or with the passphrase the user types
+// (FR-CONN-003); after MaxAuthFailures wrong passphrases it fails with
+// ErrAuthFailed.
 func (c Credentials) parse(ctx context.Context, t domain.Target, b []byte, name string) (ssh.Signer, error) {
 	signer, err := ssh.ParsePrivateKey(b)
-	if _, ok := errors.AsType[*ssh.PassphraseMissingError](err); ok {
-		if !t.HasPassphrase {
-			return nil, fmt.Errorf("%w: %s (no passphrase is stored)", ErrKeyFileEncrypted, name)
-		}
-		pass, err := c.get(ctx, t, secrets.FieldKeyPassphrase)
-		if err != nil {
-			return nil, err
-		}
-		defer pass.Destroy()
-		signer, err = ssh.ParsePrivateKeyWithPassphrase(b, pass.Bytes())
+	if _, ok := errors.AsType[*ssh.PassphraseMissingError](err); !ok {
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", name, err)
 		}
 		return signer, nil
 	}
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", name, err)
+	var note string
+	for try := range sshclient.MaxAuthFailures {
+		var pass []byte
+		if try == 0 && t.HasPassphrase {
+			s, err := c.get(ctx, t, secrets.FieldKeyPassphrase)
+			switch {
+			case err == nil:
+				pass = bytes.Clone(s.Bytes())
+				s.Destroy()
+			case errors.Is(err, secrets.ErrNotFound):
+				note = "The stored passphrase is not set on this device."
+			default:
+				return nil, err
+			}
+		}
+		if pass == nil {
+			if pass, err = c.askPassphrase(ctx, t, name, note); err != nil {
+				return nil, err
+			}
+		}
+		signer, err = ssh.ParsePrivateKeyWithPassphrase(b, pass)
+		clear(pass)
+		if errors.Is(err, x509.IncorrectPasswordError) {
+			note = "Wrong passphrase, please try again."
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", name, err)
+		}
+		return signer, nil
 	}
-	return signer, nil
+	return nil, fmt.Errorf("%w: wrong passphrase for %s", sshclient.ErrAuthFailed, name)
+}
+
+// askPassphrase asks the user for the passphrase of the key called name.
+func (c Credentials) askPassphrase(ctx context.Context, t domain.Target, name, note string) ([]byte, error) {
+	if c.Prompter == nil {
+		return nil, fmt.Errorf("%w: %s (no passphrase is stored)", ErrKeyFileEncrypted, name)
+	}
+	answers, err := c.Prompter.Ask(ctx, sshclient.AuthPrompt{
+		Kind: sshclient.PromptPassphrase, Label: t.Label, User: t.User, Host: t.Hostname,
+		Key: name, Questions: []sshclient.Question{{Text: "Passphrase:"}}, Note: note,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(answers) != 1 {
+		return nil, errors.New("passphrase prompt returned no answer")
+	}
+	return []byte(answers[0]), nil
 }
 
 // Password returns the identity's stored password, or
@@ -112,6 +163,9 @@ func (c Credentials) Password(ctx context.Context, t domain.Target) (string, err
 		return "", sshclient.ErrNoCredential
 	}
 	s, err := c.get(ctx, t, secrets.FieldPassword)
+	if errors.Is(err, secrets.ErrNotFound) {
+		return "", sshclient.ErrCredentialMissing // asked for instead (SEC-CRED-007)
+	}
 	if err != nil {
 		return "", err
 	}

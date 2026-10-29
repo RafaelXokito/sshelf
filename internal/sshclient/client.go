@@ -32,8 +32,10 @@ type CredentialSource interface {
 	// Signers returns the signers for the target's explicit key (stored
 	// or file), or none.
 	Signers(ctx context.Context, t domain.Target) ([]ssh.Signer, error)
-	// Password returns the identity's stored password, or ErrNoCredential
-	// when it has none. Any other error aborts the connection.
+	// Password returns the identity's stored password, ErrNoCredential
+	// when it has none, or ErrCredentialMissing when the identity has one
+	// that the store does not contain. Any other error aborts the
+	// connection.
 	Password(ctx context.Context, t domain.Target) (string, error)
 }
 
@@ -51,14 +53,24 @@ type Prompter interface {
 	// HostKey asks whether to trust an unknown host key. It runs on the
 	// connect goroutine and may block until the user answers or ctx ends.
 	HostKey(ctx context.Context, p HostKeyPrompt) (trust bool, err error)
+	// Ask shows an authentication prompt and returns one answer per
+	// question, or ErrAuthCancelled when the user cancels. It runs on the
+	// connect goroutine and may block until the user answers or ctx ends.
+	Ask(ctx context.Context, p AuthPrompt) ([]string, error)
 }
 
-// RejectUnknownHosts is a Prompter that never trusts an unknown host key.
-// It is what Connect uses when it is given no Prompter.
+// RejectUnknownHosts is a Prompter that never trusts an unknown host key
+// and cancels every authentication prompt. It is what Connect uses when it
+// is given no Prompter.
 type RejectUnknownHosts struct{}
 
 // HostKey implements Prompter.
 func (RejectUnknownHosts) HostKey(context.Context, HostKeyPrompt) (bool, error) { return false, nil }
+
+// Ask implements Prompter.
+func (RejectUnknownHosts) Ask(context.Context, AuthPrompt) ([]string, error) {
+	return nil, ErrAuthCancelled
+}
 
 // Config holds what every connection shares.
 type Config struct {
@@ -87,7 +99,7 @@ func (c Config) Connect(ctx context.Context, t domain.Target, creds CredentialSo
 		port = 22
 	}
 	addr := net.JoinHostPort(t.Hostname, strconv.Itoa(port))
-	auth := newAuthState(ctx, t, creds)
+	auth := newAuthState(ctx, t, creds, p)
 	defer auth.done()
 	cfg := clientConfig(t, auth, hostKeyCallback(ctx, known, p))
 	cfg.HostKeyAlgorithms = hostKeyAlgorithms(known, addr)

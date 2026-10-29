@@ -166,7 +166,7 @@ func (a *App) Connect(ctx context.Context, hostID domain.ID) (Session, error) {
 
 	slog.Debug("connect: start", "host", h.Label, "id", hostID)
 	ssh := sshclient.Config{KnownHostsFiles: a.cfg.KnownHostsFiles}
-	creds := Credentials{Store: a.cfg.Secrets, Home: a.cfg.Home}
+	creds := Credentials{Store: a.cfg.Secrets, Home: a.cfg.Home, Prompter: a}
 	client, err := ssh.Connect(ctx, target, creds, a)
 	if err != nil {
 		slog.Debug("connect: failed", "host", h.Label, "err", err)
