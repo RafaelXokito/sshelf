@@ -56,21 +56,27 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: Build 4 static targets (NFR-BUILD-001)
+      - name: Build 4 static targets (NFR-BUILD-001), stamped with version, commit and date (FR-CLI-001)
         env:
           CGO_ENABLED: "0"
         run: |
           set -eu
+          version=$(git describe --tags --always --dirty)
+          date=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          ldflags="-X main.version=$version -X main.commit=$GITHUB_SHA -X main.date=$date"
           for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
             os=${target%/*}; arch=${target#*/}
             bin="dist/sshelf-$os-$arch"
-            GOOS=$os GOARCH=$arch go build -trimpath -o "$bin" ./cmd/sshelf
+            GOOS=$os GOARCH=$arch go build -trimpath -ldflags "$ldflags" -o "$bin" ./cmd/sshelf
             go version -m "$bin" | grep -q 'CGO_ENABLED=0' || { echo "$bin: not CGO_ENABLED=0"; exit 1; }
             file "$bin"
             if [ "$os" = linux ]; then
               file "$bin" | grep -q 'statically linked' || { echo "$bin: not statically linked"; exit 1; }
             fi
           done
+          want="sshelf $version (commit $GITHUB_SHA, built $date)"
+          got=$(dist/sshelf-linux-amd64 --version)
+          [ "$got" = "$want" ] || { echo "--version: got '$got', want '$want'"; exit 1; }
 
   # Real OS credential-store tests (T-010, credential-storage §8). They run
   # only here, never on a developer machine, and never touch a login

@@ -256,7 +256,7 @@ Priority: MVP · Status: Implemented · Threats: T-4, T-17
 
 **SEC-MEM-003: No core dumps.**
 When the process starts, the system shall set `RLIMIT_CORE` to 0 and, on Linux, call `prctl(PR_SET_DUMPABLE, 0)`.
-Priority: MVP · Status: Draft · Threats: T-7, T-4
+Priority: MVP · Status: Implemented · Threats: T-7, T-4
 - AC1: The hardening is an unexported function in `cmd/sshelf` (main), called first thing at startup. After it
   runs, `Getrlimit(RLIMIT_CORE)` returns `{0,0}`. On Linux, `PR_GET_DUMPABLE` returns 0.
 
