@@ -8,6 +8,7 @@ require (
 	charm.land/lipgloss/v2 v2.0.6
 	github.com/google/uuid v1.6.0
 	go.uber.org/goleak v1.3.0
+	golang.org/x/crypto v0.58.0
 	golang.org/x/term v0.47.0
 )
 
