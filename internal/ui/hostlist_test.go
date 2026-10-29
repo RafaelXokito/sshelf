@@ -18,16 +18,21 @@ import (
 )
 
 // DeleteHost mimics app.App.DeleteHost in memory.
-func (f *fakeService) DeleteHost(_ context.Context, id domain.ID) ([]domain.Host, error) {
+func (f *fakeService) DeleteHost(_ context.Context, id domain.ID) (app.DeletedHost, error) {
 	f.checkGoroutine("DeleteHost")
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	i := slices.IndexFunc(f.hosts, func(h domain.Host) bool { return h.ID == id })
 	if i < 0 {
-		return nil, app.ErrHostNotFound
+		return app.DeletedHost{}, app.ErrHostNotFound
 	}
+	gone := f.hosts[i]
 	f.hosts = slices.Delete(slices.Clone(f.hosts), i, i+1)
-	return slices.Clone(f.hosts), nil
+	// A hidden identity goes with its host (FR-HOST-010).
+	f.identities = slices.DeleteFunc(slices.Clone(f.identities), func(o domain.Identity) bool {
+		return o.Hidden && o.ID == gone.IdentityID
+	})
+	return app.DeletedHost{Hosts: slices.Clone(f.hosts), Identities: slices.Clone(f.identities)}, nil
 }
 
 // withScreen returns a loaded root model showing s.

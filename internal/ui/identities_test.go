@@ -118,7 +118,7 @@ func (f *fakeService) SaveIdentity(_ context.Context, in app.IdentityInput) (app
 var identityHosts = []domain.Host{
 	{Meta: domain.Meta{ID: "h1"}, Label: "db-staging", Hostname: "10.0.1.20", IdentityID: "i1"},
 	{Meta: domain.Meta{ID: "h2"}, Label: "web-prod", Hostname: "10.0.0.10", IdentityID: "i1"},
-	{Meta: domain.Meta{ID: "h3"}, Label: "zeta", Hostname: "10.0.0.30", IdentityID: "i3"},
+	{Meta: domain.Meta{ID: "h3"}, Label: "zeta", Hostname: "10.0.0.30", IdentityID: "i2"},
 }
 
 func identityService() *fakeService {

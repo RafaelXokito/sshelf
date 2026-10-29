@@ -59,8 +59,10 @@ type ImportFailedMsg struct{ Err error }
 
 // HostDeletedMsg reports that a host was deleted; Hosts are the rest.
 type HostDeletedMsg struct {
-	Label string
-	Hosts []domain.Host
+	Label      string
+	Hosts      []domain.Host
+	Identities []domain.Identity
+	Warnings   []string // stored items of its hidden identity left behind
 }
 
 // HostDeleteFailedMsg reports that a host was not deleted.
@@ -187,9 +189,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.openForm(msg.Host), nil
 
 	case hostedit.SaveMsg:
-		svc, h := m.svc, msg.Host
+		svc, h, c := m.svc, msg.Host, msg.Creds
 		return m, func() tea.Msg {
-			saved, err := svc.SaveHost(context.Background(), h)
+			saved, err := svc.SaveHostWithCredentials(context.Background(), h, c)
 			if err != nil {
 				return HostSaveFailedMsg{Err: err}
 			}
@@ -200,9 +202,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Saved even if the form was cancelled meanwhile: show and select
 		// the host (FR-HOST-001).
 		h := msg.Saved.Host
+		if f, ok := m.screen.(hostedit.Model); ok {
+			f.Destroy()
+		}
+		if msg.Saved.Identities != nil {
+			m.identities = msg.Saved.Identities
+		}
 		m.modals = nil
 		m.screen = m.sized(hostlist.New(msg.Saved.Hosts).Select(h.ID))
-		m.status = domain.Sanitize(h.Label) + ": saved"
+		m.status = domain.Sanitize(strings.Join(append([]string{h.Label + ": saved"}, msg.Saved.Warnings...), "; "))
 		return m, nil
 
 	case HostSaveFailedMsg:
@@ -251,11 +259,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case hostlist.DeleteHostMsg:
 		svc, id, label := m.svc, msg.HostID, msg.Label
 		return m, func() tea.Msg {
-			hosts, err := svc.DeleteHost(context.Background(), id)
+			del, err := svc.DeleteHost(context.Background(), id)
 			if err != nil {
 				return HostDeleteFailedMsg{Label: label, Err: err}
 			}
-			return HostDeletedMsg{Label: label, Hosts: hosts}
+			return HostDeletedMsg{Label: label, Hosts: del.Hosts, Identities: del.Identities, Warnings: del.Warnings}
 		}
 
 	case HostDeletedMsg:
@@ -267,7 +275,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if l, ok := m.screen.(hostlist.Model); ok {
 			m.screen = l.SelectRow(row)
 		}
-		m.status = domain.Sanitize(msg.Label) + ": deleted"
+		if msg.Identities != nil {
+			m.identities = msg.Identities
+		}
+		m.status = domain.Sanitize(strings.Join(append([]string{msg.Label + ": deleted"}, msg.Warnings...), "; "))
 		return m, nil
 
 	case HostDeleteFailedMsg:

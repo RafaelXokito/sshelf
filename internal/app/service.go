@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -12,7 +11,6 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/RafaelXokito/sshelf/internal/domain"
 	"github.com/RafaelXokito/sshelf/internal/paths"
@@ -77,7 +75,11 @@ type Service interface {
 	DeleteIdentity(ctx context.Context, id domain.ID) (DeletedIdentity, error)
 	// DeleteHost removes the host with id and writes config.json. See
 	// App.DeleteHost.
-	DeleteHost(ctx context.Context, id domain.ID) ([]domain.Host, error)
+	DeleteHost(ctx context.Context, id domain.ID) (DeletedHost, error)
+	// SaveHostWithCredentials saves a host and the credentials typed in
+	// its form as its hidden identity (FR-HOST-010). See
+	// App.SaveHostWithCredentials.
+	SaveHostWithCredentials(ctx context.Context, h domain.Host, c HostCredentials) (SavedHost, error)
 	// ImportSSHConfig copies ~/.ssh/config into config.json once. See
 	// App.ImportSSHConfig.
 	ImportSSHConfig(ctx context.Context) (ImportReport, error)
@@ -87,6 +89,12 @@ type Service interface {
 type SavedHost struct {
 	Host  domain.Host   // as saved, with its ID
 	Hosts []domain.Host // every host after the save, sorted by label
+	// Identities are every identity after the save, hidden ones
+	// included, sorted by name.
+	Identities []domain.Identity
+	// Warnings name stored items that could not be deleted
+	// (SEC-CRED-004).
+	Warnings []string
 }
 
 // Config wires an App.
@@ -175,54 +183,10 @@ func sortedHosts(hosts []domain.Host) []domain.Host {
 	return hosts
 }
 
-// SaveHost implements Service (FR-HOST-001). A new host (h.ID == "") gets
-// a UUIDv7 ID (ARCH-DATA-001). For an existing host only the form's
-// fields (label, hostname, port, user and identity) are taken from h; the
-// rest of the stored host is kept. Label, hostname and user are trimmed.
-// The host is validated against the loaded hosts and identities
-// (FR-HOST-003; the error is a *domain.ValidationError), then config.json
-// is written through store.Save. The in-memory config changes only after
-// that write succeeded, so a host counts as saved only when SaveHost
-// returns nil.
+// SaveHost implements Service (FR-HOST-001): SaveHostWithCredentials
+// with no credentials typed.
 func (a *App) SaveHost(ctx context.Context, h domain.Host) (SavedHost, error) {
-	if err := ctx.Err(); err != nil {
-		return SavedHost{}, err
-	}
-	h.Label = strings.TrimSpace(h.Label)
-	h.Hostname = strings.TrimSpace(h.Hostname)
-	h.User = strings.TrimSpace(h.User)
-
-	a.mu.Lock()
-	defer a.mu.Unlock() // held across the write, so saves never interleave
-	hosts := slices.Clone(a.data.Hosts)
-	now := time.Now().UTC()
-	if h.ID == "" {
-		h.ID = domain.NewID()
-		h.CreatedAt, h.UpdatedAt = now, now
-		hosts = append(hosts, h)
-	} else {
-		i := slices.IndexFunc(hosts, func(o domain.Host) bool { return o.ID == h.ID })
-		if i < 0 {
-			return SavedHost{}, ErrHostNotFound
-		}
-		stored := hosts[i]
-		stored.Label, stored.Hostname, stored.Port, stored.User, stored.IdentityID = h.Label, h.Hostname, h.Port, h.User, h.IdentityID
-		stored.UpdatedAt = now
-		hosts[i], h = stored, stored
-	}
-	data := a.data
-	data.Hosts = hosts
-	if err := domain.ValidateHost(h, data); err != nil {
-		return SavedHost{}, err
-	}
-	file := paths.ConfigFile(a.cfg.Dir)
-	if err := store.Save(file, &store.Snapshot{Data: data}); err != nil {
-		slog.Debug("save host: failed", "host", h.Label, "err", err)
-		return SavedHost{}, fmt.Errorf("could not save %s: %w", filepath.Base(file), err)
-	}
-	a.data = data
-	slog.Debug("save host: saved", "host", h.Label, "id", h.ID)
-	return SavedHost{Host: h, Hosts: sortedHosts(hosts)}, nil
+	return a.SaveHostWithCredentials(ctx, h, HostCredentials{})
 }
 
 // modesNotice is the one-line notice for repaired modes, e.g.

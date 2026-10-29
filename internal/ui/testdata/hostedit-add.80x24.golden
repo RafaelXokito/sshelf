@@ -2,15 +2,15 @@ sshelf
 
 Add host
 
-  Label     api
-  Hostname  10.0.0.40
-  Port      22
-  Username  root
-> Identity  ‹ (none) ›
-
-
-
-
+  Label       api
+  Hostname    10.0.0.40
+  Port        22
+  Username    root
+> Identity    ‹ (none) ›
+  Password    (not set)
+  Key file    optional
+  Stored key  (not set)
+  Passphrase  (not set)
 
 
 

@@ -125,7 +125,7 @@ When the user submits the host form, the system shall save the host (new or edit
 ### FR-HOST-002 · Delete a host
 When the user confirms deletion of a host, the system shall remove the host.
 
-- **Priority:** MVP · **Status:** Draft
+- **Priority:** MVP · **Status:** Implemented
 - **Acceptance:**
   - The confirmation names the host and defaults to "No".
   - A linked shared identity is not deleted. A hidden per-host identity (FR-HOST-010) is deleted with its stored secrets.
@@ -189,7 +189,7 @@ While the details pane is open, the system shall show the selected host's effect
 ### FR-HOST-010 · Credentials in the host form
 When the user enters a username plus a password or a key (stored or file path) directly in the host form instead of choosing an identity, the system shall save them as a hidden identity linked only to that host.
 
-- **Priority:** MVP · **Status:** Draft · **Source:** ARCH `Identity.Hidden`
+- **Priority:** MVP · **Status:** Implemented · **Source:** ARCH `Identity.Hidden`
 - **Acceptance:**
   - A first-time user adds a host with a username and password and connects without opening the identities view.
   - The hidden identity is not listed in the identities view. Its secrets are stored as in FR-CRED-001.
