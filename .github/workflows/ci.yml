@@ -12,8 +12,8 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       - name: gofmt
@@ -26,7 +26,7 @@ jobs:
           go vet -tags devcheck ./...
           go vet -tags integration_keyring ./...
       - name: golangci-lint (NFR-QUAL-002)
-        uses: golangci/golangci-lint-action@v8
+        uses: golangci/golangci-lint-action@v9
         with:
           version: latest
           args: --build-tags=devcheck,integration_keyring
@@ -40,8 +40,8 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       - name: go test -race (NFR-PORT-001, NFR-REL-001)
@@ -60,8 +60,8 @@ jobs:
   cross-compile:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       - name: Build 4 static targets (NFR-BUILD-001), stamped with version, commit and date (FR-CLI-001)
@@ -114,8 +114,8 @@ jobs:
     env:
       SSHELF_KEYRING_TESTS: "1"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       - name: Throwaway keychain as the only keychain in the search list
@@ -139,8 +139,8 @@ jobs:
     env:
       SSHELF_KEYRING_TESTS: "1"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       - name: Install gnome-keyring and dbus
@@ -164,7 +164,7 @@ jobs:
       SSHELF_KEYRING_TESTS: "1"
       SSHELF_KEYRING_NO_BUS: "1"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Check there is no session bus
         run: |
           if [ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then echo "session bus present"; exit 1; fi
