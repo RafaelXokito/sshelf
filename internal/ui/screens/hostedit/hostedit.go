@@ -160,6 +160,17 @@ func New(h domain.Host, hosts []domain.Host, identities []domain.Identity) Model
 	return m
 }
 
+// WithoutStore returns the form with its secret fields disabled,
+// explaining that store is not available (ARCH-SEC-006, D-101). A key
+// file and the username still save.
+func (m Model) WithoutStore(store string) Model {
+	reason := "disabled: no " + store
+	m.password.Disable(reason)
+	m.key.Disable(reason)
+	m.passphrase.Disable(reason)
+	return m
+}
+
 // Cancel implements components.FormScreen: Ctrl+C closes the form without
 // asking (FR-NAV-003).
 func (m Model) Cancel() tea.Msg { return CancelledMsg{} }
@@ -266,7 +277,7 @@ func (m Model) SaveFailed(err error) Model {
 		m.form.FocusFirstError()
 		return m
 	}
-	m.err = domain.Sanitize(err.Error())
+	m.err = domain.Sanitize(components.ErrorText(err))
 	return m
 }
 

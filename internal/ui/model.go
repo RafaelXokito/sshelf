@@ -110,6 +110,7 @@ type Model struct {
 	identities []domain.Identity // for the host form's picker
 	prev       components.Screen // the screen to return to while a form is open
 	idView     identities.Model  // the identities view to return to from its form
+	noStore    *app.StoreError   // set when no credential store is available (D-101)
 
 	width, height int // terminal size; 0 until the first tea.WindowSizeMsg
 
@@ -126,10 +127,10 @@ func New(svc app.Service) Model {
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd {
 	svc := m.svc
-	return func() tea.Msg {
+	return tea.Batch(func() tea.Msg {
 		l, err := svc.Load(context.Background())
 		return LoadedMsg{Hosts: l.Hosts, Identities: l.Identities, Notices: l.Notices, Err: err}
-	}
+	}, probeStore(svc))
 }
 
 // Update implements tea.Model.
@@ -415,7 +416,11 @@ func (m Model) openForm(h domain.Host) Model {
 	}
 	m.prev = m.screen
 	m.status = ""
-	m.screen = m.sized(hostedit.New(h, hosts, m.identities))
+	f := hostedit.New(h, hosts, m.identities)
+	if m.noStore != nil {
+		f = f.WithoutStore(m.noStore.Store)
+	}
+	m.screen = m.sized(f)
 	return m
 }
 
@@ -522,6 +527,7 @@ func endedStatus(label string, err error) string {
 // is truncated to the width with "…" (NFR-UX-002).
 func (m Model) View() tea.View {
 	body, foot := m.screenLines()
+	body = m.withBanner(body)
 	if n := len(m.modals); n > 0 {
 		var ml []string
 		for i, md := range m.modals {

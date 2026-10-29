@@ -22,7 +22,20 @@ type SecretField struct {
 	status   string
 	canClear bool // something is stored
 	clear    bool
+	disabled string // why the field takes no input; "" when enabled
 }
+
+// Disable makes the field read-only and show reason instead of a status,
+// for when no credential store is available (ARCH-SEC-006). Anything
+// typed is zeroed.
+func (f *SecretField) Disable(reason string) {
+	f.in.Reset()
+	f.clear = false
+	f.disabled = reason
+}
+
+// Disabled reports whether the field is read-only.
+func (f *SecretField) Disabled() bool { return f.disabled != "" }
 
 // NewSecretField returns an empty field showing status, such as "set",
 // "not set" or "not set on this device". Any status but "not set" can be
@@ -94,6 +107,9 @@ func (f *SecretField) Blur() { f.in.Blur() }
 // Update implements FormField. ClearSecret toggles clearing; typing a new
 // value undoes it.
 func (f *SecretField) Update(msg tea.Msg) tea.Cmd {
+	if f.disabled != "" {
+		return nil
+	}
 	if k, ok := msg.(tea.KeyPressMsg); ok && key.Matches(k, keys.ClearSecret) {
 		if f.in.Focused() && f.canClear {
 			f.in.Reset()
@@ -111,4 +127,13 @@ func (f *SecretField) Update(msg tea.Msg) tea.Cmd {
 }
 
 // View implements FormField: the status while empty, else Mask.
-func (f *SecretField) View() string { return f.in.View() }
+func (f *SecretField) View() string {
+	if f.disabled != "" {
+		v := placeholderStyle.Render("(" + f.disabled + ")")
+		if f.in.Focused() {
+			return "_" + v
+		}
+		return v
+	}
+	return f.in.View()
+}

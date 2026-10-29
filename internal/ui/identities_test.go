@@ -26,6 +26,7 @@ type fakeIdentities struct {
 	idSecrets map[string][]byte   // "<id>/<field>" → value
 
 	idDeleteWarnings []string // returned by DeleteIdentity
+	storeErr         error    // returned by SecretsAvailable
 }
 
 func (f *fakeService) Identities(context.Context) ([]app.IdentityInfo, error) {

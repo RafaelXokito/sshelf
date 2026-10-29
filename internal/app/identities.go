@@ -385,6 +385,27 @@ func (a *App) saveConfig(data domain.Data) error {
 	return nil
 }
 
+// SecretsAvailable is the startup probe of the credential store
+// (credential-storage §7): nil when it works, or a *StoreError wrapping
+// secrets.ErrUnavailable when there is none (D-101), in which case the UI
+// shows a banner and disables the secret fields (ARCH-SEC-006). Other
+// probe failures, such as a locked keyring, are not reported: saving or
+// connecting will ask the store again.
+func (a *App) SecretsAvailable(ctx context.Context) error {
+	if a.cfg.Secrets == nil {
+		return &StoreError{Store: StoreName(), Err: secrets.ErrUnavailable}
+	}
+	err := a.cfg.Secrets.Available(ctx)
+	if errors.Is(err, secrets.ErrUnavailable) {
+		slog.Debug("credential store: not available", "err", err)
+		return &StoreError{Store: StoreName(), Err: err}
+	}
+	if err != nil {
+		slog.Debug("credential store: probe failed", "err", err)
+	}
+	return nil
+}
+
 // SecretsService is the credential-store service sshelf's items are
 // stored under (SEC-CRED-002); warnings name it.
 const SecretsService = "sshelf"

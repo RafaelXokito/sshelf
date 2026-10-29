@@ -96,7 +96,7 @@ When the user saves a password, private key or key passphrase, the system shall 
 ### FR-CRED-002 · Credential store unavailable
 If the OS credential store is unavailable, then the system shall refuse to save passwords, keys and passphrases, explain why and how to fix it, and keep working for hosts that need no stored secret.
 
-- **Priority:** MVP · **Status:** Draft · **Source:** D-101, SEC-CRED-005
+- **Priority:** MVP · **Status:** Implemented · **Source:** D-101, SEC-CRED-005
 - **Acceptance:**
   - On Linux without a running Secret Service, saving a password shows a message naming the missing service (for example "No Secret Service found: install or start GNOME Keyring or KWallet"), and nothing is written.
   - Hosts with a key file, or authentication through a prompt, still connect.

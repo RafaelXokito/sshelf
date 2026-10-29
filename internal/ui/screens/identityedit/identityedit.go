@@ -63,6 +63,7 @@ type Model struct {
 	passphrase *components.SecretField
 	key        *components.SecretField
 	importKey  bool // store the key file in the credential store on save
+	noStore    bool // no credential store: secrets cannot be saved
 
 	saving bool
 	err    string // why the last save failed, when not a field error
@@ -108,6 +109,19 @@ func New(info app.IdentityInfo, identities []domain.Identity) Model {
 	return m
 }
 
+// WithoutStore returns the form with its secret fields and the "store key
+// file" action disabled, explaining that store is not available
+// (ARCH-SEC-006, D-101). Name, username and key file still save.
+func (m Model) WithoutStore(store string) Model {
+	reason := "disabled: no " + store
+	m.password.Disable(reason)
+	m.key.Disable(reason)
+	m.passphrase.Disable(reason)
+	m.noStore = true
+	m.importKey = false
+	return m
+}
+
 // Cancel implements components.FormScreen: Ctrl+C closes the form without
 // asking (FR-NAV-003).
 func (m Model) Cancel() tea.Msg { return CancelledMsg{} }
@@ -128,7 +142,7 @@ func (m Model) Update(msg tea.Msg) (components.Screen, tea.Cmd) {
 		return m, nil
 	}
 	if k, ok := msg.(tea.KeyPressMsg); ok && key.Matches(k, keys.StoreKeyFile) {
-		if m.form.Focused() == rowKeyPath {
+		if m.form.Focused() == rowKeyPath && !m.noStore {
 			m.importKey = !m.importKey
 		}
 		return m, nil
@@ -213,7 +227,7 @@ func (m Model) SaveFailed(err error) Model {
 		m.form.FocusFirstError()
 		return m
 	}
-	m.err = domain.Sanitize(err.Error())
+	m.err = domain.Sanitize(components.ErrorText(err))
 	return m
 }
 

@@ -129,17 +129,21 @@ Priority: MVP · Status: Implemented · Threats: T-9
 **SEC-CRED-005: Store unavailable.**
 If the credential store is unavailable at startup or on use, then the system shall keep hosts that use key files
 or the agent working, disable the secret fields in forms with an explanation, and never store a secret elsewhere.
-Priority: MVP · Status: Draft · Threats: T-6
+Priority: MVP · Status: Implemented · Threats: T-6
 - AC1: With the fake returning `secrets.ErrUnavailable`, the host list loads, a key-file host connects, the
   password field is disabled with the D-101 message, and no file contains the canary.
 
 **SEC-CRED-006: Access denied or cancelled.**
 If the store denies access or the user cancels an OS unlock prompt, then the system shall abort only the current
 connect or save with a message that names the store, without retrying automatically and without caching the
-failure.
+failure. A store that is not available at all (`ErrUnavailable`) is not a denial: per D-101 a connect does not abort
+but uses the key file and asks for a needed password or passphrase for that connection only, without saving it, and
+a save is refused with the D-101 explanation (SEC-CRED-005).
 Priority: MVP · Status: Implemented · Threats: T-6
 - AC1: Fake returns `ErrDenied` on `Get`: connect fails with the "Access to Keychain was denied" message, makes no
   second `Get` call, and the next connect calls `Get` again.
+- AC2: Fake returns `ErrUnavailable` on every call: a host with a stored password opens the password prompt (noting
+  that the store is not available), connects with the typed value, and nothing is saved.
 
 **SEC-CRED-007: Missing item.**
 If an identity references a secret that the store does not contain (new machine, synced config, manual

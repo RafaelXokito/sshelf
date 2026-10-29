@@ -80,6 +80,9 @@ type Service interface {
 	// its form as its hidden identity (FR-HOST-010). See
 	// App.SaveHostWithCredentials.
 	SaveHostWithCredentials(ctx context.Context, h domain.Host, c HostCredentials) (SavedHost, error)
+	// SecretsAvailable probes the credential store. See
+	// App.SecretsAvailable.
+	SecretsAvailable(ctx context.Context) error
 	// ImportSSHConfig copies ~/.ssh/config into config.json once. See
 	// App.ImportSSHConfig.
 	ImportSSHConfig(ctx context.Context) (ImportReport, error)

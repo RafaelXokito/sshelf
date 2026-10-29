@@ -2,13 +2,17 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/RafaelXokito/sshelf/internal/app"
 	"github.com/RafaelXokito/sshelf/internal/domain"
 	"github.com/RafaelXokito/sshelf/internal/ui/components"
+	"github.com/RafaelXokito/sshelf/internal/ui/screens/hostedit"
 	"github.com/RafaelXokito/sshelf/internal/ui/screens/hostlist"
 	"github.com/RafaelXokito/sshelf/internal/ui/screens/identities"
 	"github.com/RafaelXokito/sshelf/internal/ui/screens/identityedit"
@@ -32,11 +36,53 @@ type IdentityDeletedMsg struct {
 	Deleted app.DeletedIdentity
 }
 
+// StoreStatusMsg carries the result of the startup probe of the
+// credential store (credential-storage §7): nil, or a *app.StoreError when
+// there is none.
+type StoreStatusMsg struct{ Err error }
+
+// probeStore is the startup probe, run off the Update goroutine
+// (ARCH-UI-002).
+func probeStore(svc app.Service) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), probeTimeout)
+		defer cancel()
+		return StoreStatusMsg{Err: svc.SecretsAvailable(ctx)}
+	}
+}
+
+// probeTimeout bounds the startup probe.
+const probeTimeout = 10 * time.Second
+
+// withBanner puts the one-line "no credential store" banner (D-101,
+// ARCH-SEC-006) above the host list, the identities and the forms.
+func (m Model) withBanner(body []string) []string {
+	if m.noStore == nil {
+		return body
+	}
+	switch m.screen.(type) {
+	case hostlist.Model, identities.Model, identityedit.Model, hostedit.Model:
+	default:
+		return body
+	}
+	banner := bannerStyle.Render("! " + m.noStore.Explain())
+	return append([]string{banner, ""}, body...)
+}
+
+var bannerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Bold(true)
+
 // updateIdentities routes the identities view and the identity form
 // (design §9.1: HostList → Identities → IdentityEdit). ok is false for
 // messages it does not handle.
 func (m Model) updateIdentities(msg tea.Msg) (Model, tea.Cmd, bool) {
 	switch msg := msg.(type) {
+	case StoreStatusMsg:
+		m.noStore = nil
+		if se, ok := errors.AsType[*app.StoreError](msg.Err); ok {
+			m.noStore = se
+		}
+		return m, nil, true
+
 	case hostlist.IdentitiesMsg:
 		// i on the host list (FR-NAV-003).
 		m, cmd := m.openIdentities()
@@ -159,6 +205,10 @@ func (m Model) openIdentityForm(info app.IdentityInfo) Model {
 	}
 	m.idView = v
 	m.status = ""
-	m.screen = m.sized(identityedit.New(info, m.identities))
+	f := identityedit.New(info, m.identities)
+	if m.noStore != nil {
+		f = f.WithoutStore(m.noStore.Store)
+	}
+	m.screen = m.sized(f)
 	return m
 }
