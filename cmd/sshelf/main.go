@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 
 	tea "charm.land/bubbletea/v2"
@@ -69,6 +70,14 @@ func run(args []string) int {
 		fmt.Fprintln(os.Stderr, "sshelf:", err)
 		return 1
 	}
+	closeLog, err := setupLogging(os.Getenv, dirs.State)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "sshelf: debug log:", err)
+		return 1
+	}
+	defer func() { _ = closeLog() }()
+	slog.Info("sshelf starting", "version", versionString())
+
 	home, _ := os.UserHomeDir() // "" skips ~/.ssh/known_hosts
 	svc := app.New(app.Config{
 		Dir:             dirs.Config,

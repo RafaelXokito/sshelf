@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
@@ -161,9 +162,11 @@ func (a *App) Connect(ctx context.Context, hostID domain.ID) (Session, error) {
 	target := domain.Resolve(h, a.data.Groups, a.data.Identities, a.data.Settings)
 	a.mu.Unlock()
 
+	slog.Debug("connect: start", "host", h.Label, "id", hostID)
 	ssh := sshclient.Config{KnownHostsFiles: a.cfg.KnownHostsFiles}
 	client, err := ssh.Connect(ctx, target, a.cfg.Creds, a)
 	if err != nil {
+		slog.Debug("connect: failed", "host", h.Label, "err", err)
 		return nil, err
 	}
 	s, err := session.New(client, a.cfg.Terminal, session.Options{
@@ -172,7 +175,9 @@ func (a *App) Connect(ctx context.Context, hostID domain.ID) (Session, error) {
 		Command: h.Options.RemoteCommand,
 	})
 	if err != nil {
+		slog.Debug("connect: session failed", "host", h.Label, "err", err)
 		return nil, err // never a typed nil inside the interface
 	}
+	slog.Debug("connect: session open", "host", h.Label)
 	return s, nil
 }

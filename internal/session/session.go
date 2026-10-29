@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"maps"
 	"os"
 	"slices"
@@ -270,9 +271,10 @@ func (s *Session) Run() (err error) {
 
 	select {
 	case <-failed:
-		return ErrInternal
+		result = ErrInternal
 	default:
 	}
+	slog.Debug("session: ended", "result", result)
 	return result
 }
 
