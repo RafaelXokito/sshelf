@@ -1,0 +1,60 @@
+{
+  "version": 1,
+  "settings": {
+    "theme": "auto"
+  },
+  "groups": [
+    {
+      "id": "0192a000-0000-7000-8000-0000000000a1",
+      "name": "prod",
+      "parent_id": null
+    },
+    {
+      "id": "0192a000-0000-7000-8000-0000000000a2",
+      "name": "db",
+      "parent_id": "0192a000-0000-7000-8000-0000000000a1"
+    }
+  ],
+  "identities": [
+    {
+      "id": "0192a000-0000-7000-8000-0000000000b1",
+      "name": "ops",
+      "username": "deploy",
+      "key_path": "~/.ssh/id_ed25519",
+      "has_password": true,
+      "has_private_key": false,
+      "has_key_passphrase": true,
+      "use_agent": false
+    }
+  ],
+  "hosts": [
+    {
+      "id": "0192a000-0000-7000-8000-0000000000c1",
+      "label": "db 1",
+      "hostname": "db1.example.com",
+      "port": 22,
+      "user": "",
+      "identity_id": "0192a000-0000-7000-8000-0000000000b1",
+      "group_id": "0192a000-0000-7000-8000-0000000000a2",
+      "tags": [
+        "pg"
+      ],
+      "jump_host_ids": [],
+      "forward_agent": false
+    },
+    {
+      "id": "0192a000-0000-7000-8000-0000000000c2",
+      "label": "bastion",
+      "hostname": "bastion.example.com",
+      "port": 2222,
+      "user": "jump",
+      "identity_id": "",
+      "group_id": "",
+      "tags": [],
+      "jump_host_ids": [
+        "0192a000-0000-7000-8000-0000000000c1"
+      ],
+      "forward_agent": true
+    }
+  ]
+}

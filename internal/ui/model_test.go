@@ -49,6 +49,7 @@ func (s *stubSession) Close() error        { s.closed.Store(true); return nil }
 type fakeService struct {
 	hosts      []domain.Host
 	notices    []string
+	loadErr    error
 	connectErr error
 	session    *stubSession
 	updateGID  atomic.Uint64
@@ -65,6 +66,9 @@ func (f *fakeService) checkGoroutine(method string) {
 
 func (f *fakeService) Load(context.Context) (app.Loaded, error) {
 	f.checkGoroutine("Load")
+	if f.loadErr != nil {
+		return app.Loaded{}, f.loadErr
+	}
 	return app.Loaded{Hosts: f.hosts, Notices: f.notices}, nil
 }
 

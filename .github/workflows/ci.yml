@@ -48,6 +48,9 @@ jobs:
         run: go test -race -coverprofile=coverage.out ./...
       - name: Coverage report (NFR-QUAL-003, not gated yet)
         run: go tool cover -func=coverage.out | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Fuzz config.json loading for 30 s (T-006)
+        if: matrix.os == 'ubuntu-latest'
+        run: go test -run '^$' -fuzz '^FuzzLoadConfig$' -fuzztime 30s ./internal/store
 
   cross-compile:
     runs-on: ubuntu-latest

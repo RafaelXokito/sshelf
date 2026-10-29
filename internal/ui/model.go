@@ -5,6 +5,7 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"charm.land/bubbles/v2/key"
@@ -17,6 +18,7 @@ import (
 	"github.com/RafaelXokito/sshelf/internal/ui/keys"
 	"github.com/RafaelXokito/sshelf/internal/ui/modals/connecting"
 	"github.com/RafaelXokito/sshelf/internal/ui/screens/hostlist"
+	"github.com/RafaelXokito/sshelf/internal/ui/screens/loaderror"
 )
 
 var (
@@ -110,11 +112,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case LoadedMsg:
-		m.screen = hostlist.New(msg.Hosts)
 		m.status = strings.Join(msg.Notices, "; ")
 		if msg.Err != nil {
-			m.status = "config: " + msg.Err.Error()
+			le, ok := errors.AsType[*app.LoadError](msg.Err)
+			if !ok {
+				le = &app.LoadError{Path: "config.json", Problem: msg.Err.Error(), Err: msg.Err}
+			}
+			m.screen = loaderror.New(le)
+			return m, nil
 		}
+		m.screen = hostlist.New(msg.Hosts)
 		return m, nil
 
 	case hostlist.ConnectRequestMsg:
@@ -232,8 +239,10 @@ func (m Model) View() tea.View {
 		b.WriteString(statusStyle.Render(m.status))
 		b.WriteString("\n")
 	}
-	b.WriteString(dimStyle.Render("↑/↓ move • enter connect • q quit"))
-	b.WriteString("\n")
+	if _, ok := m.screen.(hostlist.Model); ok {
+		b.WriteString(dimStyle.Render("↑/↓ move • enter connect • q quit"))
+		b.WriteString("\n")
+	}
 
 	v := tea.NewView(b.String())
 	v.AltScreen = true

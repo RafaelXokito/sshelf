@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -89,5 +90,33 @@ func TestSEC_FILE_002_NoticeShownOnce(t *testing.T) {
 	l, err = New(Config{Dir: dir, Terminal: stillTerm{}}).Load(context.Background())
 	if err != nil || len(l.Notices) != 0 {
 		t.Fatalf("second start: notices = %q, %v", l.Notices, err)
+	}
+}
+
+func TestFR_CFG_003_BrokenConfigUntouched(t *testing.T) {
+	dir := t.TempDir()
+	const broken = "{\n  \"version\": 1,\n  \"hosts\": [}\n}\n"
+	if err := os.WriteFile(paths.ConfigFile(dir), []byte(broken), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	a := New(Config{Dir: dir, Terminal: stillTerm{}})
+	_, err := a.Load(context.Background())
+	le, ok := errors.AsType[*LoadError](err)
+	if !ok || !errors.Is(err, store.ErrCorrupt) || le.Path != paths.ConfigFile(dir) || le.Line != 3 {
+		t.Fatalf("Load err = %#v", err)
+	}
+	if b, _ := os.ReadFile(paths.ConfigFile(dir)); string(b) != broken { //nolint:gosec // temp file
+		t.Fatal("config.json changed")
+	}
+}
+
+func TestFR_CFG_003_UnknownSettingNotice(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(paths.ConfigFile(dir), []byte(`{"version": 1, "settings": {"fancy": true}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	l, err := New(Config{Dir: dir, Terminal: stillTerm{}}).Load(context.Background())
+	if err != nil || len(l.Notices) == 0 || !strings.Contains(l.Notices[len(l.Notices)-1], `"fancy"`) {
+		t.Fatalf("Load = %+v, %v", l, err)
 	}
 }

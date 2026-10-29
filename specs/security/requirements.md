@@ -332,7 +332,7 @@ Priority: MVP · Status: Implemented · Threats: T-5
 When saving `config.json` or `known_hosts`, the system shall write a temp file in the same directory
 (`O_CREATE|O_EXCL`, 0600), `Sync` it, `rename` it over the target (resolving symlinks first), and `fsync` the
 directory.
-Priority: MVP · Status: Draft · Threats: T-18
+Priority: MVP · Status: Implemented · Threats: T-18
 - AC1: Fault injection at each step (through an `fs` fake) leaves the old or the new file, never a partial file.
 - AC2: A symlinked config stays a symlink, and the target is updated.
 

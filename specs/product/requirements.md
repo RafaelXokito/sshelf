@@ -941,7 +941,7 @@ The system shall keep its hosts, identities (without secrets), settings and `kno
 ### FR-CFG-002 · Durable writes
 When the user confirms a change, the system shall write it to disk before reporting it as saved, so that a crash leaves either the old or the new file contents.
 
-- **Priority:** MVP · **Status:** Draft · **Source:** ARCH-DATA-005, SEC-FILE-003 (atomic write)
+- **Priority:** MVP · **Status:** Implemented · **Source:** ARCH-DATA-005, SEC-FILE-003 (atomic write)
 - **Acceptance:**
   - After "Saved" is shown, a SIGKILL and restart still shows the change.
   - Killing the process during a write never leaves a truncated file.
@@ -949,7 +949,7 @@ When the user confirms a change, the system shall write it to disk before report
 ### FR-CFG-003 · Broken config file
 If a config file cannot be parsed, then the system shall show the file, line and problem, and shall not overwrite that file until the user fixes it.
 
-- **Priority:** MVP · **Status:** Draft
+- **Priority:** MVP · **Status:** Implemented
 - **Acceptance:**
   - A syntax error in `config.json` shows an error screen with the path and line number, and `q` quits. The file is byte-for-byte unchanged afterwards.
   - An unknown setting key produces a warning, and sshelf starts with the default for that setting.

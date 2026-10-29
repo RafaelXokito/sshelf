@@ -22,6 +22,11 @@ import (
 // ErrHostNotFound means the host ID is not in the loaded config.
 var ErrHostNotFound = errors.New("host not found")
 
+// LoadError is returned by Load when config.json cannot be read or parsed.
+// The file is never written afterwards (FR-CFG-003). Err is
+// store.ErrCorrupt, store.ErrNewerVersion or the underlying I/O error.
+type LoadError = store.LoadError
+
 // Session is the handle of an attached session. *session.Session satisfies
 // it, and its method set includes tea.ExecCommand's, so the UI can pass it
 // to tea.Exec. Close releases a session that will never run.
@@ -46,7 +51,7 @@ type Loaded struct {
 // calls it only from tea.Cmd goroutines, never from Update (ARCH-UI-002).
 type Service interface {
 	// Load creates the config directory if needed, repairs loose file
-	// modes, and reads config.json.
+	// modes, and reads config.json. Every failure is a *LoadError.
 	Load(ctx context.Context) (Loaded, error)
 	// Connect dials, verifies and authenticates the host, then opens an
 	// interactive session ready for tea.Exec. Nothing is handed to the
@@ -100,21 +105,29 @@ func (a *App) Load(ctx context.Context) (Loaded, error) {
 	if err := ctx.Err(); err != nil {
 		return Loaded{}, err
 	}
-	if _, err := paths.EnsureDir(a.cfg.Dir); err != nil {
+	fail := func(path string, err error) (Loaded, error) {
+		var le *LoadError
+		if !errors.As(err, &le) {
+			err = &LoadError{Path: path, Problem: err.Error(), Err: err}
+		}
 		return Loaded{}, err
+	}
+	if _, err := paths.EnsureDir(a.cfg.Dir); err != nil {
+		return fail(a.cfg.Dir, err)
 	}
 	var notices []string
 	fixed, err := paths.CheckModes(a.cfg.Dir)
 	if err != nil {
-		return Loaded{}, err
+		return fail(a.cfg.Dir, err)
 	}
 	if len(fixed) > 0 {
-		notices = append(notices, modesNotice(fixed))
+		notices = append(notices, modesNotice(a.cfg.Dir, fixed))
 	}
 	snap, err := store.Load(paths.ConfigFile(a.cfg.Dir))
 	if err != nil {
-		return Loaded{Notices: notices}, err
+		return fail(paths.ConfigFile(a.cfg.Dir), err)
 	}
+	notices = append(notices, snap.Warnings...)
 	a.mu.Lock()
 	a.data = snap.Data
 	a.mu.Unlock()
@@ -127,10 +140,13 @@ func (a *App) Load(ctx context.Context) (Loaded, error) {
 
 // modesNotice is the one-line notice for repaired modes, e.g.
 // "permissions of config.json, known_hosts were too open; set to 0700/0600".
-func modesNotice(fixed []string) string {
+func modesNotice(dir string, fixed []string) string {
 	names := make([]string, len(fixed))
 	for i, f := range fixed {
 		names[i] = filepath.Base(f)
+		if f == dir {
+			names[i] = "the config directory"
+		}
 	}
 	return "permissions of " + strings.Join(names, ", ") + " were too open; set to 0700/0600"
 }
