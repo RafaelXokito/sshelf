@@ -1,14 +1,18 @@
-// Package ui implements the sshelf terminal interface using Bubble Tea.
+// Package ui is the root Bubble Tea model. For now it shows a plain,
+// selectable list of hosts; the router and modal stack come later.
 package ui
 
 import (
 	"fmt"
+	"net"
+	"strconv"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
-	"github.com/RafaelXokito/sshelf/internal/hosts"
+	"github.com/RafaelXokito/sshelf/internal/domain"
 )
 
 var (
@@ -17,28 +21,37 @@ var (
 	dimStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
 )
 
-// Model is the root Bubble Tea model: a selectable list of hosts.
+var (
+	keyUp   = key.NewBinding(key.WithKeys("up", "k"))
+	keyDown = key.NewBinding(key.WithKeys("down", "j"))
+	keyQuit = key.NewBinding(key.WithKeys("q", "ctrl+c"))
+)
+
+// Model is the root Bubble Tea model.
 type Model struct {
-	hosts  []hosts.Host
+	hosts  []domain.Host
 	cursor int
 }
 
-func New(h []hosts.Host) Model {
-	return Model{hosts: h}
+// New returns a model listing hosts.
+func New(hosts []domain.Host) Model {
+	return Model{hosts: hosts}
 }
 
+// Init implements tea.Model.
 func (m Model) Init() tea.Cmd { return nil }
 
+// Update implements tea.Model.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if key, ok := msg.(tea.KeyMsg); ok {
-		switch key.String() {
-		case "q", "ctrl+c":
+	if k, ok := msg.(tea.KeyPressMsg); ok {
+		switch {
+		case key.Matches(k, keyQuit):
 			return m, tea.Quit
-		case "up", "k":
+		case key.Matches(k, keyUp):
 			if m.cursor > 0 {
 				m.cursor--
 			}
-		case "down", "j":
+		case key.Matches(k, keyDown):
 			if m.cursor < len(m.hosts)-1 {
 				m.cursor++
 			}
@@ -47,7 +60,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) View() string {
+// View implements tea.Model.
+func (m Model) View() tea.View {
 	var b strings.Builder
 	b.WriteString(titleStyle.Render("sshelf"))
 	b.WriteString("\n")
@@ -57,7 +71,7 @@ func (m Model) View() string {
 		b.WriteString("\n")
 	}
 	for i, h := range m.hosts {
-		line := fmt.Sprintf("%-20s %s@%s", h.Label, h.User, h.Address())
+		line := fmt.Sprintf("%-20s %s@%s", h.Label, h.User, address(h))
 		if i == m.cursor {
 			b.WriteString(selectedStyle.Render("> " + line))
 		} else {
@@ -69,5 +83,18 @@ func (m Model) View() string {
 	b.WriteString("\n")
 	b.WriteString(dimStyle.Render("↑/↓ move • q quit"))
 	b.WriteString("\n")
-	return b.String()
+
+	v := tea.NewView(b.String())
+	v.AltScreen = true
+	return v
+}
+
+// address returns host:port with port 22 when unset. domain.Resolve replaces
+// it once groups and settings exist.
+func address(h domain.Host) string {
+	port := h.Port
+	if port == 0 {
+		port = 22
+	}
+	return net.JoinHostPort(h.Hostname, strconv.Itoa(port))
 }

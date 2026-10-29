@@ -308,7 +308,7 @@ Priority: MVP · Status: Draft · Threats: T-17, AC-8
 
 **SEC-CLIP-005: Never copy secrets.**
 The system shall never place a secret on the clipboard, and copied command lines shall contain no secret.
-Priority: MVP · Status: Draft · Threats: T-17
+Priority: MVP · Status: Implemented · Threats: T-17
 - AC1: The import-rule test (`internal/archtest`) finds no clipboard package imported by any sshelf package, so
   the MVP has no path that can copy a secret.
 - Note: when a copy feature arrives (FR-HOST-008, v1), its clipboard writer takes `string` only and gets a canary
