@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -54,8 +55,40 @@ type fakeService struct {
 	session    *stubSession
 	updateGID  atomic.Uint64
 
+	identities []domain.Identity
+	saveErr    error // returned by SaveHost instead of saving
+
 	mu        sync.Mutex
 	connected []domain.ID
+	saves     []domain.Host // hosts passed to SaveHost
+}
+
+// SaveHost mimics app.App.SaveHost in memory.
+func (f *fakeService) SaveHost(_ context.Context, h domain.Host) (app.SavedHost, error) {
+	f.checkGoroutine("SaveHost")
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.saves = append(f.saves, h)
+	if f.saveErr != nil {
+		return app.SavedHost{}, f.saveErr
+	}
+	hosts := slices.Clone(f.hosts)
+	if h.ID == "" {
+		h.ID = domain.NewID()
+		hosts = append(hosts, h)
+	} else {
+		i := slices.IndexFunc(hosts, func(o domain.Host) bool { return o.ID == h.ID })
+		if i < 0 {
+			return app.SavedHost{}, app.ErrHostNotFound
+		}
+		hosts[i] = h
+	}
+	if err := domain.ValidateHost(h, domain.Data{Hosts: hosts, Identities: f.identities}); err != nil {
+		return app.SavedHost{}, err
+	}
+	slices.SortFunc(hosts, func(a, b domain.Host) int { return strings.Compare(strings.ToLower(a.Label), strings.ToLower(b.Label)) })
+	f.hosts = hosts
+	return app.SavedHost{Host: h, Hosts: slices.Clone(hosts)}, nil
 }
 
 func (f *fakeService) checkGoroutine(method string) {
@@ -69,7 +102,7 @@ func (f *fakeService) Load(context.Context) (app.Loaded, error) {
 	if f.loadErr != nil {
 		return app.Loaded{}, f.loadErr
 	}
-	return app.Loaded{Hosts: f.hosts, Notices: f.notices}, nil
+	return app.Loaded{Hosts: f.hosts, Identities: f.identities, Notices: f.notices}, nil
 }
 
 func (f *fakeService) Connect(_ context.Context, id domain.ID) (app.Session, error) {

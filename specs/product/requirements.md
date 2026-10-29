@@ -116,7 +116,7 @@ Where the user has explicitly enabled the plaintext secret fallback, the system 
 ### FR-HOST-001 · Add or edit a host
 When the user submits the host form, the system shall save the host (new or edited) and select it in the host list.
 
-- **Priority:** MVP · **Status:** Draft · **Source:** Termius parity
+- **Priority:** MVP · **Status:** Implemented · **Source:** Termius parity
 - **Acceptance:**
   - MVP fields are label, hostname (DNS name, IPv4 or IPv6), port (default 22), username (optional) and either an identity (optional) or credentials entered directly (FR-HOST-010). v1 adds group, tags, notes, jump hosts, forwarding rules and startup command.
   - Changing the port from 22 to 2222 shows `:2222` in the list, and the next connection uses port 2222.
@@ -134,7 +134,7 @@ When the user confirms deletion of a host, the system shall remove the host.
 ### FR-HOST-003 · Field validation
 If the label is empty, longer than 64 characters or equal (case-insensitive) to another host's label, or the hostname is empty or contains whitespace, or the port is outside 1 to 65535, then the system shall reject the form and show the error next to the offending field.
 
-- **Priority:** MVP · **Status:** Draft · **Source:** D-105 (labels may contain spaces)
+- **Priority:** MVP · **Status:** Implemented · **Source:** D-105 (labels may contain spaces)
 - **Acceptance:**
   - Label `Web Prod EU` is accepted. With `web-prod` saved, `Web-Prod` is rejected with "Label already in use".
   - Ports `0`, `65536` and `abc` are rejected. `65535` is accepted.

@@ -26,6 +26,12 @@ type ConnectRequestMsg struct {
 	Label  string
 }
 
+// AddHostMsg asks the root model to open the host form for a new host.
+type AddHostMsg struct{}
+
+// EditHostMsg asks the root model to open the host form for Host.
+type EditHostMsg struct{ Host domain.Host }
+
 // Model is the host list: one line per host (label and user@hostname:port)
 // with a cursor. Sorting, port-22 omission and truncation come in T-016.
 type Model struct {
@@ -43,6 +49,10 @@ func (m Model) Selected() (domain.Host, bool) {
 	}
 	return m.hosts[m.cursor], true
 }
+
+// Hosts returns the listed hosts, in list order. The caller must not
+// modify them.
+func (m Model) Hosts() []domain.Host { return m.hosts }
 
 // Select moves the cursor to the host with id, if it is listed.
 func (m Model) Select(id domain.ID) Model {
@@ -70,6 +80,12 @@ func (m Model) Update(msg tea.Msg) (components.Screen, tea.Cmd) {
 	case key.Matches(k, keys.Connect):
 		if h, ok := m.Selected(); ok {
 			return m, func() tea.Msg { return ConnectRequestMsg{HostID: h.ID, Label: h.Label} }
+		}
+	case key.Matches(k, keys.AddHost):
+		return m, func() tea.Msg { return AddHostMsg{} }
+	case key.Matches(k, keys.EditHost):
+		if h, ok := m.Selected(); ok {
+			return m, func() tea.Msg { return EditHostMsg{Host: h} }
 		}
 	case key.Matches(k, keys.Quit):
 		return m, tea.Quit

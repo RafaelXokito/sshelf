@@ -36,3 +36,25 @@ var (
 	DeleteToStart = key.NewBinding(key.WithKeys("ctrl+u"), key.WithHelp("ctrl+u", "delete to start"))
 	DeleteToEnd   = key.NewBinding(key.WithKeys("ctrl+k"), key.WithHelp("ctrl+k", "delete to end"))
 )
+
+// Host list: open the host form.
+var (
+	AddHost  = key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "add"))
+	EditHost = key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "edit"))
+)
+
+// Forms (design §9.3): tab/shift+tab move between fields (NextField,
+// PrevField), ctrl+s saves, esc cancels (Cancel) and asks first when there
+// are unsaved changes. Ctrl+C cancels the form instead of quitting
+// (FR-NAV-003).
+var (
+	Save       = key.NewBinding(key.WithKeys("ctrl+s"), key.WithHelp("ctrl+s", "save"))
+	ChoicePrev = key.NewBinding(key.WithKeys("left"), key.WithHelp("←", "previous choice"))
+	ChoiceNext = key.NewBinding(key.WithKeys("right", "space"), key.WithHelp("→", "next choice"))
+)
+
+// Confirm modal: only y confirms; the default answer is No.
+var (
+	ConfirmYes = key.NewBinding(key.WithKeys("y"), key.WithHelp("y", "yes"))
+	ConfirmNo  = key.NewBinding(key.WithKeys("n", "enter", "esc"), key.WithHelp("n/enter/esc", "no"))
+)

@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/RafaelXokito/sshelf/internal/domain"
 	"github.com/RafaelXokito/sshelf/internal/paths"
@@ -42,8 +44,11 @@ type Session interface {
 
 // Loaded is the result of Service.Load.
 type Loaded struct {
-	Hosts    []domain.Host // sorted by label
-	FirstRun bool          // config.json did not exist
+	Hosts []domain.Host // sorted by label
+	// Identities are every identity, hidden ones included, sorted by
+	// label. They carry no secrets.
+	Identities []domain.Identity
+	FirstRun   bool // config.json did not exist
 	// Notices are one-line messages to show once, such as repaired file
 	// modes (SEC-FILE-002).
 	Notices []string
@@ -59,6 +64,15 @@ type Service interface {
 	// interactive session ready for tea.Exec. Nothing is handed to the
 	// terminal unless all of that succeeded (ARCH-SESS-002).
 	Connect(ctx context.Context, hostID domain.ID) (Session, error)
+	// SaveHost adds h (when h.ID is "") or updates the host with h.ID,
+	// and writes config.json atomically. See App.SaveHost.
+	SaveHost(ctx context.Context, h domain.Host) (SavedHost, error)
+}
+
+// SavedHost is the result of Service.SaveHost.
+type SavedHost struct {
+	Host  domain.Host   // as saved, with its ID
+	Hosts []domain.Host // every host after the save, sorted by label
 }
 
 // Config wires an App.
@@ -132,11 +146,70 @@ func (a *App) Load(ctx context.Context) (Loaded, error) {
 	a.mu.Lock()
 	a.data = snap.Data
 	a.mu.Unlock()
-	hosts := slices.Clone(snap.Data.Hosts)
+	ids := slices.Clone(snap.Data.Identities)
+	slices.SortStableFunc(ids, func(x, y domain.Identity) int {
+		return cmp.Compare(strings.ToLower(x.Label), strings.ToLower(y.Label))
+	})
+	return Loaded{Hosts: sortedHosts(snap.Data.Hosts), Identities: ids, FirstRun: snap.FirstRun, Notices: notices}, nil
+}
+
+// sortedHosts returns a copy of hosts sorted by label, case-insensitively.
+func sortedHosts(hosts []domain.Host) []domain.Host {
+	hosts = slices.Clone(hosts)
 	slices.SortStableFunc(hosts, func(x, y domain.Host) int {
 		return cmp.Compare(strings.ToLower(x.Label), strings.ToLower(y.Label))
 	})
-	return Loaded{Hosts: hosts, FirstRun: snap.FirstRun, Notices: notices}, nil
+	return hosts
+}
+
+// SaveHost implements Service (FR-HOST-001). A new host (h.ID == "") gets
+// a UUIDv7 ID (ARCH-DATA-001). For an existing host only the form's
+// fields (label, hostname, port, user and identity) are taken from h; the
+// rest of the stored host is kept. Label, hostname and user are trimmed.
+// The host is validated against the loaded hosts and identities
+// (FR-HOST-003; the error is a *domain.ValidationError), then config.json
+// is written through store.Save. The in-memory config changes only after
+// that write succeeded, so a host counts as saved only when SaveHost
+// returns nil.
+func (a *App) SaveHost(ctx context.Context, h domain.Host) (SavedHost, error) {
+	if err := ctx.Err(); err != nil {
+		return SavedHost{}, err
+	}
+	h.Label = strings.TrimSpace(h.Label)
+	h.Hostname = strings.TrimSpace(h.Hostname)
+	h.User = strings.TrimSpace(h.User)
+
+	a.mu.Lock()
+	defer a.mu.Unlock() // held across the write, so saves never interleave
+	hosts := slices.Clone(a.data.Hosts)
+	now := time.Now().UTC()
+	if h.ID == "" {
+		h.ID = domain.NewID()
+		h.CreatedAt, h.UpdatedAt = now, now
+		hosts = append(hosts, h)
+	} else {
+		i := slices.IndexFunc(hosts, func(o domain.Host) bool { return o.ID == h.ID })
+		if i < 0 {
+			return SavedHost{}, ErrHostNotFound
+		}
+		stored := hosts[i]
+		stored.Label, stored.Hostname, stored.Port, stored.User, stored.IdentityID = h.Label, h.Hostname, h.Port, h.User, h.IdentityID
+		stored.UpdatedAt = now
+		hosts[i], h = stored, stored
+	}
+	data := a.data
+	data.Hosts = hosts
+	if err := domain.ValidateHost(h, data); err != nil {
+		return SavedHost{}, err
+	}
+	file := paths.ConfigFile(a.cfg.Dir)
+	if err := store.Save(file, &store.Snapshot{Data: data}); err != nil {
+		slog.Debug("save host: failed", "host", h.Label, "err", err)
+		return SavedHost{}, fmt.Errorf("could not save %s: %w", filepath.Base(file), err)
+	}
+	a.data = data
+	slog.Debug("save host: saved", "host", h.Label, "id", h.ID)
+	return SavedHost{Host: h, Hosts: sortedHosts(hosts)}, nil
 }
 
 // modesNotice is the one-line notice for repaired modes, e.g.

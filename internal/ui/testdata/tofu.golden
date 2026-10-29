@@ -27,4 +27,4 @@ sshelf
 │ No credentials are sent until you choose.                          │
 ╰────────────────────────────────────────────────────────────────────╯
 
-↑/↓ move • enter connect • q quit
+↑/↓ move • enter connect • a add • e edit • q quit
