@@ -825,7 +825,7 @@ When the user triggers import, the system shall create one host for each `Host` 
 ### FR-IMPORT-002 · Resolve wildcards and Include
 When importing, the system shall follow `Include` directives and apply values from matching wildcard `Host` blocks using OpenSSH's first-value-wins rule.
 
-- **Priority:** MVP · **Status:** Draft
+- **Priority:** MVP · **Status:** Implemented
 - **Acceptance:**
   - `Include config.d/*` is resolved relative to `~/.ssh`.
   - For the fixture set, the imported hostname, user, port and identity file equal the output of `ssh -G <alias>`.
