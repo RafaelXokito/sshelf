@@ -67,6 +67,11 @@ type Service interface {
 	// SaveHost adds h (when h.ID is "") or updates the host with h.ID,
 	// and writes config.json atomically. See App.SaveHost.
 	SaveHost(ctx context.Context, h domain.Host) (SavedHost, error)
+	// Identities returns the identities view. See App.Identities.
+	Identities(ctx context.Context) ([]IdentityInfo, error)
+	// SaveIdentity creates or edits an identity and stores its secrets.
+	// See App.SaveIdentity.
+	SaveIdentity(ctx context.Context, in IdentityInput) (SavedIdentity, error)
 }
 
 // SavedHost is the result of Service.SaveHost.
@@ -99,7 +104,10 @@ type App struct {
 
 	mu   sync.Mutex
 	data domain.Data
-	send func(any) // delivers prompts to the UI; see SetSend
+	// missing are the secrets the store did not have when a connection
+	// asked for them: "not set on this device" (D-108).
+	missing map[secrets.Ref]bool
+	send    func(any) // delivers prompts to the UI; see SetSend
 
 	khMu sync.Mutex // serialises writes to sshelf's known_hosts
 }
@@ -146,11 +154,7 @@ func (a *App) Load(ctx context.Context) (Loaded, error) {
 	a.mu.Lock()
 	a.data = snap.Data
 	a.mu.Unlock()
-	ids := slices.Clone(snap.Data.Identities)
-	slices.SortStableFunc(ids, func(x, y domain.Identity) int {
-		return cmp.Compare(strings.ToLower(x.Label), strings.ToLower(y.Label))
-	})
-	return Loaded{Hosts: sortedHosts(snap.Data.Hosts), Identities: ids, FirstRun: snap.FirstRun, Notices: notices}, nil
+	return Loaded{Hosts: sortedHosts(snap.Data.Hosts), Identities: sortedIdentities(snap.Data.Identities), FirstRun: snap.FirstRun, Notices: notices}, nil
 }
 
 // sortedHosts returns a copy of hosts sorted by label, case-insensitively.
@@ -245,7 +249,7 @@ func (a *App) Connect(ctx context.Context, hostID domain.ID) (Session, error) {
 	if send != nil {
 		ssh.Progress = func(st sshclient.Stage) { send(ConnectProgressMsg{HostID: hostID, Stage: st}) }
 	}
-	creds := Credentials{Store: a.cfg.Secrets, Home: a.cfg.Home, Prompter: a}
+	creds := Credentials{Store: a.cfg.Secrets, Home: a.cfg.Home, Prompter: a, OnMissing: a.markMissing}
 	client, err := ssh.Connect(ctx, target, creds, a)
 	if err != nil {
 		slog.Debug("connect: failed", "host", h.Label, "err", err)

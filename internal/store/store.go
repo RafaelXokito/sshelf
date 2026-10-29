@@ -182,6 +182,11 @@ type fileIdentity struct {
 	HasPrivateKey    bool   `json:"has_private_key"`
 	HasKeyPassphrase bool   `json:"has_key_passphrase"`
 	UseAgent         bool   `json:"use_agent"`
+	// Hidden marks a per-host identity made from the host form
+	// (FR-HOST-010); PublicKey is the stored key's authorized_keys line,
+	// shown as its type and fingerprint (FR-IDENT-003). Neither is secret.
+	Hidden    bool   `json:"hidden,omitempty"`
+	PublicKey string `json:"public_key,omitempty"`
 }
 
 type fileHost struct {
@@ -217,6 +222,8 @@ func (f fileConfig) toDomain() domain.Data {
 			HasKey:        i.HasPrivateKey,
 			HasPassphrase: i.HasKeyPassphrase,
 			UseAgent:      i.UseAgent,
+			Hidden:        i.Hidden,
+			PublicKey:     i.PublicKey,
 		})
 	}
 	for _, h := range f.Hosts {
@@ -265,6 +272,8 @@ func fromDomain(d domain.Data) fileConfig {
 			HasPrivateKey:    i.HasKey,
 			HasKeyPassphrase: i.HasPassphrase,
 			UseAgent:         i.UseAgent,
+			Hidden:           i.Hidden,
+			PublicKey:        i.PublicKey,
 		})
 	}
 	for _, h := range d.Hosts {

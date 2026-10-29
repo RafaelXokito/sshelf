@@ -101,3 +101,41 @@ func ParsePort(s string) (int, error) {
 	}
 	return p, nil
 }
+
+// The identity fields ValidateIdentity checks.
+const FieldName Field = "name"
+
+// The messages shown next to an invalid identity field (FR-IDENT-001).
+const (
+	MsgNameRequired = "Name is required"
+	MsgNameTooLong  = "Name is longer than 64 characters"
+	MsgNameInUse    = "Name already in use"
+)
+
+// ValidateIdentity checks i against FR-IDENT-001, using d for the other
+// identities (one with i's ID is i itself). Names are required, at most
+// MaxLabelLen characters, and unique case-insensitively among the
+// identities the user sees: hidden per-host identities (FR-HOST-010) are
+// named after their host and neither checked nor checked against. It
+// returns nil or a *ValidationError.
+func ValidateIdentity(i Identity, d Data) error {
+	if i.Hidden {
+		return nil
+	}
+	name := strings.TrimSpace(i.Label)
+	var msg string
+	switch {
+	case name == "":
+		msg = MsgNameRequired
+	case utf8.RuneCountInString(name) > MaxLabelLen:
+		msg = MsgNameTooLong
+	case slices.ContainsFunc(d.Identities, func(o Identity) bool {
+		return o.ID != i.ID && !o.Hidden && strings.EqualFold(strings.TrimSpace(o.Label), name)
+	}):
+		msg = MsgNameInUse
+	}
+	if msg != "" {
+		return &ValidationError{Fields: map[Field]string{FieldName: msg}}
+	}
+	return nil
+}

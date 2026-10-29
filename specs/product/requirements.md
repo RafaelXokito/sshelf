@@ -86,7 +86,7 @@ defined in `SEC-CRED-*`.
 ### FR-CRED-001 · Save secrets without an sshelf password
 When the user saves a password, private key or key passphrase, the system shall store it in the OS credential store without asking for any sshelf-specific password.
 
-- **Priority:** MVP · **Status:** Draft · **Source:** D-002, D-003
+- **Priority:** MVP · **Status:** Implemented · **Source:** D-002, D-003
 - **Acceptance:**
   - sshelf never shows a screen for creating, entering or changing a master password.
   - After a restart, a host whose identity has a saved password connects without a prompt.

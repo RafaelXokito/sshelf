@@ -106,7 +106,7 @@ Priority: MVP · Status: Draft · Threats: T-2, T-17
 **SEC-CRED-002: Item naming.**
 The system shall store each secret as one generic-password item with service `sshelf` and account
 `<identity-uuid>/<field>`, where `<field>` is `password`, `private-key` or `key-passphrase`.
-Priority: MVP · Status: Draft · Threats: T-9
+Priority: MVP · Status: Implemented · Threats: T-9
 - AC1: A fake-store test asserts the exact keys after creating an identity with all three fields.
 - AC2: Renaming an identity changes no keys. The UUID is stable.
 
@@ -300,7 +300,7 @@ Priority: MVP · Status: Implemented · Threats: T-17, T-5
 **SEC-LOG-005: Secrets never displayed.**
 The system shall show each secret field only as "set", "not set" or "not set on this device", never as its value
 or length.
-Priority: MVP · Status: Draft · Threats: T-17, AC-8
+Priority: MVP · Status: Implemented · Threats: T-17, AC-8
 - AC1: Golden test of the identity form, with a canary password, contains no canary and no run of bullets of the
   same length.
 

@@ -1,0 +1,12 @@
+sshelf
+
+Edit identity ops
+
+> Name        ops_
+  Username    deploy
+  Password    (set)
+  Key file    ~/.ssh/id_ed25519
+  Passphrase  (not set)
+
+tab next field • shift+tab previous field • ctrl+s save • esc cancel
+

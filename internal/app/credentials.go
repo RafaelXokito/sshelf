@@ -45,6 +45,9 @@ type Credentials struct {
 	// Prompter asks for the passphrase of an encrypted key that has none
 	// stored. nil means encrypted keys need a stored passphrase.
 	Prompter sshclient.Prompter
+	// OnMissing, if set, is told about each secret the store did not
+	// have, so the identity form can show "not set on this device".
+	OnMissing func(secrets.Ref)
 }
 
 var _ sshclient.CredentialSource = Credentials{}
@@ -182,7 +185,11 @@ func (c Credentials) get(ctx context.Context, t domain.Target, f secrets.Field) 
 	if c.Store == nil {
 		return secrets.Secret{}, &StoreError{Store: StoreName(), Err: secrets.ErrUnavailable}
 	}
-	s, err := c.Store.Get(ctx, secrets.Ref{IdentityID: string(t.IdentityID), Field: f})
+	ref := secrets.Ref{IdentityID: string(t.IdentityID), Field: f}
+	s, err := c.Store.Get(ctx, ref)
+	if errors.Is(err, secrets.ErrNotFound) && c.OnMissing != nil {
+		c.OnMissing(ref)
+	}
 	if errors.Is(err, secrets.ErrDenied) || errors.Is(err, secrets.ErrUnavailable) {
 		return secrets.Secret{}, &StoreError{Store: StoreName(), Err: err}
 	}

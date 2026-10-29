@@ -24,6 +24,7 @@ import (
 	"github.com/RafaelXokito/sshelf/internal/ui/modals/tofu"
 	"github.com/RafaelXokito/sshelf/internal/ui/screens/hostedit"
 	"github.com/RafaelXokito/sshelf/internal/ui/screens/hostlist"
+	"github.com/RafaelXokito/sshelf/internal/ui/screens/identities"
 	"github.com/RafaelXokito/sshelf/internal/ui/screens/loaderror"
 )
 
@@ -85,6 +86,7 @@ type Model struct {
 
 	identities []domain.Identity // for the host form's picker
 	list       hostlist.Model    // the list to return to while a form is open
+	idView     identities.Model  // the identities view to return to from its form
 
 	attempt     int                // id of the latest connection attempt
 	attemptHost domain.ID          // host of the attempt in progress
@@ -107,6 +109,9 @@ func (m Model) Init() tea.Cmd {
 
 // Update implements tea.Model.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if next, cmd, ok := m.updateIdentities(msg); ok {
+		return next, cmd
+	}
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		if key.Matches(msg, keys.ForceQuit) {
