@@ -36,6 +36,13 @@ const liveHostID = "0192a000-0000-7000-8000-000000000002"
 
 func newLiveModel(t *testing.T) *liveModel {
 	t.Helper()
+	return newLiveModelWith(t, nil)
+}
+
+// newLiveModelWith is newLiveModel with extra server options, and wrap,
+// if not nil, standing between the root model and the app.
+func newLiveModelWith(t *testing.T, wrap func(*app.App) app.Service, opts ...sshtest.Option) *liveModel {
+	t.Helper()
 	home, dir := t.TempDir(), t.TempDir()
 	if err := os.Mkdir(filepath.Join(home, ".ssh"), 0o700); err != nil {
 		t.Fatal(err)
@@ -44,7 +51,7 @@ func newLiveModel(t *testing.T) *liveModel {
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := sshtest.New(t, sshtest.WithAuthorizedKey("demo", pub))
+	srv := sshtest.New(t, append([]sshtest.Option{sshtest.WithAuthorizedKey("demo", pub)}, opts...)...)
 	kh := filepath.Join(dir, "known_hosts")
 	if err := os.WriteFile(kh, []byte(srv.KnownHostsLine()+"\n"), 0o600); err != nil {
 		t.Fatal(err)
@@ -58,7 +65,11 @@ func newLiveModel(t *testing.T) *liveModel {
 	}
 	svc := app.New(app.Config{Dir: dir, KnownHostsFiles: []string{kh}, Secrets: secrets.NewMemStore(), Home: home})
 	svc.SetSend(func(any) {}) // progress only; a prompt would time out
-	lm := &liveModel{t: t, m: loadModel(t, svc), srv: srv}
+	var service app.Service = svc
+	if wrap != nil {
+		service = wrap(svc)
+	}
+	lm := &liveModel{t: t, m: loadModel(t, service), srv: srv}
 	t.Cleanup(func() {
 		if m, ok := lm.m.(ui.Model); ok {
 			m.CloseTabs()

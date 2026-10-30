@@ -35,7 +35,7 @@ func setHook[T any](t *testing.T, hook *T, v T) {
 	t.Cleanup(func() { *hook = old })
 }
 
-func openBrowser(t *testing.T, srv *sshtest.Server) *Browser {
+func openBrowser(t testing.TB, srv *sshtest.Server) *Browser {
 	t.Helper()
 	b, err := Open(dialLease(t, srv), Options{})
 	if err != nil {
@@ -101,7 +101,7 @@ func byName(ts []Transfer, name string) Transfer {
 }
 
 // randFile writes size pseudo-random bytes to p and returns their SHA-256.
-func randFile(t *testing.T, p string, size int64, seed byte) [32]byte {
+func randFile(t testing.TB, p string, size int64, seed byte) [32]byte {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
 		t.Fatal(err)

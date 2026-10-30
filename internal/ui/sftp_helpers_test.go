@@ -106,7 +106,7 @@ func approvedBrowser(connID uint64) *apptest.FakeBrowser {
 }
 
 // sftpDriver is a driver over an sftpService serving browsers.
-func sftpDriver(t *testing.T, hosts []domain.Host, sessions []*apptest.FakeSession, browsers ...*apptest.FakeBrowser) (*driver, *sftpService) {
+func sftpDriver(t testing.TB, hosts []domain.Host, sessions []*apptest.FakeSession, browsers ...*apptest.FakeBrowser) (*driver, *sftpService) {
 	t.Helper()
 	svc := &sftpService{fakeService: &fakeService{hosts: hosts, framed: sessions}, browsers: browsers}
 	d := &driver{t: t, svc: svc.fakeService, svcSFTP: svc, listeners: map[int]tea.Cmd{}, clock: testEpoch}
@@ -133,7 +133,7 @@ func sftpDriver(t *testing.T, hosts []domain.Host, sessions []*apptest.FakeSessi
 }
 
 // openSFTP presses s on host id in the host list.
-func openSFTP(t *testing.T, d *driver, id domain.ID) {
+func openSFTP(t testing.TB, d *driver, id domain.ID) {
 	t.Helper()
 	d.focus(0)
 	l, ok := d.root().screen.(hostlist.Model)

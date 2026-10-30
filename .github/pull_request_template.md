@@ -24,3 +24,4 @@ without `-race`.
 | search, 5,000 hosts (NFR-PERF-002) | ms | ≤ 16 ms |
 | emulator: throughput (NFR-PERF-005, perf-session job) | MB/s | ≥ 1 MB/s |
 | emulator: heap per session, 120×40, full scrollback (NFR-SIZE-003) | MiB | ≤ 48 MiB |
+| sftp: throughput down / up, 256 MiB; heap peak, two transfers (NFR-PERF-007, NFR-SIZE-004, perf-sftp job) | MB/s / MB/s; MiB | ≥ 50 MB/s each; ≤ 16 MiB |

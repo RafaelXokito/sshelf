@@ -31,7 +31,7 @@ func approvedTab(t *testing.T) (*driver, *apptest.FakeBrowser) {
 }
 
 // sftpOpen opens one SFTP tab on browser b with nothing else.
-func sftpOpen(t *testing.T, b *apptest.FakeBrowser) (*driver, *sftpService) {
+func sftpOpen(t testing.TB, b *apptest.FakeBrowser) (*driver, *sftpService) {
 	t.Helper()
 	d, svc := sftpDriver(t, piHosts, nil, b)
 	d.send(tea.WindowSizeMsg{Width: 80, Height: 24})

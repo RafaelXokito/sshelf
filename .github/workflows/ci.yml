@@ -48,8 +48,9 @@ jobs:
       - name: go test -race (NFR-PORT-001, NFR-REL-001)
         run: go test -race -coverpkg=./... -coverprofile=coverage.out ./...
       - name: performance limits without -race (NFR-PERF-002)
-        # NFR-PERF-005 runs in the perf-session job.
-        run: go test -count=1 -run 'TestNFR_PERF_' -skip 'TestNFR_PERF_005' ./...
+        # NFR-PERF-005 runs in the perf-session job; NFR-PERF-007, 008 and
+        # 009 in the perf-sftp job.
+        run: go test -count=1 -run 'TestNFR_PERF_' -skip 'TestNFR_PERF_005|TestNFR_PERF_00[789]' ./...
       - name: Coverage gate (NFR-QUAL-003)
         shell: bash # -o pipefail, so a failing gate is not hidden by tee
         run: go run ./scripts/covercheck coverage.out | tee -a "$GITHUB_STEP_SUMMARY"
@@ -87,6 +88,37 @@ jobs:
       - name: Emulator benchmark (NFR-PERF-005)
         shell: bash
         run: go test -run '^$' -bench 'BenchmarkNFR_PERF_005_EmulatorWrite' -benchtime 5x ./internal/session | tee -a "$GITHUB_STEP_SUMMARY"
+
+  # SFTP transfer throughput, UI responsiveness during transfers, large
+  # listings and transfer memory (T-058). A job of its own, so a slow
+  # runner can be re-run alone without re-running the suite.
+  perf-sftp:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: SFTP throughput, frame gaps, large listings and transfer memory without -race (NFR-PERF-007, NFR-PERF-008, NFR-PERF-009, NFR-SIZE-004)
+        shell: bash
+        run: |
+          # Shared runners stall now and then. Retry once; the first
+          # failure stays visible as a warning (specs/nfr.md §1).
+          checks() {
+            go test -count=1 -v -run 'TestNFR_PERF_00[789]_|TestNFR_SIZE_004_' ./internal/files ./internal/ui ./cmd/sshelf | tee perf.txt
+          }
+          if ! checks; then
+            echo "::warning::NFR-PERF-007/008/009 or NFR-SIZE-004 failed once on this runner; retrying"
+            checks
+          fi
+          grep 'sftp:' perf.txt >> "$GITHUB_STEP_SUMMARY"
+      - name: SFTP benchmarks (NFR-PERF-007, NFR-PERF-009)
+        shell: bash
+        run: go test -run '^$' -bench 'BenchmarkNFR_PERF_00[79]_' -benchtime 5x ./internal/files ./internal/ui | tee -a "$GITHUB_STEP_SUMMARY"
 
   cross-compile:
     runs-on: ubuntu-latest

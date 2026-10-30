@@ -71,20 +71,20 @@ While 10 sessions are open, each receiving output at 100 KB/s, the system shall 
 ### NFR-PERF-007 · Transfer throughput
 When a 256 MiB file is downloaded or uploaded over loopback, the system shall transfer it at an average of at least 50 MB/s.
 
-- **Priority:** M3 · **Status:** Draft · **Source:** D-018
-- **Check:** `TestNFR_PERF_007_Throughput` (no `-race`, perf job) starts sshtest with its SFTP subsystem over a temp dir (ARCH-TEST-004), opens a real SFTP browser on a connection to it, and times a 256 MiB file of random bytes from enqueue to `done`, once as a download and once as an upload: the median of 3 runs of each is ≥ 50 MB/s (≤ 5.4 s) on the CI runner, and both copies have the source's SHA-256. The measured MB/s are recorded in the PR template's perf section. `BenchmarkNFR_PERF_007_Download` and `BenchmarkNFR_PERF_007_Upload` report MB/s for tracking. The figure is a floor for sshelf's own overhead (buffers, part files, progress); real links are limited by the network and the server.
+- **Priority:** M3 · **Status:** Implemented · **Source:** D-018
+- **Check:** `TestNFR_PERF_007_Throughput` (no `-race`, the `perf-sftp` CI job) starts sshtest with its SFTP subsystem over a temp dir (ARCH-TEST-004), opens a real SFTP browser on a connection to it, and times a 256 MiB file of random bytes from enqueue to `done`, once as a download and once as an upload: the median of 3 runs of each is ≥ 50 MB/s (≤ 5.4 s) on the CI runner, and both copies have the source's SHA-256. The measured MB/s are recorded in the PR template's perf section. `BenchmarkNFR_PERF_007_Download` and `BenchmarkNFR_PERF_007_Upload` report MB/s for tracking. The figure is a floor for sshelf's own overhead (buffers, part files, progress); real links are limited by the network and the server.
 
 ### NFR-PERF-008 · Responsive UI during transfers
 While two transfers run, the system shall handle every key press and draw its frame within 100 ms, and shall keep the keystroke overhead of a session tab within NFR-PERF-004's bound.
 
-- **Priority:** M3 · **Status:** Draft · **Source:** D-017, D-018
-- **Check:** `TestNFR_PERF_008_FrameGaps` drives the root model directly with a real SFTP browser while a 256 MiB download and a 256 MiB upload run against sshtest: 200 cursor-move keys sent to the SFTP tab, 50 ms apart, each produce a `View()` showing the moved cursor within 100 ms (p100), and no single `Update` or `View` call takes more than 20 ms. A second run sends 1,000 keys to a session tab on the same connection while the transfers run: p99 ≤ 5 ms as in NFR-PERF-004. The progress line is redrawn at most 4 times a second (ARCH-SFTP-003).
+- **Priority:** M3 · **Status:** Implemented · **Source:** D-017, D-018
+- **Check:** `TestNFR_PERF_008_FrameGaps` (`perf-sftp` CI job) drives the root model as `tea.Program` would (one goroutine calls `Update` and `View`; commands run on their own goroutines; their messages and the keys share one queue) with a real SFTP browser while a 256 MiB download and a 256 MiB upload run against sshtest, each queued again as soon as it finishes (over loopback one takes well under a second, and the keys take 10 s): 200 cursor-move keys sent to the SFTP tab, 50 ms apart, each produce a `View()` showing the moved cursor within 100 ms (p100), and no single `Update` or `View` call takes more than 20 ms. A second run sends 1,000 keys to a session tab on the same connection while the transfers run: p99 ≤ 5 ms as in NFR-PERF-004. The progress line is redrawn at most 4 times a second (ARCH-SFTP-003).
 
 ### NFR-PERF-009 · Large listings
 When a directory with 10,000 entries is opened, the system shall show its first screen within 200 ms of receiving the listing, and shall apply each filter keystroke within 50 ms.
 
-- **Priority:** M3 · **Status:** Draft · **Source:** D-017
-- **Check:** `TestNFR_PERF_009_TenThousandEntries` feeds a 10,000-entry listing message (mixed directories, files and symlinks, names up to 60 characters) to the root model and measures from `Update` receiving it to the `View()` that shows its first rows (sorting, hidden-file filtering and rendering of the visible rows only): median of 5 ≤ 200 ms on the CI runner. Typing `/` and 5 characters measures each filter step: each ≤ 50 ms. `BenchmarkNFR_PERF_009_SortAndRender` tracks it. A PTY variant lists a 10,000-entry sshtest directory and checks that the first frame with the listing appears within 1 s of pressing `enter` (network included).
+- **Priority:** M3 · **Status:** Implemented · **Source:** D-017
+- **Check:** `TestNFR_PERF_009_TenThousandEntries` (`perf-sftp` CI job) feeds a 10,000-entry listing message (mixed directories, files and symlinks, names up to 60 characters) to the root model and measures from `Update` receiving it to the `View()` that shows its first rows (sorting, hidden-file filtering and rendering of the visible rows only): median of 5 ≤ 200 ms on the CI runner. Typing `/` and 5 characters measures each filter step: each ≤ 50 ms. `BenchmarkNFR_PERF_009_SortAndRender` tracks it. A PTY variant, `TestNFR_PERF_009_E2ETenThousandEntries`, lists a 10,000-entry sshtest directory and checks that the first frame with the listing appears within 1 s of pressing `enter` (network included).
 
 ---
 
@@ -105,8 +105,8 @@ While a session at 120×40 has a full scrollback of 100-column lines, the system
 ### NFR-SIZE-004 · Transfer memory
 While files are transferred, the system shall use an amount of heap memory that does not depend on the files' sizes, at most 16 MiB above the idle SFTP tab for the two transfers that run at once.
 
-- **Priority:** M3 · **Status:** Draft · **Source:** D-018 ("streamed with bounded memory")
-- **Check:** `TestNFR_SIZE_004_TransferHeap` samples `runtime/metrics` `/memory/classes/heap/objects:bytes` every 50 ms (after a `runtime.GC()` baseline with the SFTP tab open) while a download and an upload run at the same time, first with 256 MiB files and then with 1 GiB files (sparse files on the local side; sshtest's in-memory zero file on the remote side): the peak growth is ≤ 16 MiB in both, and the two peaks differ by less than 4 MiB. Closing the tab and running `runtime.GC()` returns the heap to within 2 MiB of the baseline.
+- **Priority:** M3 · **Status:** Implemented · **Source:** D-018 ("streamed with bounded memory")
+- **Check:** `TestNFR_SIZE_004_TransferHeap` (`perf-sftp` CI job) samples `runtime/metrics` `/memory/classes/heap/objects:bytes` and `/gc/heap/live:bytes` every 50 ms (after a `runtime.GC()` baseline with the SFTP tab open and one small transfer done each way) while a download and an upload run at the same time, first with 256 MiB files and then with 1 GiB files (sparse files on the local side; sshtest's in-memory zero file on the remote side): the peak growth of `objects` (garbage not yet collected included) is ≤ 16 MiB in both, and the two peaks of the live heap differ by less than 4 MiB. The size-independence is read from the live heap because the garbage a 50 ms sample catches depends on where the collector is in its cycle, and the longer transfer takes four times the samples, so `objects` peaks differ by up to 4 MiB with no size-dependent memory. Closing the tab and running `runtime.GC()` returns the heap to within 2 MiB of the baseline.
 
 ### NFR-SIZE-002 · Binary size
 The system shall produce a release binary of no more than 20 MB for each supported target.

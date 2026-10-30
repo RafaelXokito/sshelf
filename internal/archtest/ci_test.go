@@ -74,6 +74,18 @@ func TestNFR_PERF_005_CIRunsPerfSessionJob(t *testing.T) {
 	wantAll(t, tmpl, readRootFile(t, tmpl), "emulator: throughput", "emulator: heap per session")
 }
 
+// TestNFR_PERF_007_CIRunsPerfSFTPJob: the SFTP throughput,
+// responsiveness, listing and memory checks run without -race in a job
+// of their own, retried once (specs/nfr.md §1), and the PR template
+// records them (T-058).
+func TestNFR_PERF_007_CIRunsPerfSFTPJob(t *testing.T) {
+	wantAll(t, ciFile, readRootFile(t, ciFile), "perf-sftp:",
+		"-run 'TestNFR_PERF_00[789]_|TestNFR_SIZE_004_' ./internal/files ./internal/ui ./cmd/sshelf",
+		"failed once on this runner; retrying", "BenchmarkNFR_PERF_00[79]_")
+	const tmpl = ".github/pull_request_template.md"
+	wantAll(t, tmpl, readRootFile(t, tmpl), "sftp: throughput down / up", "heap peak, two transfers")
+}
+
 // TestNFR_REL_001_GoroutinePackagesCheckLeaks: every package that starts
 // goroutines, and every package NFR-REL-001 names, calls
 // goleak.VerifyTestMain (through testutil.VerifyTestMain) in its tests.

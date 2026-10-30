@@ -139,7 +139,7 @@ func (f *fakeService) ReconnectSFTP(context.Context, app.Browser) error {
 // driver runs the root model the way tea.Program does: Update on one
 // goroutine, every command on another.
 type driver struct {
-	t    *testing.T
+	t    testing.TB
 	svc  *fakeService
 	m    tea.Model
 	quit bool

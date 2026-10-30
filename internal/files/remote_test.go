@@ -24,12 +24,12 @@ import (
 
 var bg = context.Background()
 
-func sftpSrv(t *testing.T, opts ...sshtest.Option) *sshtest.Server {
+func sftpSrv(t testing.TB, opts ...sshtest.Option) *sshtest.Server {
 	t.Helper()
 	return sshtest.New(t, append([]sshtest.Option{sshtest.WithPassword("u", "pw"), sshtest.WithSFTP(t.TempDir())}, opts...)...)
 }
 
-func dialLease(t *testing.T, srv *sshtest.Server) *sshclient.Lease {
+func dialLease(t testing.TB, srv *sshtest.Server) *sshclient.Lease {
 	t.Helper()
 	c, err := ssh.Dial("tcp", srv.Addr(), &ssh.ClientConfig{
 		User:            "u",

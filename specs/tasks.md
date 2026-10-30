@@ -688,7 +688,7 @@ order and rebase rather than resolve by hand.
 - **Delivers:** the perf-job checks for transfer throughput, UI responsiveness during transfers, large listings and transfer memory; the PR template's perf section gains an `sftp` row (MB/s each way, heap peak).
 - **Satisfies:** NFR-PERF-007, NFR-PERF-008, NFR-PERF-009, NFR-SIZE-004
 - **Depends on:** T-054
-- **Tests:** `TestNFR_PERF_007_Throughput`, `BenchmarkNFR_PERF_007_Download`, `BenchmarkNFR_PERF_007_Upload`, `TestNFR_PERF_008_FrameGaps`, `TestNFR_PERF_009_TenThousandEntries`, `BenchmarkNFR_PERF_009_SortAndRender`, `TestNFR_SIZE_004_TransferHeap`.
+- **Tests:** `TestNFR_PERF_007_Throughput`, `BenchmarkNFR_PERF_007_Download`, `BenchmarkNFR_PERF_007_Upload`, `TestNFR_PERF_008_FrameGaps`, `TestNFR_PERF_009_TenThousandEntries`, `TestNFR_PERF_009_E2ETenThousandEntries`, `BenchmarkNFR_PERF_009_SortAndRender`, `TestNFR_SIZE_004_TransferHeap`.
 - **Done when:** each check passes 5 consecutive CI runs; if throughput is under 50 MB/s, the profile and the cause (sshtest, sshelf or `pkg/sftp`) are in the PR and the product owner decides before the limit changes.
 - **Estimate:** 1.5 d
 
