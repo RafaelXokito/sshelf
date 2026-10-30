@@ -10,19 +10,18 @@ import (
 
 	"github.com/RafaelXokito/sshelf/internal/domain"
 	"github.com/RafaelXokito/sshelf/internal/files"
-	"github.com/RafaelXokito/sshelf/internal/sshclient"
 	"github.com/RafaelXokito/sshelf/internal/testutil/sshtest"
 )
 
-// reconnectable stands in for the app.Browser that T-054 makes of a
-// *files.Browser: only what ReconnectSFTP uses.
-type reconnectable struct {
-	Browser
-	fb *files.Browser
+// openOn opens an SFTP browser for host on s's connection.
+func openOn(t *testing.T, a *App, s Session, host string) *files.Browser {
+	t.Helper()
+	b, err := a.OpenSFTPOn(s, domain.ID(host))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b.(*files.Browser)
 }
-
-func (r reconnectable) HostID() domain.ID                   { return r.fb.HostID() }
-func (r reconnectable) Attach(lease *sshclient.Lease) error { return r.fb.Attach(lease) }
 
 // waitTransfers waits until cond holds for fb's transfers.
 func waitTransfers(t *testing.T, fb *files.Browser, cond func([]files.Transfer) bool) []files.Transfer {
@@ -57,14 +56,7 @@ func TestFR_SFTP_004_DropPausesSftp(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = s.Close() }()
-	lease, err := s.(connHolder).Conn().Lease()
-	if err != nil {
-		t.Fatal(err)
-	}
-	fb, err := files.Open(lease, files.Options{HostID: "h1"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	fb := openOn(t, a, s, "h1")
 	defer func() { _ = fb.Close() }()
 	attempts := len(srv.AuthAttempts())
 
@@ -83,7 +75,7 @@ func TestFR_SFTP_004_DropPausesSftp(t *testing.T) {
 	waitTransfers(t, fb, func(ts []files.Transfer) bool { return ts[0].State == files.Paused })
 	read := srv.SFTPBytesRead("zero.bin")
 
-	if err := a.ReconnectSFTP(context.Background(), reconnectable{fb: fb}); err != nil {
+	if err := a.ReconnectSFTP(context.Background(), fb); err != nil {
 		t.Fatal(err)
 	}
 	if fb.State() != files.Connected || fb.ConnID() == s.ConnID() {
@@ -117,16 +109,9 @@ func TestFR_SFTP_018_ReconnectSFTPErrors(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = s.Close() }()
-	lease, err := s.(connHolder).Conn().Lease()
-	if err != nil {
-		t.Fatal(err)
-	}
-	fb, err := files.Open(lease, files.Options{HostID: "h2"}) // h2 refuses connections
-	if err != nil {
-		t.Fatal(err)
-	}
+	fb := openOn(t, a, s, "h2") // h2 refuses connections
 	defer func() { _ = fb.Close() }()
-	if err := a.ReconnectSFTP(context.Background(), reconnectable{fb: fb}); err == nil {
+	if err := a.ReconnectSFTP(context.Background(), fb); err == nil {
 		t.Fatal("reconnect to an unreachable host succeeded")
 	}
 	if fb.State() != files.Connected { // a failed reconnect changes nothing

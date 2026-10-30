@@ -72,7 +72,7 @@ func TestFR_TAB_002_E2ETwoServers(t *testing.T) {
 	}
 	s.prefix("h")
 	s.typeKeys("q")
-	s.waitText(off, "Quit and close 2 sessions?")
+	s.waitText(off, "Quit and close 2 tabs?")
 	s.typeKeys("y")
 	s.waitQuit()
 	waitCloses(t, s, prod, 1, 2*time.Second)
@@ -185,7 +185,7 @@ func TestARCH_SESS_010_QuitClosesAll(t *testing.T) {
 	s.prefix("h")
 	off := s.out.Len()
 	s.typeKeys("q")
-	s.waitText(off, "Quit and close 3 sessions?")
+	s.waitText(off, "Quit and close 3 tabs?")
 	s.typeKeys("y")
 	s.waitQuit()
 	waitCloses(t, s, s.srv, 3, 2*time.Second)

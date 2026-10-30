@@ -214,7 +214,7 @@ func TestFR_TAB_009_ConfirmWithLiveSessions(t *testing.T) {
 	for _, quit := range []tea.KeyPressMsg{{Code: 'q', Text: "q"}, {Code: 'c', Mod: tea.ModCtrl}} {
 		for _, no := range []tea.KeyPressMsg{{Code: 'n', Text: "n"}, {Code: tea.KeyEnter}, {Code: tea.KeyEscape}} {
 			d.send(quit)
-			if v := d.view(); !strings.Contains(v, "Quit and close 2 sessions?") {
+			if v := d.view(); !strings.Contains(v, "Quit and close 2 tabs?") {
 				t.Fatalf("no confirmation after %v:\n%s", quit, v)
 			}
 			d.send(quit) // asked once only
@@ -231,7 +231,7 @@ func TestFR_TAB_009_ConfirmWithLiveSessions(t *testing.T) {
 	// Ended tabs do not count.
 	endTab(d, 1, a, nil)
 	d.press('q', "q")
-	if v := d.view(); !strings.Contains(v, "Quit and close 1 session?") {
+	if v := d.view(); !strings.Contains(v, "Quit and close 1 tab?") {
 		t.Fatalf("view:\n%s", v)
 	}
 	d.press('y', "y")

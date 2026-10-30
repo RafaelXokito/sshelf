@@ -1,0 +1,24 @@
+sshelf │ Hosts │[1 sftp: web-prod]│
+┌ Local: ~/Downloads/photos ───────────┐┌ Remote: /home/pi ────────────────────┐
+│   ..                                 ││   ..                                 │
+│>  a.jpg                           1 B││ ▸ scripts/                   12 items│
+│   b.jpg                           2 B││   .bashrc                        4 KB│
+│   c.jpg                           3 B││   backup.tar.gz                840 MB│
+│   d.jpg                           4 B││                                      │
+│                                      ││                                      │
+│                                      ││                                      │
+│                                      ││                                      │
+│                                      ││                                      │
+│                                      ││                                      │
+│                                      ││                                      │
+│                                      ││                                      │
+│                                      ││                                      │
+│                                      ││                                      │
+│                                      ││                                      │
+│                                      ││                                      │
+│                                      ││                                      │
+│                                      ││                                      │
+│                                      ││                                      │
+└──────────────────────────────────────┘└──────────────────────────────────────┘
+ ↑ a.jpg  0.4/1 MB  ████░░░░░░ 40%  200 KB/s
+ tab switch pane · c copy · r rename · d delete · m mkdir · e edit locally

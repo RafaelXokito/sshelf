@@ -115,7 +115,7 @@ func run(args []string) (code int) {
 	// Whatever ended the program, no session outlives it (ARCH-SESS-010).
 	if g, ok := final.(guard); ok {
 		if m, ok := g.model.(ui.Model); ok {
-			m.CloseSessions()
+			m.CloseTabs()
 		}
 	}
 	if err != nil {

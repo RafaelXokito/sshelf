@@ -523,7 +523,7 @@ the MVP.
 
 **Consequences.** No new package or lifecycle owner (D-007). Quitting closes
 every session through the root model's quit path (`closeAllAndQuit`), and
-`cmd/sshelf` calls `Model.CloseSessions` on the final model whatever ended
+`cmd/sshelf` calls `Model.CloseTabs` (M2: `CloseSessions`) on the final model whatever ended
 the program, a signal included (ARCH-SESS-010). If a
 future feature needs sessions outside the UI (snippets on a live session,
 tunnels without a tab), a manager can be extracted then. *M3 (ADR-017):*
@@ -639,7 +639,7 @@ One goroutine per `Conn` (through `term.SafeGo`) waits on `client.Wait()` and
 closes `Done`. Constructors take ownership of a lease: `session.New(lease,
 opts)` and `files.Open(lease, opts)` release it when they end, fail or are
 closed. (`files.Open` builds the tab's `Browser` on `files.OpenRemote(lease)`,
-the remote side with its two channels, T-046.) `app.Connect` creates the `Conn`; `app.OpenSFTPOn(session)` takes a
+the remote side with its two channels, T-046.) `app.Connect` creates the `Conn`; `app.OpenSFTPOn(session, hostID)` takes a
 second lease from the session's `Conn`. `app.Session` and `app.Browser`
 gain `ConnID() uint64`, so the root model can find the SFTP tab already on a
 session's connection (FR-SFTP-003) without seeing `sshclient`.
@@ -974,7 +974,7 @@ removed in revision 2.
 - Priority: M2 · Status: Implemented · Source: D-009, D-010, ADR-015
 - Acceptance: An M2 walk-through (start, list, connect with a stub session, tab opens, `Ctrl+]` `h`, connect a second host, `Ctrl+]` `1`, remote `exit 3`, ended tab, `x`, list with the host selected) matches its golden files. The MVP walk-through (start, list, edit, save, connect, TOFU, stub session, back) still passes with the header line in place of the title. Both drive the root model directly, the way `tea.Program` does, without `teatest` (see the golden convention in `tasks.md`).
 - Note: a modal that answers a running connection attempt (auth prompt, TOFU) is popped in the `Update` that delivers the answer, not when its `DoneMsg` arrives, so a late `DoneMsg` can never close the next prompt.
-- **M3 revision** · Priority: M3 · Status: Draft · Source: D-017, ADR-020
+- **M3 revision** · Priority: M3 · Status: Implemented · Source: D-017, ADR-020
   - *Revised:* The system shall run one root Bubble Tea model that holds the Hosts tab (one active screen and a stack of modal overlays, as in the MVP), the session tabs and the SFTP tabs, routes every message to the focused tab, the modal stack, the sessions or the SFTP browsers as defined in §9, and draws the frame around them.
   - *Acceptance:* The M2 walk-through still passes. An M3 walk-through (host list, `s` on a host, TOFU, SFTP tab opens, `tab`, `enter` into a directory, `c`, progress line, `t`, Esc, `Ctrl+]` `h`, `enter` on another host, `Ctrl+]` `s`, the existing SFTP tab is not reused because the connection differs, `Ctrl+]` `q` on the SFTP tab, confirm) matches its golden files, driven through the root model with a fake `app.Browser`.
 
@@ -1037,7 +1037,7 @@ removed in revision 2.
 - Acceptance: archtest: no other sshelf package imports `github.com/pkg/sftp`. sshtest records two `subsystem sftp` requests per SFTP tab. With `WithMaxSessions` allowing only one more channel, the tab still opens and transfers and listings work over one channel. Closing the browser closes both channels (sshtest records their closes) and releases the lease once.
 
 **ARCH-SFTP-002**: The system shall list, stat and change remote and local directories only in commands off the UI goroutine, applying the name check of SEC-SFTP-001 and the limits of SEC-SFTP-004 inside `internal/files`, so that the UI receives only safe, capped listings.
-- Priority: M3 · Status: Draft · Source: ARCH-UI-002, SEC-SFTP-001, SEC-SFTP-004
+- Priority: M3 · Status: Implemented · Source: ARCH-UI-002, SEC-SFTP-001, SEC-SFTP-004
 - Acceptance: In UI tests the fake `app.Browser` panics when called from `Update` (the ARCH-UI-002 goroutine marker). `files` unit tests: a listing returns `Entries`, `Skipped` (unsafe names) and `Truncated`; the 64 MiB browse-channel budget cancels a listing (sshtest serving long names); the result never holds an unsafe name.
 
 **ARCH-SFTP-003**: The system shall run each SFTP tab's transfers in its own goroutines, at most 2 at a time, report state changes through a capacity-1 channel written without blocking, and let the UI read progress through a snapshot, so that no transfer ever blocks the UI goroutine or waits for it.
@@ -1057,7 +1057,7 @@ removed in revision 2.
 - Acceptance: Unit tests of `editor.Words` (`VISUAL` before `EDITOR` before `vi`; spaces split; empty values skipped) and `editor.Command` (args are the words plus the path; `Env` nil). PTY E2E with a fake `$EDITOR` script that sleeps 1 s while sshtest streams 100 KB/s into a session in another tab and a 64 MiB download runs: after the editor exits, the session's emulator holds all streamed output, the download finished or kept progressing, and the terminal size change made during the edit (PTY resize) reached the session as one `window-change`. `e` while a Connecting modal is open does nothing.
 
 **ARCH-SFTP-007**: The system shall keep SFTP tabs in the root model's tab list with session tabs, draw and hit-test them from `sftpview.Layout`, and close every SFTP browser when sshelf exits.
-- Priority: M3 · Status: Draft · Source: ADR-020, ARCH-SESS-010
+- Priority: M3 · Status: Implemented · Source: ADR-020, ARCH-SESS-010
 - Acceptance: Root-model tests with a fake browser: numbering shared with session tabs, `ConnID` matching for `Ctrl+]` `s`, focus moves left on close. Quitting with two SFTP tabs and a session closes every channel and connection (sshtest), removes every local part file of running downloads, and `goleak` passes.
 
 ---
@@ -1641,7 +1641,7 @@ on a crash.
 | Session ends (exit, drop, `Ctrl+]` `q`) | Its goroutines stop (ARCH-SESS-005); the tab shows the ended state with its reason (SEC-SESSION-006). Nothing is written to the terminal. |
 | Panic in a session goroutine | `term.SafeGo` recovers it and ends that session with `ErrInternal`; other sessions and the UI keep running. |
 | Panic in `Update` or `View` | `main`'s `recover` restores the startup terminal state, writes `term.ResetSequence` (`ESC[?1049l`, mouse modes off, `?2004l`, `?1l ESC>`, `?25h`, `ESC[0m`, `ESC[<u`) and a crash report, and exits 70. Open sessions die with the process. |
-| Quit, SIGTERM or SIGHUP | The program quits (SIGHUP is turned into a quit); Bubble Tea restores the terminal (alt screen, mouse modes, bracketed paste, cursor); `main` then calls `CloseSessions` on the final model, so every connection is closed (ARCH-SESS-010). |
+| Quit, SIGTERM or SIGHUP | The program quits (SIGHUP is turned into a quit); Bubble Tea restores the terminal (alt screen, mouse modes, bracketed paste, cursor); `main` then calls `CloseTabs` on the final model, so every transfer is cancelled (part files removed) and every connection is closed (ARCH-SESS-010, ARCH-SFTP-007). |
 | Ctrl-C or Ctrl-Z in a focused session | Encoded as `0x03` / `0x1a` and sent to the remote (FR-TAB-006). |
 | stdin is not a TTY | sshelf exits with "sshelf needs an interactive terminal" (D-001). |
 
@@ -1660,7 +1660,7 @@ ADR-017 in sequence form:
 ```
 host list `enter`:  app.Connect → sshclient.Connect → NewConn(client) → (conn, lease1) → session.New(lease1)
 host list `s`:      app.OpenSFTP → sshclient.Connect → NewConn(client) → (conn, lease1) → files.Open(lease1)
-ctrl+] s:           app.OpenSFTPOn(session) → session.Conn().Lease() → lease2 → files.Open(lease2)
+ctrl+] s:           app.OpenSFTPOn(session, hostID) → session.Conn().Lease() → lease2 → files.Open(lease2)
 shell exits:        session releases lease1 → conn stays (lease2 held) → SFTP tab keeps working
 SFTP tab closed:    browser closes its channels, releases lease2 → last lease → client.Close()
 connection drops:   conn.Done() closes → session ends (*DisconnectError), browser pauses its transfers
@@ -1725,24 +1725,27 @@ type Browser interface {
 }
 ```
 
-**As built for the UI (T-049, T-050, T-053).** The UI lanes were built
-against `apptest.FakeBrowser` before `internal/files` existed, so the types
-above (`Side`, `Kind`, `Entry`, `Listing`, `Transfer`, `TransferState`,
-`Conflict`, `Answer`, `ConnState`, `ErrNoSFTP`, `ErrNotConnected`) are
-defined in `internal/app/browser.go`; T-054 turns each into an alias of
-the `internal/files` type of the same name and fields. `Transfer.From` is
-the source side (Remote = download, ↓); `Transfer.DstDir` is the target
-directory, so a finished transfer refreshes the pane showing it;
-`Transfer.Conflict` holds both sides' size and mtime while `Waiting`
-(FR-SFTP-016). The edit-locally methods arrive with T-055. The three
-service methods below are `app.SFTPService`, which the root model finds on
-its `Service` with a type assertion until T-054 adds them to `Service`
-(T-048's `App.OpenSFTPOn` returns the lease that `files.Open` will wrap).
+**As built (T-049 … T-054).** The UI lanes were built against
+`apptest.FakeBrowser` before `internal/files` existed; since T-054 the
+types above (`Side`, `Kind`, `Entry`, `Listing`, `Transfer`,
+`TransferState`, `Conflict`, `Answer`, `ConnState`, `ErrNoSFTP`,
+`ErrNotConnected`) are aliases in `internal/app/browser.go` of the
+`internal/files` types of the same names (the kinds are `app.KindFile`,
+`KindDir`, `KindSymlink`, `KindOther`), so `*files.Browser` is an
+`app.Browser`. `Transfer.From` is the source side (Remote = download, ↓);
+`Transfer.DstDir` is the target directory, so a finished transfer
+refreshes the pane showing it; `Transfer.Conflict` holds both sides' size
+and mtime while `Waiting` (FR-SFTP-016). The edit-locally methods arrive
+with T-055.
 
-`app.Service` gains `OpenSFTP(ctx, hostID) (Browser, error)`,
-`OpenSFTPOn(s Session) (Browser, error)` and `ReconnectSFTP(ctx, b
-Browser) error`; all three report `ErrNoSFTP` when the server refuses the
-subsystem. Connect progress and prompts reuse the M2 messages.
+`app.Service` embeds `app.SFTPService`: `OpenSFTP(ctx, hostID) (Browser,
+error)`, `OpenSFTPOn(s Session, hostID) (Browser, error)` and
+`ReconnectSFTP(ctx, b Browser) error`; all three report `ErrNoSFTP` when
+the server refuses the subsystem, and `OpenSFTP` then closes the
+connection it dialled. `OpenSFTPOn` takes the session tab's host ID
+because a session does not know its host and the browser needs it for a
+later reconnect (`files.Options.HostID`, FR-SFTP-018). Connect progress
+and prompts reuse the M2 messages.
 
 **Listing.** `List` on the remote side runs `ReadDirContext` on the browse
 channel with a 30 s timeout; the counting reader cancels it past 64 MiB of

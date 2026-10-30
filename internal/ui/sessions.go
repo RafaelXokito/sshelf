@@ -196,11 +196,13 @@ func (m Model) setColors(fg, bg color.Color) Model {
 	return m
 }
 
-// CloseSessions closes every session and SFTP browser. main calls it
-// after the program has ended, whatever ended it (a signal included), so
-// that no connection outlives the UI (ARCH-SESS-010, ARCH-SFTP-007).
-// Close does not wait on the network for long: it closes the connection.
-func (m Model) CloseSessions() {
+// CloseTabs closes every session and SFTP browser; a browser cancels its
+// transfers first, removing their part files (FR-SFTP-015). main calls
+// it after the program has ended, whatever ended it (a signal included),
+// so that no connection or transfer outlives the UI (ARCH-SESS-010,
+// ARCH-SFTP-007, FR-TAB-009 M3 revision). Close does not wait on the
+// network for long: it closes the connection.
+func (m Model) CloseTabs() {
 	for _, t := range m.tabs {
 		_ = t.closer().Close()
 	}
@@ -308,15 +310,42 @@ func (m Model) reconnected(t *sessionTab, s app.Session) (Model, tea.Cmd) {
 	return m, tea.Batch(func() tea.Msg { _ = old.Close(); return nil }, m.listen(t.num, s), cmd)
 }
 
-// liveSessions counts the tabs whose session has not ended.
-func (m Model) liveSessions() int {
-	n := 0
+// openWork counts what quitting would stop (FR-TAB-009 M3 revision):
+// tabs are the live session tabs and the SFTP tabs that are connected or
+// have paused transfers; transfers are the queued, running, waiting and
+// paused transfers of every SFTP tab.
+func (m Model) openWork() (tabs, transfers int) {
 	for _, t := range m.tabs {
-		if t.sftp == nil && !t.done {
-			n++
+		switch {
+		case t.sftp != nil:
+			n := t.sftp.view.Pending()
+			transfers += n
+			if !t.sftp.disconnected || n > 0 {
+				tabs++
+			}
+		case !t.done:
+			tabs++
 		}
 	}
-	return n
+	return tabs, transfers
+}
+
+// plural is "1 tab" or "3 tabs".
+func plural(n int, word string) string {
+	if n == 1 {
+		return "1 " + word
+	}
+	return fmt.Sprintf("%d %ss", n, word)
+}
+
+// quitQuestion is the FR-TAB-009 question: "Quit and close 2 tabs? 3
+// transfers will stop."
+func quitQuestion(tabs, transfers int) string {
+	q := "Quit and close " + plural(tabs, "tab") + "?"
+	if transfers > 0 {
+		q += " " + plural(transfers, "transfer") + " will stop."
+	}
+	return q
 }
 
 // quitKeyQuits reports whether q quits on the Hosts tab's screen: the
@@ -331,17 +360,18 @@ func (m Model) quitKeyQuits() bool {
 	return false
 }
 
-// quit quits sshelf, asking first while sessions are live (FR-TAB-009).
+// quit quits sshelf, asking first while sessions are live, SFTP tabs are
+// connected or transfers are pending (FR-TAB-009 M3 revision). On y,
+// closeAllAndQuit closes every tab, cancelling the transfers.
 func (m Model) quit() (tea.Model, tea.Cmd) {
-	n := m.liveSessions()
-	if n == 0 {
+	tabs, transfers := m.openWork()
+	if tabs == 0 && transfers == 0 {
 		m.cancelAttempt()
 		return m, tea.Quit
 	}
 	if !m.quitAsked {
 		m.quitAsked = true
-		q := fmt.Sprintf("Quit and close %d session%s?", n, map[bool]string{true: "", false: "s"}[n == 1])
-		m.modals = append(m.modals, confirm.New(q, quitMsg{}))
+		m.modals = append(m.modals, confirm.New(quitQuestion(tabs, transfers), quitMsg{}))
 	}
 	return m, nil
 }

@@ -180,6 +180,19 @@ var hostLabels = []string{"web-prod", "web-test", "web-uat"}
 // own sshtest server: web-prod, web-test and web-uat.
 func startServers(t *testing.T, bin string, n int, env ...string) *slice {
 	t.Helper()
+	return startWith(t, bin, n, launch{env: env})
+}
+
+// launch adds to what startWith sets up.
+type launch struct {
+	env  []string         // added to sshelf's minimal environment
+	opts []sshtest.Option // for every server
+	dir  string           // sshelf's working directory; "" is the test's
+}
+
+// startWith is startServers with server options and a working directory.
+func startWith(t *testing.T, bin string, n int, l launch) *slice {
+	t.Helper()
 	if _, err := exec.LookPath("stty"); err != nil {
 		t.Skip("stty not available")
 	}
@@ -195,7 +208,7 @@ func startServers(t *testing.T, bin string, n int, env ...string) *slice {
 	srvs := make([]*sshtest.Server, n)
 	var known, hosts []string
 	for i := range srvs {
-		srvs[i] = sshtest.New(t, sshtest.WithAuthorizedKey("demo", pub))
+		srvs[i] = sshtest.New(t, append([]sshtest.Option{sshtest.WithAuthorizedKey("demo", pub)}, l.opts...)...)
 		known = append(known, srvs[i].KnownHostsLine())
 		hosts = append(hosts, fmt.Sprintf(`{"id": "0192a000-0000-7000-8000-00000000000%d", "label": %q, "hostname": "127.0.0.1",
              "port": %d, "user": "demo", "identity_id": "0192a000-0000-7000-8000-000000000001"}`, i+2, hostLabels[i], srvs[i].Port()))
@@ -236,7 +249,8 @@ func startServers(t *testing.T, bin string, n int, env ...string) *slice {
 	s.cmd.Env = []string{
 		"HOME=" + home, "XDG_CONFIG_HOME=" + xdg, "TERM=xterm-256color", "PATH=" + os.Getenv("PATH"),
 	}
-	s.cmd.Env = append(s.cmd.Env, env...)
+	s.cmd.Env = append(s.cmd.Env, l.env...)
+	s.cmd.Dir = l.dir
 	s.cmd.Stdin, s.cmd.Stdout, s.cmd.Stderr = tty, tty, tty
 	// A new session without a controlling terminal: sshelf only needs its
 	// stdin to be a TTY. With Setctty, macOS revokes and resets the slave

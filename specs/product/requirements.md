@@ -1040,7 +1040,7 @@ duplicates.
 ### FR-SFTP-001 · Copy between the panes
 When the user presses `c` in a pane, the system shall copy the marked entries, or the entry under the cursor if none is marked, into the other pane's current directory, uploading from local to remote and downloading from remote to local, and copying directories recursively.
 
-- **Priority:** M3 · **Status:** Draft · **Source:** D-017, D-018 (was `Later` "Transfer a single file")
+- **Priority:** M3 · **Status:** Implemented · **Source:** D-017, D-018 (was `Later` "Transfer a single file")
 - **Acceptance:**
   - A 100 MiB file uploaded and then downloaded again has the same SHA-256 as the original (sshtest SFTP subsystem, ARCH-TEST-004).
   - A directory tree with three levels, an empty directory and 200 small files is copied in both directions with the same relative paths and contents. Directories are created before their contents.
@@ -1052,7 +1052,7 @@ When the user presses `c` in a pane, the system shall copy the marked entries, o
 ### FR-SFTP-002 · Open an SFTP tab from the host list
 When the user presses `s` on a host in the host list, the system shall connect to that host through the normal connect flow and, once connected, open an SFTP tab for it after the last tab and focus it.
 
-- **Priority:** M3 · **Status:** Draft · **Source:** D-017 (was `Later` "SFTP browser")
+- **Priority:** M3 · **Status:** Implemented · **Source:** D-017 (was `Later` "SFTP browser")
 - **Acceptance:**
   - Dialling, host-key checks (TOFU, changed key), prompts and authentication happen exactly as for `enter` (FR-TAB-002, ARCH-SESS-002); no tab opens if any of them fails or is cancelled.
   - The connection opens no shell and no PTY: sshtest records one `subsystem sftp` request per SFTP channel and no `pty-req` or `shell`.
@@ -1063,7 +1063,7 @@ When the user presses `s` on a host in the host list, the system shall connect t
 ### FR-SFTP-003 · Open SFTP from a session without logging in again
 While a live session tab is focused, when the user presses `Ctrl+]` `s`, the system shall open an SFTP tab on that session's SSH connection, without dialling or authenticating again, or focus the SFTP tab that already uses that connection.
 
-- **Priority:** M3 · **Status:** Draft · **Source:** D-018
+- **Priority:** M3 · **Status:** Implemented · **Source:** D-018
 - **Acceptance:**
   - sshtest records no new TCP connection and no auth attempt; it records a new `subsystem sftp` channel on the session's existing connection. No credential is read from the store (`MemStore` counts zero `Get`).
   - A second `Ctrl+]` `s` on the same session, or on another session tab of the same connection, focuses the existing SFTP tab instead of opening a second one. A session tab on a different connection to the same host gets its own SFTP tab.
@@ -1072,7 +1072,7 @@ While a live session tab is focused, when the user presses `Ctrl+]` `s`, the sys
 ### FR-SFTP-004 · A shared connection outlives either tab
 While a session tab and an SFTP tab share one SSH connection, the system shall keep that connection open until both tabs have ended or been closed.
 
-- **Priority:** M3 · **Status:** Draft · **Source:** D-018
+- **Priority:** M3 · **Status:** Implemented · **Source:** D-018
 - **Acceptance:**
   - `exit` in the shell ends the session tab (`✕`, FR-CONN-005); the SFTP tab keeps listing, and a transfer that was running completes with the right checksum. sshtest records the session channel close and no connection close.
   - Closing the SFTP tab (FR-SFTP-025) leaves the session tab live and echoing input.
@@ -1082,7 +1082,7 @@ While a session tab and an SFTP tab share one SSH connection, the system shall k
 ### FR-SFTP-005 · Starting directories
 When an SFTP tab opens, the system shall show the directory sshelf was started in on the local pane, or the user's home directory if that directory can no longer be read, and the remote user's home directory as the server reports it on the remote pane, with the remote pane focused.
 
-- **Priority:** M3 · **Status:** Draft · **Source:** D-017
+- **Priority:** M3 · **Status:** Implemented · **Source:** D-017
 - **Rationale:** most people start sshelf from a shell, so the working directory is where they were about to put or pick files (as `sftp`, `scp` and Midnight Commander do). `~` jumps to the home directory in one key (FR-SFTP-007).
 - **Acceptance:**
   - With sshelf started in a temp dir, the local pane shows that dir. After that dir is deleted, a new SFTP tab starts in `$HOME`.
@@ -1169,7 +1169,7 @@ When the user presses `R`, the system shall list both panes' current directories
 ### FR-SFTP-014 · Progress line
 While a transfer is running, the system shall show one line under the panes with the direction, name, bytes done and total, a 10-cell bar, the percentage and the current rate of the oldest running transfer, and the number of other running and queued transfers.
 
-- **Priority:** M3 · **Status:** Draft · **Source:** D-017, the approved layout
+- **Priority:** M3 · **Status:** Implemented · **Source:** D-017, the approved layout
 - **Acceptance:**
   - Golden: ` ↓ backup.tar.gz  412/840 MB  █████░░░░░ 49%  12 MB/s  +1 running, 3 queued` (↓ download, ↑ upload). The percentage is always shown as text, so the bar is not the only cue (NFR-UX-003). When the line does not fit, the counts, then the bar, then the rate are dropped, and the name is cut with `…`.
   - The rate is a moving average over the last 5 s. The line is redrawn at most 4 times a second (ARCH-SFTP-003).
@@ -1178,7 +1178,7 @@ While a transfer is running, the system shall show one line under the panes with
 ### FR-SFTP-015 · Transfers view: cancel and retry
 When the user presses `t`, the system shall show the tab's transfers with, for each, its direction, name, state, bytes done and total, rate and estimated time left, and shall let the user cancel a queued, running, waiting or paused transfer and retry a failed or cancelled one.
 
-- **Priority:** M3 · **Status:** Draft · **Source:** D-018
+- **Priority:** M3 · **Status:** Implemented · **Source:** D-018
 - **Acceptance:**
   - States are `queued`, `running`, `waiting` (an existing target needs an answer), `paused` (connection lost), `done`, `failed: <reason>`, `cancelled` and `skipped`, written as text (NFR-UX-003). ETA is `—` while the rate is 0.
   - Keys: ↑/↓ move, `x` cancels the selected transfer, `r` retries it from the start (or resumes it, FR-SFTP-017), `enter` on a `waiting` transfer reopens its question (FR-SFTP-016), `C` removes finished rows, `t` or Esc returns to the panes.
@@ -1189,7 +1189,7 @@ When the user presses `t`, the system shall show the tab's transfers with, for e
 ### FR-SFTP-016 · Existing targets
 If a file to be copied already exists in the target directory, then the system shall ask whether to overwrite it, skip it, or copy it under a new name, with an option to apply the same answer to the rest of that copy, and shall act only on the answer.
 
-- **Priority:** M3 · **Status:** Draft · **Source:** D-018
+- **Priority:** M3 · **Status:** Implemented · **Source:** D-018
 - **Acceptance:**
   - The modal shows both sides' size and modification time: "backup.tar.gz already exists (remote 840 MB, Oct 29 10:12; local 812 MB, Oct 28 09:00). [o] Overwrite · [s] Skip · [n] Keep both · [a] apply to all · [esc] Skip". `a` toggles "apply to all" before the choice.
   - "Keep both" copies to `<stem> (1)<ext>`, then `(2)` and so on, using the first free name (`backup (1).tar.gz`).
@@ -1212,7 +1212,7 @@ When an interrupted transfer is started again in the same sshelf run, the system
 ### FR-SFTP-018 · Connection lost: pause and reconnect
 If an SFTP tab's connection drops, then the system shall pause its running and queued transfers, keep the panes' last listings, and on `r` reconnect through the normal connect flow and resume the paused transfers.
 
-- **Priority:** M3 · **Status:** Draft · **Source:** D-018
+- **Priority:** M3 · **Status:** Implemented · **Source:** D-018
 - **Acceptance:**
   - After sshtest drops the connection mid-transfer: the tab shows `✕`, the progress line shows `⏸ N transfers paused: connection lost · r reconnect`, and operations other than browsing the local pane, `t`, `r` and `x` are refused with "not connected".
   - `r` opens the Connecting flow (modals over the tab); on success the tab uses the new connection, both panes refresh, and paused transfers resume (FR-SFTP-017) in their original order. A failed or cancelled reconnect leaves the tab disconnected with the error shown.
@@ -1258,7 +1258,7 @@ While an SFTP tab is focused and no modal is open, the system shall focus the pa
 ### FR-SFTP-022 · Drag to copy
 When the user presses the left button on an entry in one pane and releases it over the other pane, the system shall copy the marked entries, or the pressed entry if it is not marked, into the other pane's current directory, as `c` does.
 
-- **Priority:** M3 · **Status:** Draft · **Source:** D-017
+- **Priority:** M3 · **Status:** Implemented · **Source:** D-017
 - **Acceptance:**
   - While the button is held after moving off the pressed row, the progress line shows the hint `drag: copy 3 items to Remote: /home/pi · release over the other pane`, and the pane under the pointer has its border highlighted.
   - Releasing over the same pane, the header, the progress line or the footer copies nothing and clears the hint. Releasing on a directory row of the other pane still copies into that pane's current directory (no drop into subdirectories).
@@ -1287,7 +1287,7 @@ If an SFTP operation fails or skips entries, then the system shall say so on the
 ### FR-SFTP-025 · Close an SFTP tab
 When the user presses `Ctrl+]` `q` on an SFTP tab and confirms, or `x` on a disconnected SFTP tab, the system shall cancel the tab's transfers, close its SFTP channels, release its connection, and close the tab.
 
-- **Priority:** M3 · **Status:** Draft · **Source:** D-018
+- **Priority:** M3 · **Status:** Implemented · **Source:** D-018
 - **Acceptance:**
   - The question is "Close SFTP tab 2?", with "3 transfers will stop." when any are queued, running, waiting or paused; it defaults to No.
   - Cancelled transfers remove their part files as in FR-SFTP-015.
@@ -1368,7 +1368,7 @@ While any tab is focused and no modal is open, when the user presses `Ctrl+]`, t
   - After `Ctrl+]`, the status bar shows `Ctrl+] …` until the next key. Esc, or any key that is not a command, cancels the prefix and is not sent to the remote. There is no timeout.
   - `Ctrl+]` `?` opens a help overlay listing every prefix command, generated from `ui/keys` (ARCH-UI-004); `?` or Esc closes it.
   - On the Hosts tab the prefix key works on every screen, including while a text field is focused; `q` and `[` do nothing there.
-- **M3 revision** · Priority: M3 · Status: Draft · Source: D-017, D-018
+- **M3 revision** · Priority: M3 · Status: Implemented · Source: D-017, D-018
   - *Revised:* While any tab is focused and no modal is open, when the user presses `Ctrl+]`, the system shall treat the next key as a tab command (`q` disconnect or close, `?` help, `h` or `0` Hosts tab, `1`–`9` tab, `n` next tab, `p` previous tab, `[` scrollback mode, `s` SFTP tab for this host, `Ctrl+]` send a literal `Ctrl+]`) and shall send neither key to the remote.
   - *Acceptance:* the M2 criteria above, unchanged, plus:
     - `Ctrl+]` `s` on a live session tab opens or focuses the SFTP tab on that session's connection (FR-SFTP-003); on an ended session tab it opens an SFTP tab for the same host through the normal connect flow (FR-SFTP-002); on the Hosts tab and on an SFTP tab it does nothing.
@@ -1410,7 +1410,7 @@ When the user quits sshelf (`q` on the host list or the Welcome screen, or Ctrl+
   - The confirmation defaults to No: `n`, Enter and Esc keep sshelf running with every session intact.
   - Ended tabs do not count. With no live session, `q` quits at once as in the MVP.
   - SIGTERM and SIGHUP close every session without asking, restore the terminal and exit 0.
-- **M3 revision** · Priority: M3 · Status: Draft · Source: D-017, D-018
+- **M3 revision** · Priority: M3 · Status: Implemented · Source: D-017, D-018
   - *Revised:* When the user quits sshelf (`q` on the host list or the Welcome screen, or Ctrl+C on the Hosts tab) while at least one session is live, an SFTP tab is connected, or a transfer is queued, running or paused, the system shall ask "Quit and close N tabs?", followed by "M transfers will stop." when M is not zero, and quit only on `y`.
   - *Acceptance:*
     - N counts live session tabs and SFTP tabs that are connected or have paused transfers; M counts queued, running, paused and waiting transfers in every SFTP tab.

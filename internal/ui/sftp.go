@@ -50,12 +50,6 @@ type sftpOnFailedMsg struct {
 // could not be opened on it (FR-SFTP-003).
 const sftpNoticeHold = 5 * time.Second
 
-// sftpService is the service's SFTP part, if it has one.
-func (m Model) sftpService() (app.SFTPService, bool) {
-	s, ok := m.svc.(app.SFTPService)
-	return s, ok
-}
-
 // focusedSFTP returns the focused tab if it is an SFTP tab.
 func (m Model) focusedSFTP() *sessionTab {
 	if m.focus <= 0 || m.focus > len(m.tabs) {
@@ -80,10 +74,10 @@ func localHome() string {
 // connect flow (FR-SFTP-002): the Connecting modal, host-key checks and
 // prompts as for a session.
 func (m Model) startSFTPConnect(hostID domain.ID, label string) (tea.Model, tea.Cmd) {
-	svc, ok := m.sftpService()
-	if !ok || m.cancel != nil {
-		return m, nil
+	if m.cancel != nil {
+		return m, nil // one attempt at a time
 	}
+	svc := m.svc
 	ctx, cancel := context.WithCancel(context.Background())
 	m.attempt++
 	m.attemptHost, m.attemptTab, m.attemptAddr = hostID, 0, ""
@@ -106,13 +100,9 @@ func (m Model) openSFTPOn(t *sessionTab) (tea.Model, tea.Cmd) {
 	if num := m.sftpTabOn(t.sess.ConnID()); num > 0 {
 		return m.focusNum(num)
 	}
-	svc, ok := m.sftpService()
-	if !ok {
-		return m, nil
-	}
-	s, num, hostID, label := t.sess, t.num, t.hostID, t.label
+	svc, s, num, hostID, label := m.svc, t.sess, t.num, t.hostID, t.label
 	return m, func() tea.Msg {
-		b, err := svc.OpenSFTPOn(s)
+		b, err := svc.OpenSFTPOn(s, hostID)
 		if err != nil {
 			return sftpOnFailedMsg{num: num, err: err}
 		}

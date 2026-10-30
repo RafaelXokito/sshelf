@@ -198,10 +198,10 @@ func (m Model) updateTransfers(msg tea.Msg) (Model, tea.Cmd, bool) {
 // flow (FR-SFTP-018): the Connecting modal over the tab, then
 // ReconnectSFTP, which resumes the paused transfers.
 func (m Model) reconnectSFTP(t *sessionTab) (tea.Model, tea.Cmd) {
-	svc, ok := m.sftpService()
-	if !ok || m.cancel != nil {
-		return m, nil
+	if m.cancel != nil {
+		return m, nil // one attempt at a time
 	}
+	svc := m.svc
 	ctx, cancel := context.WithCancel(context.Background())
 	m.attempt++
 	m.attemptHost, m.attemptTab = t.hostID, t.num

@@ -318,7 +318,7 @@ func TestSEC_LOG_001_CanaryHarnessM2(t *testing.T) {
 	// Disconnect tab 1 with its confirmation, then quit with tab 2 open.
 	step("\x1dq", "Disconnect m2-typed?")
 	step("y", "enter connect")
-	step("q", "Quit and close 1 session?")
+	step("q", "Quit and close 1 tab?")
 	c.typeKeys("y")
 	c.waitQuit()
 

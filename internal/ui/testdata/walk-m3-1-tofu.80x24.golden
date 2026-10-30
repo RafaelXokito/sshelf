@@ -1,0 +1,24 @@
+sshelf │[Hosts]│
+
+╭─────────────────────────────────────────────────────────────╮
+│ Connecting to web-prod…                                     │
+│                                                             │
+│ › dialling → · verifying → · authenticating    [esc] Cancel │
+╰─────────────────────────────────────────────────────────────╯
+
+╭────────────────────────────────────────────────────────────────────╮
+│ Unknown host key                                                   │
+│                                                                    │
+│ sshelf has never seen this host's key. Check the                   │
+│ fingerprint with the server's owner before you trust it.           │
+│                                                                    │
+│   Host:         10.0.0.10                                          │
+│   Port:         22                                                 │
+│   Key type:     ssh-ed25519                                        │
+│   Fingerprint:  SHA256:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU │
+│                                                                    │
+│ [y] Trust and save    [enter/esc] Cancel                           │
+│ No credentials are sent until you choose.                          │
+╰────────────────────────────────────────────────────────────────────╯
+
+y trust and save • enter/esc cancel

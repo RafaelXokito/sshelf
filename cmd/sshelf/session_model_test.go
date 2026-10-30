@@ -61,7 +61,7 @@ func newLiveModel(t *testing.T) *liveModel {
 	lm := &liveModel{t: t, m: loadModel(t, svc), srv: srv}
 	t.Cleanup(func() {
 		if m, ok := lm.m.(ui.Model); ok {
-			m.CloseSessions()
+			m.CloseTabs()
 		}
 	})
 	return lm

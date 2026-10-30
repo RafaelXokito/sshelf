@@ -16,6 +16,17 @@ const (
 	Remote
 )
 
+// Other returns the other side.
+func (s Side) Other() Side { return 1 - s }
+
+// String is "Local" or "Remote", as the pane titles say.
+func (s Side) String() string {
+	if s == Remote {
+		return "Remote"
+	}
+	return "Local"
+}
+
 // Kind is what an entry is, as Lstat reports it (links are not followed).
 type Kind int
 

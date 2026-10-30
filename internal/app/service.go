@@ -73,6 +73,9 @@ type Service interface {
 	// ImportSSHConfig copies ~/.ssh/config into config.json once. See
 	// App.ImportSSHConfig.
 	ImportSSHConfig(ctx context.Context) (ImportReport, error)
+	// SFTPService opens SFTP tabs: OpenSFTP, OpenSFTPOn and
+	// ReconnectSFTP (design §8.9).
+	SFTPService
 }
 
 // SavedHost is the result of Service.SaveHost.

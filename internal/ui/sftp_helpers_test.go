@@ -49,7 +49,7 @@ func (s *sftpService) OpenSFTP(_ context.Context, id domain.ID) (app.Browser, er
 	return s.next()
 }
 
-func (s *sftpService) OpenSFTPOn(sess app.Session) (app.Browser, error) {
+func (s *sftpService) OpenSFTPOn(sess app.Session, _ domain.ID) (app.Browser, error) {
 	s.checkGoroutine("OpenSFTPOn")
 	s.mu.Lock()
 	s.openedOn = append(s.openedOn, sess)
@@ -69,7 +69,7 @@ func (s *sftpService) ReconnectSFTP(_ context.Context, b app.Browser) error {
 	return err
 }
 
-var _ app.SFTPService = (*sftpService)(nil)
+var _ app.Service = (*sftpService)(nil)
 
 // piHosts is the approved layout's host.
 var piHosts = []domain.Host{{Meta: domain.Meta{ID: "pi"}, Label: "raspberrypi4", Hostname: "192.168.1.20", User: "pi"}}

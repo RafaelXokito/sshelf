@@ -118,6 +118,24 @@ func (f *fakeService) Connect(_ context.Context, id domain.ID, size app.Size) (a
 	return framed, nil
 }
 
+// OpenSFTP is refused: sftpService opens SFTP tabs.
+func (f *fakeService) OpenSFTP(context.Context, domain.ID) (app.Browser, error) {
+	f.checkGoroutine("OpenSFTP")
+	return nil, app.ErrNoSFTP
+}
+
+// OpenSFTPOn is refused: sftpService opens SFTP tabs.
+func (f *fakeService) OpenSFTPOn(app.Session, domain.ID) (app.Browser, error) {
+	f.checkGoroutine("OpenSFTPOn")
+	return nil, app.ErrNoSFTP
+}
+
+// ReconnectSFTP is refused: sftpService opens SFTP tabs.
+func (f *fakeService) ReconnectSFTP(context.Context, app.Browser) error {
+	f.checkGoroutine("ReconnectSFTP")
+	return app.ErrNoSFTP
+}
+
 // driver runs the root model the way tea.Program does: Update on one
 // goroutine, every command on another.
 type driver struct {

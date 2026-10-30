@@ -652,7 +652,7 @@ order and rebase rather than resolve by hand.
 - **Delivers:** `app.Service.OpenSFTP(ctx, hostID)` through the normal connect flow, `OpenSFTPOn` and `ReconnectSFTP` returning `*files.Browser` as `app.Browser`; `ErrNoSFTP`; the root model's quit path closing SFTP tabs (`CloseTabs`), the FR-TAB-009 question with tab and transfer counts, SIGTERM/SIGHUP cancelling transfers; the M3 walk-through; PTY E2E of upload and download.
 - **Satisfies:** FR-SFTP-002, FR-SFTP-003, FR-SFTP-004, FR-SFTP-025, FR-TAB-009 (M3 revision), FR-TAB-005 (M3 revision), ARCH-UI-001 (M3 revision), ARCH-SFTP-007, ARCH-SFTP-002
 - **Depends on:** T-048, T-050, T-052, T-053
-- **Tests:** `TestFR_SFTP_002_E2EOpenFromHostList` (no `pty-req`), `TestFR_SFTP_002_NoSftpNoTab`, `TestFR_SFTP_003_E2ESameConnectionNoAuth`, `TestFR_SFTP_004_E2ECloseEitherFirst`, `TestFR_SFTP_025_E2ECloseReleases`, `TestFR_TAB_009_M3_QuestionCounts`, `TestFR_TAB_009_M3_SigtermCancelsTransfers`, `TestARCH_UI_001_M3_Walkthrough`, `TestARCH_SFTP_007_QuitClosesAll`, `TestFR_SFTP_001_E2EUploadDownload` (PTY, checksums).
+- **Tests:** `TestFR_SFTP_002_E2EOpenFromHostList` (no `pty-req`), `TestFR_SFTP_002_NoSftpNoTab`, `TestFR_SFTP_003_E2ESameConnectionNoAuth`, `TestFR_SFTP_004_E2ECloseEitherFirst`, `TestFR_SFTP_025_E2ECloseReleases`, `TestFR_TAB_009_M3_QuestionCounts`, `TestFR_TAB_009_M3_SigtermCancelsTransfers`, `TestARCH_UI_001_M3_Walkthrough`, `TestARCH_SFTP_007_QuitClosesAll`, `TestFR_SFTP_001_E2EUploadDownload` (PTY, checksums), `TestFR_SFTP_018_E2EResumeAfterDrop` (PTY: a download and an upload dropped at 20 MiB resume after `r`).
 - **Done when:** the PTY suite uploads and downloads against sshtest on Linux and macOS, and every connection close is counted exactly once.
 - **Estimate:** 2 d
 
@@ -1115,7 +1115,7 @@ first.
 | FR-SFTP-015 | T-051, T-053 |
 | FR-SFTP-016 | T-051, T-053 |
 | FR-SFTP-017 | T-052 |
-| FR-SFTP-018 | T-052, T-053 |
+| FR-SFTP-018 | T-052, T-053, T-054 |
 | FR-SFTP-019 | T-055, T-059 |
 | FR-SFTP-020 | T-055 |
 | FR-SFTP-021 | T-056, T-059 |

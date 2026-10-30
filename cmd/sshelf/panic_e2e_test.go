@@ -161,7 +161,7 @@ func TestARCH_SESS_005_M2_OtherSessionSurvivesPanic(t *testing.T) {
 	}
 	s.prefix("h")
 	s.typeKeys("q")
-	s.waitText(off, "Quit and close 1 session?")
+	s.waitText(off, "Quit and close 1 tab?")
 	s.typeKeys("y")
 	s.waitQuit()
 	s.checkCrash()

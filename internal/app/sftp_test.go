@@ -36,7 +36,7 @@ func TestFR_SFTP_004_OpenSFTPOnSharesConn(t *testing.T) {
 	}
 	defer func() { _ = s.Close() }()
 	attempts := len(srv.AuthAttempts())
-	r, err := a.OpenSFTPOn(s)
+	r, err := a.OpenSFTPOn(s, "h1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +52,7 @@ func TestFR_SFTP_004_OpenSFTPOnSharesConn(t *testing.T) {
 	}
 	_ = s.Close()
 	<-s.Done()
-	if _, err := r.List(context.Background(), r.Start()); err != nil {
+	if _, err := r.List(context.Background(), Remote, r.Start(Remote)); err != nil {
 		t.Fatalf("listing after the session closed: %v", err)
 	}
 	if n := disconnectCount(srv); n != 0 {
@@ -62,7 +62,7 @@ func TestFR_SFTP_004_OpenSFTPOnSharesConn(t *testing.T) {
 	if !srv.WaitFor(time.Second, func() bool { return disconnectCount(srv) == 1 }) {
 		t.Fatalf("closes = %+v, want one connection close", srv.Closes())
 	}
-	if _, err := a.OpenSFTPOn(s); !errors.Is(err, sshclient.ErrConnClosed) {
+	if _, err := a.OpenSFTPOn(s, "h1"); !errors.Is(err, sshclient.ErrConnClosed) {
 		t.Fatalf("OpenSFTPOn after the connection closed = %v, want ErrConnClosed", err)
 	}
 }
@@ -79,7 +79,7 @@ func TestFR_SFTP_003_NoSFTPKeepsSession(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = s.Close() }()
-	if _, err := a.OpenSFTPOn(s); !errors.Is(err, ErrNoSFTP) {
+	if _, err := a.OpenSFTPOn(s, "h1"); !errors.Is(err, ErrNoSFTP) {
 		t.Fatalf("OpenSFTPOn = %v, want ErrNoSFTP", err)
 	}
 	select {
@@ -93,7 +93,7 @@ func TestFR_SFTP_003_NoSFTPKeepsSession(t *testing.T) {
 }
 
 func TestFR_SFTP_004_OpenSFTPOnNeedsConn(t *testing.T) {
-	if _, err := New(Config{}).OpenSFTPOn(nil); !errors.Is(err, ErrNoSharedConn) {
+	if _, err := New(Config{}).OpenSFTPOn(nil, ""); !errors.Is(err, ErrNoSharedConn) {
 		t.Fatalf("err = %v, want ErrNoSharedConn", err)
 	}
 }

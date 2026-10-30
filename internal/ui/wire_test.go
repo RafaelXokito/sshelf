@@ -72,7 +72,7 @@ func TestARCH_SESS_010_CloseSessionsClosesEveryTab(t *testing.T) {
 	connectHost(t, d, "h1")
 	connectHost(t, d, "h2")
 	endTab(d, 2, b, nil)
-	d.root().CloseSessions()
+	d.root().CloseTabs()
 	if a.Closes() != 1 || b.Closes() != 1 {
 		t.Fatalf("Close calls: %d, %d", a.Closes(), b.Closes())
 	}

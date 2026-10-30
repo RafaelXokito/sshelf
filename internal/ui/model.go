@@ -116,7 +116,7 @@ type Model struct {
 	prefix  bool          // ctrl+] seen, waiting for the command key (design §8.5)
 
 	attemptTab int  // the ended tab the attempt in progress reconnects; 0 for a new tab
-	quitAsked  bool // the "Quit and close N sessions?" confirmation is open
+	quitAsked  bool // the "Quit and close N tabs?" confirmation is open
 
 	// fg and bg are the terminal's default colours once Bubble Tea
 	// reports them; every session answers OSC 10/11 with them
@@ -210,7 +210,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if t := m.focusedSFTP(); t != nil {
 			return m.sftpKey(t, msg)
 		}
-		if key.Matches(msg, keys.Quit) && m.quitKeyQuits() && m.liveSessions() > 0 {
+		if tabs, transfers := m.openWork(); key.Matches(msg, keys.Quit) && m.quitKeyQuits() && tabs+transfers > 0 {
 			return m.quit() // q on the host list or Welcome asks first (FR-TAB-009)
 		}
 		if m.screen == nil {

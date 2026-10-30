@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"log/slog"
 
 	"github.com/RafaelXokito/sshelf/internal/domain"
 	"github.com/RafaelXokito/sshelf/internal/files"
@@ -12,6 +13,25 @@ import (
 // ErrCannotReconnect means ReconnectSFTP was given a browser that does not
 // belong to internal/files (a test double).
 var ErrCannotReconnect = errors.New("browser cannot reconnect")
+
+// OpenSFTP implements Service (FR-SFTP-002): it connects to the host
+// through the normal connect flow (dialling, host-key checks, prompts,
+// authentication, exactly as Connect) and opens an SFTP tab's browser on
+// the new connection, with no shell and no PTY. If the server refuses the
+// subsystem it closes the connection and reports ErrNoSFTP.
+func (a *App) OpenSFTP(ctx context.Context, hostID domain.ID) (Browser, error) {
+	h, lease, err := a.dial(ctx, hostID)
+	if err != nil {
+		return nil, err
+	}
+	b, err := files.Open(lease, files.Options{HostID: hostID}) // owns the lease, also on failure
+	if err != nil {
+		slog.Debug("sftp: open failed", "host", h.Label, "err", err)
+		return nil, err // never a typed nil inside the interface
+	}
+	slog.Debug("sftp: open", "host", h.Label)
+	return b, nil
+}
 
 // reattacher is what *files.Browser offers for a reconnect.
 type reattacher interface {
@@ -38,11 +58,7 @@ func (a *App) ReconnectSFTP(ctx context.Context, b Browser) error {
 		lease.Release()
 		return err
 	}
-	err = r.Attach(lease) // owns the lease, also on failure
-	if errors.Is(err, files.ErrNoSFTP) {
-		return ErrNoSFTP
-	}
-	return err
+	return r.Attach(lease) // owns the lease, also on failure
 }
 
 // ErrNoSharedConn means a session does not run on a shared connection
@@ -55,13 +71,14 @@ type connHolder interface {
 	Conn() *sshclient.Conn
 }
 
-// OpenSFTPOn opens the remote side of an SFTP tab on the connection of s,
-// with a second lease and without dialling or authenticating again
-// (ADR-017, design §8.8, FR-SFTP-003). It fails with
-// sshclient.ErrConnClosed once that connection has ended and with
-// ErrNoSFTP when the server refuses the subsystem; the session keeps
-// running either way. T-054 wraps the result in the tab's app.Browser.
-func (a *App) OpenSFTPOn(s Session) (*files.RemoteFS, error) {
+// OpenSFTPOn implements Service: it opens an SFTP tab's browser on the
+// connection of s, with a second lease and without dialling or
+// authenticating again (ADR-017, design §8.8, FR-SFTP-003). hostID is the
+// session's host, which a later reconnect of the tab dials (FR-SFTP-018).
+// It fails with sshclient.ErrConnClosed once that connection has ended
+// and with ErrNoSFTP when the server refuses the subsystem; the session
+// keeps running either way.
+func (a *App) OpenSFTPOn(s Session, hostID domain.ID) (Browser, error) {
 	h, ok := s.(connHolder)
 	if !ok {
 		return nil, ErrNoSharedConn
@@ -70,9 +87,9 @@ func (a *App) OpenSFTPOn(s Session) (*files.RemoteFS, error) {
 	if err != nil {
 		return nil, err
 	}
-	r, err := files.OpenRemote(lease) // owns the lease, also on failure
-	if errors.Is(err, files.ErrNoSFTP) {
-		return nil, ErrNoSFTP
+	b, err := files.Open(lease, files.Options{HostID: hostID}) // owns the lease, also on failure
+	if err != nil {
+		return nil, err
 	}
-	return r, err
+	return b, nil
 }
