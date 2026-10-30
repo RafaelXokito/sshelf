@@ -2,6 +2,7 @@ package keys
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	"charm.land/bubbles/v2/key"
@@ -65,6 +66,29 @@ func TestNFR_UX_001_EveryActionBound(t *testing.T) {
 	actions := MouseActions()
 	if len(actions) == 0 {
 		t.Fatal("no mouse actions")
+	}
+	// The SFTP tab's mouse actions (FR-SFTP-021, FR-SFTP-022) are among
+	// them, each with a binding of the SFTP panes' keymap.
+	var panes Map
+	for _, m := range maps {
+		if m.Name == "sftp panes" {
+			panes = m
+		}
+	}
+	sftp := 0
+	for _, a := range actions {
+		if !strings.HasPrefix(a.Name, "sftp: ") {
+			continue
+		}
+		sftp++
+		for _, b := range a.Keys {
+			if !slices.ContainsFunc(panes.Bindings, func(o key.Binding) bool { return slices.Equal(o.Keys(), b.Keys()) }) {
+				t.Errorf("mouse action %q: binding %q is not an SFTP pane key", a.Name, b.Help().Desc)
+			}
+		}
+	}
+	if sftp < 6 {
+		t.Errorf("%d SFTP mouse actions, want click, border, double-click, wheel, progress line and drag", sftp)
 	}
 	for _, a := range actions {
 		if len(a.Keys) == 0 {

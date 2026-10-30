@@ -992,21 +992,21 @@ removed in revision 2.
 **ARCH-UI-005**: The system shall draw every frame as one header row with the tab bar, then either the Hosts tab's MVP layout (blank row, screen and modals, status line, footer) or a session tab's area of `height − 2` rows, then the session's status bar, with no line wider than the terminal.
 - Priority: M2 · Status: Implemented · Source: D-009, FR-TAB-003, FR-TAB-007, NFR-UX-002
 - Acceptance: Goldens at 80×24 and 120×40 of: the host list with no sessions, the host list with 3 tabs, a live session (replayed `htop`), a session with a modal open, an ended session, scrollback mode, the prefix help overlay, and 10 tabs with overflow markers. The NFR-UX-002 helper checks widths; for session tabs it checks that the last line is the status bar. The cursor reported in `tea.View.Cursor` is the remote cursor shifted down one row, or nil when the remote hides it or a modal is open.
-- **M3 revision** · Priority: M3 · Status: Draft · Source: D-017, FR-SFTP-023
+- **M3 revision** · Priority: M3 · Status: Implemented · Source: D-017, FR-SFTP-023
   - *Revised:* The system shall draw every frame as one header row with the tab bar, then either the Hosts tab's MVP layout (blank row, screen and modals, status line, footer), a session tab's area of `height − 2` rows and its status bar, or an SFTP tab's two panes side by side, its progress line and its footer, with no line wider than the terminal.
   - *Acceptance:* The M2 goldens, plus at 80×24 and 120×40: the approved SFTP layout, the SFTP tab with a modal (rename, delete confirmation, conflict), the transfers view, the drag hint and a disconnected SFTP tab. The NFR-UX-002 helper checks widths and that the last line is the footer. `tea.View.Cursor` is nil on an SFTP tab except while the filter or a text modal is focused.
 
 **ARCH-UI-006**: The system shall compute `tea.View.MouseMode` in one function of (focused tab, modal open, scrollback mode, session ended, the focused session's requested mouse mode), following ADR-014.
 - Priority: M2 · Status: Implemented · Source: D-011, D-012, NFR-UX-001 revision
 - Acceptance: A table test covers every combination. A root-model test switches between the Hosts tab, a plain shell tab and a tab whose remote sent `?1003h`, and checks the mode of each next `View()`.
-- **M3 revision** · Priority: M3 · Status: Draft · Source: D-011, ADR-020
+- **M3 revision** · Priority: M3 · Status: Implemented · Source: D-011, ADR-020
   - *Revised:* The system shall compute `tea.View.MouseMode` in one function of (focused tab kind, modal open, scrollback mode, session ended, the focused session's requested mouse mode), with cell motion on the Hosts tab and on SFTP tabs, following ADR-014.
   - *Acceptance:* The table test gains the SFTP rows (live, disconnected, transfers view, modal open: all cell motion). A root-model test switches from a plain shell tab to an SFTP tab and back and checks the mode of each next `View()`.
 
 **ARCH-UI-007**: The system shall route each mouse press and wheel event to the single component under it, in that component's own coordinates computed from the same layout function as its `View`, and shall recognise a double-click as two left presses on the same row within 400 ms.
 - Priority: M2 · Status: Implemented · Source: D-011, ADR-014, FR-NAV-012, FR-NAV-014 … FR-NAV-017
 - Acceptance: Unit tests for each layout function compare the region reported for a target with the position of its text in `View()` (for example the column of `[ Save ]`). Double-click tests with an injected clock: 399 ms on the same row is a double-click, 401 ms is not, a different row is not, and a third press after a double-click starts over. Mouse releases and motion on sshelf screens are ignored.
-- **M3 revision** · Priority: M3 · Status: Draft · Source: D-017, FR-SFTP-021, FR-SFTP-022
+- **M3 revision** · Priority: M3 · Status: Implemented · Source: D-017, FR-SFTP-021, FR-SFTP-022
   - *Revised:* The system shall route each mouse press and wheel event to the single component under it, in that component's own coordinates computed from the same layout function as its `View`, shall recognise a double-click as two left presses on the same row within 400 ms, and, on an SFTP tab only, shall route motion with the left button held and the release to the SFTP view for dragging.
   - *Acceptance:* The M2 tests, plus: `sftpview.Layout` regions match the text positions in `View()` at 80×24, 120×40 and an odd width; a press on a local row, motion over the remote pane and a release there queue one copy; motion and release on every other sshelf screen are still ignored (table test).
 
@@ -2137,8 +2137,13 @@ the first motion event with the button held that leaves that row starts a
 drag: the view shows the hint on the progress line and highlights the pane
 under the pointer. A release over the other pane's box queues the copy
 exactly as `c` with the dragged set (the marks if the pressed entry is
-marked, otherwise that entry); any other release cancels. A press and
-release on the same row without leaving it is a click.
+marked, otherwise that entry); any other release cancels, and so does a
+modal opening during the drag. A press and release on the same row
+without leaving it is a click. A double-click counts only when both
+presses hit the same row of the same pane. The wheel moves the pane's
+scroll position and pulls its cursor along to stay on screen; a click on
+the progress line opens the transfers view (it does not close it), and
+other clicks inside the transfers view do nothing.
 
 ## 10. Testing strategy
 

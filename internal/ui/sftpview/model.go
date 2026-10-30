@@ -105,6 +105,9 @@ type Model struct {
 	tcursor       int            // the selected transfer
 	doneSeen      map[app.TransferID]bool
 	reported      map[app.BatchID]bool // finished copies already summed up
+
+	drag      drag   // a press on a row and the drag it may start (FR-SFTP-022)
+	lastPress *press // the last press on a row, for double-clicks
 }
 
 // New returns the view of SFTP tab number tab, browsing with b. The
@@ -279,6 +282,14 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		m, cmd = m.snapshot(msg.Transfers)
 	case answerMsg:
 		cmd = m.answer(msg)
+	case components.ClickMsg:
+		m, cmd = m.click(msg)
+	case components.WheelMsg:
+		m = m.wheel(msg)
+	case tea.MouseMotionMsg:
+		m = m.motion(msg.Mouse())
+	case tea.MouseReleaseMsg:
+		m, cmd = m.release(msg.Mouse())
 	default:
 		return m, nil
 	}

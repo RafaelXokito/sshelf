@@ -1247,7 +1247,7 @@ If the remote file's size or modification time differs, when the editor exits, f
 ### FR-SFTP-021 · Mouse in the SFTP tab
 While an SFTP tab is focused and no modal is open, the system shall focus the pane and select the row under a left click, act as `enter` on a double-click, scroll a pane with the wheel, and focus the tab clicked in the tab bar.
 
-- **Priority:** M3 · **Status:** Draft · **Source:** D-011, D-017
+- **Priority:** M3 · **Status:** Implemented · **Source:** D-011, D-017
 - **Acceptance:**
   - Mouse tracking is on (cell motion) while an SFTP tab is focused (ARCH-UI-006 M3 revision); the terminal's own text selection is not available there, as on the Hosts tab.
   - A click on a row focuses its pane and moves the cursor there; a click on a pane's border focuses that pane only. A double-click (ARCH-UI-007) on a directory opens it, and on a file does nothing.

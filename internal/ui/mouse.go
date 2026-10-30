@@ -81,6 +81,7 @@ func (m Model) layout() frameLayout {
 // mouseState is what the mouse mode depends on (ARCH-UI-006).
 type mouseState struct {
 	session    bool          // a session tab is focused
+	sftp       bool          // an SFTP tab is focused (M3)
 	modal      bool          // a modal is open
 	scrollback bool          // the focused session is in scrollback mode
 	ended      bool          // the focused session has ended
@@ -88,14 +89,14 @@ type mouseState struct {
 }
 
 // mouseModeFor is the mouse-mode policy (ARCH-UI-006, ADR-014): cell
-// motion on the Hosts tab and whenever a modal is open, since those are
-// sshelf's screens; on a session tab, none in scrollback mode and on an
+// motion on the Hosts tab, on an SFTP tab (M3 revision) and whenever a
+// modal is open, since those are sshelf's screens; on a session tab, none in scrollback mode and on an
 // ended session, and otherwise the mode the remote asked for. A plain
 // shell asks for none, so the terminal's own selection keeps working
 // (D-012).
 func mouseModeFor(s mouseState) tea.MouseMode {
 	switch {
-	case !s.session || s.modal:
+	case !s.session || s.sftp || s.modal:
 		return tea.MouseModeCellMotion
 	case s.scrollback || s.ended:
 		return tea.MouseModeNone
@@ -107,7 +108,7 @@ func mouseModeFor(s mouseState) tea.MouseMode {
 // the mouse reporting the focused session's remote asked for, from the
 // snapshot that frame is drawn from; it is ignored on the Hosts tab.
 func (m Model) mouseMode(requested app.MouseMode) tea.MouseMode {
-	s := mouseState{modal: len(m.modals) > 0}
+	s := mouseState{modal: len(m.modals) > 0, sftp: m.focusedSFTP() != nil}
 	if t := m.focused(); t != nil {
 		s.session, s.scrollback, s.ended = true, t.scroll != nil, t.done
 		s.requested = remoteMouseMode(requested)
@@ -141,7 +142,8 @@ func (m Model) sessionArea() region {
 // updateMouse handles the mouse messages; ok is false for other messages.
 // While a session is focused and no modal is open, every mouse event
 // belongs to the session (forwardMouse). Releases and motion are ignored
-// on sshelf's screens (ARCH-UI-007).
+// on sshelf's screens, except on an SFTP tab with no modal open, whose
+// view uses them to drag (ARCH-UI-007 M3 revision).
 func (m Model) updateMouse(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 	mm, ok := msg.(tea.MouseMsg)
 	if !ok {
@@ -150,6 +152,20 @@ func (m Model) updateMouse(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 	if t := m.focused(); t != nil && len(m.modals) == 0 {
 		m.forwardMouse(t, msg)
 		return m, nil, true
+	}
+	if t := m.focusedSFTP(); t != nil {
+		switch msg.(type) {
+		case tea.MouseMotionMsg, tea.MouseReleaseMsg:
+			if len(m.modals) > 0 {
+				// A modal took the mouse: a drag under it ends without
+				// copying.
+				t.sftp.view = t.sftp.view.CancelDrag()
+				return m, nil, true
+			}
+			var cmd tea.Cmd
+			t.sftp.view, cmd = t.sftp.view.Update(msg)
+			return m, cmd, true
+		}
 	}
 	switch msg.(type) {
 	case tea.MouseClickMsg:
@@ -224,8 +240,16 @@ func (m Model) mouseClick(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	if m.screen == nil || m.focusedSFTP() != nil {
-		return m, nil // the SFTP tab's rows are T-056's
+	if t := m.focusedSFTP(); t != nil {
+		// The SFTP view's layout counts rows from the top of the frame,
+		// the header included, so its coordinates are the terminal's
+		// (sftpview.Layout).
+		var cmd tea.Cmd
+		t.sftp.view, cmd = t.sftp.view.Update(components.ClickMsg{X: ms.X, Y: ms.Y, Double: double})
+		return m, cmd
+	}
+	if m.screen == nil {
+		return m, nil
 	}
 	x, y, ok := lay.screen.local(ms.X, ms.Y)
 	if !ok {
@@ -247,7 +271,16 @@ func (m Model) mouseWheel(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	default:
 		return m, nil
 	}
-	if len(m.modals) > 0 || m.focused() != nil || m.focusedSFTP() != nil || m.screen == nil {
+	if len(m.modals) > 0 || m.focused() != nil {
+		return m, nil
+	}
+	if t := m.focusedSFTP(); t != nil {
+		// The pane under the pointer scrolls (FR-SFTP-021).
+		var cmd tea.Cmd
+		t.sftp.view, cmd = t.sftp.view.Update(components.WheelMsg{X: ms.X, Y: ms.Y, Delta: delta})
+		return m, cmd
+	}
+	if m.screen == nil {
 		return m, nil
 	}
 	x, y, ok := m.layout().screen.local(ms.X, ms.Y)

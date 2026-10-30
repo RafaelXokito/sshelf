@@ -165,8 +165,7 @@ func batchSummary(ts []app.Transfer) string {
 // (FR-SFTP-001, FR-SFTP-009).
 func (m Model) copySelection(p *pane) tea.Cmd {
 	ts := p.targets()
-	other := m.panes[p.side.Other()]
-	if len(ts) == 0 || !other.loaded {
+	if len(ts) == 0 || !m.panes[p.side.Other()].loaded {
 		return nil
 	}
 	names := make([]string, len(ts))
@@ -174,6 +173,16 @@ func (m Model) copySelection(p *pane) tea.Cmd {
 		names[i] = e.Name
 	}
 	clear(p.marks)
+	return m.copyNames(p, names)
+}
+
+// copyNames queues a copy of names from p's directory into the other
+// pane's directory (FR-SFTP-001, FR-SFTP-022).
+func (m Model) copyNames(p *pane, names []string) tea.Cmd {
+	other := m.panes[p.side.Other()]
+	if len(names) == 0 || !other.loaded {
+		return nil
+	}
 	tab, b, from, src, dst := m.tab, m.b, p.side, p.dir, other.dir
 	return func() tea.Msg {
 		b.Copy(from, src, names, dst)

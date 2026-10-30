@@ -17,6 +17,7 @@ var (
 	titleStyle  = lipgloss.NewStyle().Bold(true)
 	dimStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
 	msgStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
+	dropStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("212")).Bold(true)
 )
 
 // sizeWidth is the width of the size and item-count column: "10000 items".
@@ -60,6 +61,10 @@ func (m Model) box(side app.Side, r Rect) []string {
 	p := m.panes[side]
 	inner := max(r.W-2, 0)
 	out := make([]string, 0, r.H)
+	border := func(s string) string { return s }
+	if over, ok := m.DragTarget(); ok && over == side {
+		border = func(s string) string { return dropStyle.Render(s) } // the pane under a drag (FR-SFTP-022)
+	}
 
 	suffix := ""
 	if m.hidden {
@@ -74,7 +79,7 @@ func (m Model) box(side app.Side, r Rect) []string {
 	if m.focus == side {
 		ts = titleStyle.Render(title)
 	}
-	out = append(out, "┌ "+ts+" "+strings.Repeat("─", dashes)+"┐")
+	out = append(out, border("┌ ")+ts+border(" "+strings.Repeat("─", dashes)+"┐"))
 
 	rows := max(r.H-2, 0)
 	for i := range rows {
@@ -88,7 +93,7 @@ func (m Model) box(side app.Side, r Rect) []string {
 		default:
 			s = strings.Repeat(" ", inner)
 		}
-		out = append(out, "│"+s+"│")
+		out = append(out, border("│")+s+border("│"))
 	}
 
 	var parts []string
@@ -103,7 +108,7 @@ func (m Model) box(side app.Side, r Rect) []string {
 		bottom = " " + strings.Join(parts, hintJoiner) + " "
 	}
 	bottom = ansi.Truncate(bottom, inner, "…")
-	out = append(out, "└"+bottom+strings.Repeat("─", max(inner-ansi.StringWidth(bottom), 0))+"┘")
+	out = append(out, border("└")+bottom+border(strings.Repeat("─", max(inner-ansi.StringWidth(bottom), 0))+"┘"))
 	return out
 }
 
@@ -158,6 +163,9 @@ func (m Model) rowText(p *pane, idx, inner int) string {
 // (FR-SFTP-014, FR-SFTP-024).
 func (m Model) ProgressLine() string {
 	w, _ := m.size()
+	if m.drag.active {
+		return msgStyle.Render(" " + cut(m.dragHint(), w-1))
+	}
 	if c := m.counting; c != nil {
 		return msgStyle.Render(" " + cut("Counting "+c.label+"… esc cancel", w-1))
 	}
