@@ -152,12 +152,21 @@ func (c *canaryRun) connectShell(label string, srv *sshtest.Server, n int, promp
 // have opened yet: keys typed too early go to the Connecting modal, which
 // ignores them. done must stay true once it is true (count with >=): a
 // retry typed while the server was still checking the previous answer
-// lands in the next prompt and moves the count past the target.
+// lands in the next prompt and moves the count past the target. So done
+// is checked before every typing, the first included: when an earlier
+// retry already answered this prompt, and it was the last one, sshelf is
+// back on the host list, where the keys would be commands ("e" opens the
+// edit form and the rest is typed into it). Under load the server can
+// take more than a second to check an answer; this flaked under the full
+// -race suite.
 func (c *canaryRun) typeUntil(srv *sshtest.Server, keys string, done func() bool) {
 	c.t.Helper()
-	for range 10 {
+	for range 5 {
+		if done() {
+			return
+		}
 		c.typeKeys(keys)
-		if srv.WaitFor(time.Second, done) {
+		if srv.WaitFor(3*time.Second, done) {
 			return
 		}
 	}

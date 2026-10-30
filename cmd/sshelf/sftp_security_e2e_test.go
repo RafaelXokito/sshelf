@@ -31,6 +31,27 @@ func startSFTPIn(t *testing.T, local string, extra ...sshtest.Option) *sftpRun {
 	return &sftpRun{slice: startWith(t, sshelfBinary(t), 1, launch{opts: opts, dir: local}), local: local}
 }
 
+// waitFrameLine waits until a whole SFTP frame recorded in frames (the
+// fault build's SSHELF_FAULT_FRAMES file, lines prefixed "F ") has a line
+// that shows want, compared without whitespace.
+func waitFrameLine(t *testing.T, frames, want string) {
+	t.Helper()
+	needle := whitespace.ReplaceAllString(want, "")
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		b, _ := os.ReadFile(frames) //nolint:gosec // a test temp file
+		for l := range strings.SplitSeq(string(b), "\n") {
+			if strings.HasPrefix(l, "F ") && strings.Contains(whitespace.ReplaceAllString(l, ""), needle) {
+				return
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("no recorded frame shows %q; frames:\n%s", want, b)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
 // sftpForbiddenIn is forbiddenIn (SEC-SESSION-005 AC1) for an SFTP tab's
 // output: the session corpus' payload text is not involved.
 func sftpForbiddenIn(b []byte) []string {
@@ -277,14 +298,24 @@ func TestSEC_SFTP_004_E2EDeepChainAndOversize(t *testing.T) {
 // and sshelf's PTY output over the whole run holds no forbidden sequence
 // (AC1).
 func TestSEC_SFTP_008_PTYScan(t *testing.T) {
-	r := startSFTPIn(t, t.TempDir(), sshtest.WithSFTPHostile(sshtest.SFTPHostile{
-		Status: sshtest.HostileStatus, Realpath: sshtest.SFTPHome + "/\x1b]0;title\x07\x1b[2Jhome",
-	}))
+	frames, local := filepath.Join(t.TempDir(), "frames.txt"), t.TempDir()
+	r := &sftpRun{slice: startWith(t, sshelfBinary(t), 1, launch{
+		env: []string{"SSHELF_FAULT_FRAMES=" + frames},
+		opts: []sshtest.Option{sshtest.WithSFTP(t.TempDir()), sshtest.WithSFTPHostile(sshtest.SFTPHostile{
+			Status: sshtest.HostileStatus, Realpath: sshtest.SFTPHome + "/\x1b]0;title\x07\x1b[2Jhome",
+		})},
+		dir: local,
+	}), local: local}
 	start := r.waitText(0, "web-prod demo@127.0.0.1")
-	r.openSFTPHost("Remote: /home/pi/home") // the realpath, sanitised
 	// The exact path does not exist in sshtest: the listing fails, and h
 	// goes to its parent.
-	off := r.waitText(start, "cannot open /home/pi/home: no such file or directory")
+	off := r.openSFTPHost("cannot open /home/pi/home: no such file or directory")
+	// The pane title shows the realpath, sanitised. It is read from the
+	// recorded frames, not the PTY output: the title is drawn as "Remote:"
+	// while the realpath is pending, and the renderer then writes only the
+	// path, so "Remote: /home/pi/home" need not be in the output in one
+	// piece (this flaked under load).
+	waitFrameLine(t, frames, "Remote: /home/pi/home")
 	r.typeKeys("h")
 	off = r.waitText(off, "denied")
 	r.typeKeys("jc")
