@@ -655,8 +655,12 @@ func (m Model) hostsFrame() ([]string, frameLayout) {
 		if m.height == 0 || len(body)+1+len(ml) <= m.bodyHeight() {
 			body = append(append(body, ""), ml...)
 		} else {
-			body = ml // the modals have the keyboard; the screen gives way
-			start, lay.screen.H = 0, 0
+			// The modals have the keyboard; the screen gives way, and if
+			// the stack is still too tall its bottom, with the top
+			// modal's buttons, stays in view.
+			cut := max(len(ml)-m.bodyHeight(), 0)
+			body = ml[cut:]
+			start, lay.screen.H = -cut, 0
 		}
 		for i := range lay.modals {
 			lay.modals[i].Y = hostsFrameTop + start + tops[i]

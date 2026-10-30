@@ -106,6 +106,21 @@ func MouseActions() []MouseAction {
 		{"host list: click the search field", []key.Binding{Search}},
 		{"welcome: click Import", []key.Binding{WelcomeImport}},
 		{"welcome: click Add host", []key.Binding{WelcomeAdd}},
+		{"form: click a field", []key.Binding{NextField, PrevField}},
+		{"form: click ‹ or › of a choice", []key.Binding{ChoicePrev, ChoiceNext}},
+		{"form: click [ Save ]", []key.Binding{Save, PressButton}},
+		{"form: click [ Cancel ]", []key.Binding{Cancel, PressButton}},
+		{"confirm: click [y] Yes", []key.Binding{ConfirmYes}},
+		{"confirm: click [n] No", []key.Binding{ConfirmNo}},
+		{"connecting: click [esc] Cancel", []key.Binding{Cancel}},
+		{"host key prompt: click [y] Trust and save", []key.Binding{TrustAndSave}},
+		{"host key prompt: click [enter/esc] Cancel", []key.Binding{TOFUCancel}},
+		{"authentication prompt: click a field", []key.Binding{NextField, PrevField}},
+		{"authentication prompt: click [enter] Submit", []key.Binding{Submit}},
+		{"authentication prompt: click [esc] Cancel", []key.Binding{Cancel}},
+		{"changed host key: click [esc] Close", []key.Binding{CloseBlock}},
+		{"prefix help: click [esc] Close", []key.Binding{CloseHelp}},
+		{"tab bar: click a tab", []key.Binding{PrefixHosts, PrefixTab}},
 	}
 }
 

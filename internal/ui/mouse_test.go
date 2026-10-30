@@ -46,12 +46,19 @@ func (d *driver) wheelAt(y int, b tea.MouseButton) {
 // contains s, and the column it starts at.
 func rowOf(t *testing.T, d *driver, s string) (y, x int) {
 	t.Helper()
-	for i, l := range strings.Split(plain(d.view()), "\n") {
+	return textAt(t, d.view(), s)
+}
+
+// textAt returns the row and column where s first appears in view.
+// Every character sshelf draws is one column wide.
+func textAt(t *testing.T, view, s string) (y, x int) {
+	t.Helper()
+	for i, l := range strings.Split(plain(view), "\n") {
 		if j := strings.Index(l, s); j >= 0 {
 			return i, len([]rune(l[:j]))
 		}
 	}
-	t.Fatalf("%q is not in the view:\n%s", s, plain(d.view()))
+	t.Fatalf("%q is not in the view:\n%s", s, plain(view))
 	return 0, 0
 }
 

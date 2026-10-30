@@ -60,29 +60,22 @@ func (m Model) Update(msg tea.Msg) (components.Modal, tea.Cmd) {
 	if _, ok := msg.(tea.PasteMsg); ok && len(m.inputs) > 0 {
 		return m, m.inputs[m.focus].Update(msg)
 	}
+	if c, ok := msg.(components.ClickMsg); ok {
+		return m.click(c)
+	}
 	k, ok := msg.(tea.KeyPressMsg)
 	if !ok {
 		return m, nil
 	}
 	switch {
 	case key.Matches(k, keys.Cancel):
-		m.prompt.Cancel()
-		m.clear()
-		m.done = true
-		return m, func() tea.Msg { return DoneMsg{Cancelled: true} }
+		return m.cancel()
 	case key.Matches(k, keys.Submit):
 		if m.focus < len(m.inputs)-1 {
 			m.move(1)
 			return m, nil
 		}
-		answers := make([]string, len(m.inputs))
-		for i, f := range m.inputs {
-			answers[i] = f.Value()
-		}
-		m.prompt.Answer(answers) // a buffered channel: never blocks
-		m.clear()
-		m.done = true
-		return m, func() tea.Msg { return DoneMsg{} }
+		return m.submit()
 	case key.Matches(k, keys.NextField):
 		m.move(1)
 		return m, nil
@@ -94,6 +87,55 @@ func (m Model) Update(msg tea.Msg) (components.Modal, tea.Cmd) {
 		return m, nil
 	}
 	return m, m.inputs[m.focus].Update(k)
+}
+
+// Button labels (FR-NAV-016).
+const (
+	SubmitButton = "[enter] Submit"
+	CancelButton = "[esc] Cancel"
+)
+
+// click handles a left press at column X, line Y of View: on a question's
+// line it focuses that field with the cursor at the end, as in a form
+// (FR-NAV-015); [enter] Submit sends every answer and [esc] Cancel
+// cancels (FR-NAV-016).
+func (m Model) click(c components.ClickMsg) (components.Modal, tea.Cmd) {
+	_, l := m.render()
+	switch l.buttons.At(c.X, c.Y) {
+	case 0:
+		return m.submit()
+	case 1:
+		return m.cancel()
+	}
+	for i, y := range l.fields {
+		if y == c.Y && c.X >= components.BoxInsetX && c.X < l.width-components.BoxInsetX {
+			m.inputs[m.focus].Blur()
+			m.focus = i
+			m.inputs[i].Focus()
+			m.inputs[i].End()
+		}
+	}
+	return m, nil
+}
+
+// submit answers the prompt with what was typed.
+func (m Model) submit() (components.Modal, tea.Cmd) {
+	answers := make([]string, len(m.inputs))
+	for i, f := range m.inputs {
+		answers[i] = f.Value()
+	}
+	m.prompt.Answer(answers) // a buffered channel: never blocks
+	m.clear()
+	m.done = true
+	return m, func() tea.Msg { return DoneMsg{} }
+}
+
+// cancel cancels the prompt.
+func (m Model) cancel() (components.Modal, tea.Cmd) {
+	m.prompt.Cancel()
+	m.clear()
+	m.done = true
+	return m, func() tea.Msg { return DoneMsg{Cancelled: true} }
 }
 
 // Closed implements components.Closer.
@@ -116,6 +158,20 @@ func (m *Model) clear() {
 
 // View implements components.Modal.
 func (m Model) View() string {
+	v, _ := m.render()
+	return v
+}
+
+// layout is where View puts the fields and the buttons.
+type layout struct {
+	fields  []int // the line of each question, in View coordinates
+	buttons components.ModalButtons
+	width   int // of the box
+}
+
+// render builds the View and its layout together.
+func (m Model) render() (string, layout) {
+	var l layout
 	p := m.prompt
 	who := domain.Sanitize(p.User + "@" + p.Host)
 	var b strings.Builder
@@ -141,9 +197,16 @@ func (m Model) View() string {
 	}
 	b.WriteString("\n")
 	for i, q := range p.Questions {
+		l.fields = append(l.fields, strings.Count(b.String(), "\n")+components.BoxInsetY)
 		fmt.Fprintf(&b, "%s %s\n", strings.TrimRight(domain.Sanitize(q.Text), " "), m.inputs[i].View())
 	}
-	return boxStyle.Render(strings.TrimSuffix(b.String(), "\n"))
+	if len(p.Questions) > 0 {
+		b.WriteString("\n")
+	}
+	l.buttons = components.AddButtons(&b, SubmitButton, CancelButton)
+	v := boxStyle.Render(b.String())
+	l.width = lipgloss.Width(v)
+	return v, l
 }
 
 // Hints implements components.Hinter.

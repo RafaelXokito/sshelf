@@ -703,7 +703,7 @@ When the user clicks one of the Welcome screen's choices, the system shall act a
 ### FR-NAV-015 · Buttons and mouse in forms
 The system shall show `[ Save ]` and `[ Cancel ]` buttons after every form's fields, and, when the user clicks a field, a choice arrow or a button, shall focus that field, change that choice, or act as `ctrl+s` or `esc`.
 
-- **Priority:** M2 · **Status:** Draft · **Source:** D-011
+- **Priority:** M2 · **Status:** Implemented · **Source:** D-011
 - **Acceptance:**
   - The host form and the identity form show both buttons on one row after the last field, at 80×24 and 120×40 (goldens).
   - The buttons follow the last field in the Tab order; Enter or Space on a focused button presses it, so the buttons are keyboard-reachable too (NFR-UX-001).
@@ -715,7 +715,7 @@ The system shall show `[ Save ]` and `[ Cancel ]` buttons after every form's fie
 ### FR-NAV-016 · Mouse in modals
 When the user clicks a button shown in the top modal, the system shall act as if that button's key had been pressed.
 
-- **Priority:** M2 · **Status:** Draft · **Source:** D-011
+- **Priority:** M2 · **Status:** Implemented · **Source:** D-011
 - **Acceptance:**
   - Every modal shows its actions as bracketed buttons, for example `[y] Trust and save` and `[enter/esc] Cancel` in the TOFU modal and `[y] Yes` and `[n] No` in confirmations, and each is clickable. The prompt modal's fields are clickable as in FR-NAV-015.
   - A click outside the top modal does nothing: it neither closes the modal nor reaches the screen below.
@@ -724,7 +724,7 @@ When the user clicks a button shown in the top modal, the system shall act as if
 ### FR-NAV-017 · Mouse on the tab bar
 While the Hosts tab is focused and no modal is open, when the user clicks a tab in the tab bar, the system shall focus that tab.
 
-- **Priority:** M2 · **Status:** Draft · **Source:** D-011, D-012
+- **Priority:** M2 · **Status:** Implemented · **Source:** D-011, D-012
 - **Acceptance:**
   - A click on `2 web-prod` focuses that session tab; a click on `sshelf` or a separator does nothing.
   - While a session tab is focused, tabs are switched with the keyboard (FR-TAB-005, D-012): header clicks are either not reported (mouse tracking off) or ignored (FR-TAB-011).

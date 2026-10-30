@@ -5,6 +5,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/RafaelXokito/sshelf/internal/ui/components"
+	"github.com/RafaelXokito/sshelf/internal/ui/tabs"
 )
 
 // region is the rectangle of the frame that one component draws: rows Y
@@ -134,10 +135,30 @@ func (m Model) mouseClick(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	double := m.clicks.Press(m.now(), ms.Y)
-	if len(m.modals) > 0 || m.focused() != nil || m.screen == nil {
+	lay := m.layout()
+	if n := len(m.modals); n > 0 {
+		// Only the top modal takes clicks; anywhere else, nothing happens
+		// (FR-NAV-016).
+		x, y, ok := lay.modals[n-1].local(ms.X, ms.Y)
+		if !ok {
+			return m, nil
+		}
+		return m.updateTopModal(components.ClickMsg{X: x, Y: y, Double: double})
+	}
+	if m.focused() != nil {
+		return m, nil // T-041 forwards presses to a session that asked for the mouse
+	}
+	if ms.Y == 0 {
+		// The tab bar (FR-NAV-017): the title and separators do nothing.
+		if i, ok := tabs.TabAt(m.headerSpans(), ms.X); ok {
+			return m.focusTab(i)
+		}
 		return m, nil
 	}
-	x, y, ok := m.layout().screen.local(ms.X, ms.Y)
+	if m.screen == nil {
+		return m, nil
+	}
+	x, y, ok := lay.screen.local(ms.X, ms.Y)
 	if !ok {
 		return m, nil // the header, the banner, the status line or the footer
 	}

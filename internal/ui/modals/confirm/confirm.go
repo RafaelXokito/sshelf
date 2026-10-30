@@ -1,6 +1,8 @@
 package confirm
 
 import (
+	"strings"
+
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -14,13 +16,20 @@ var (
 	titleStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("214"))
 )
 
+// Button labels (FR-NAV-016).
+const (
+	YesButton = "[y] Yes"
+	NoButton  = "[n] No"
+)
+
 // DoneMsg tells the root model that the question was answered. The root
 // pops the modal and, when Then is not nil (the answer was yes), delivers
 // Then as a message.
 type DoneMsg struct{ Then tea.Msg }
 
-// Model asks a yes/no question. Only y answers yes; n, enter and esc
-// answer no, so the default is "No".
+// Model asks a yes/no question. Only y or a click on [y] Yes answers
+// yes; n, enter, esc and a click on [n] No answer no, so the default is
+// "No".
 type Model struct {
 	question string
 	then     tea.Msg
@@ -31,23 +40,47 @@ func New(question string, then tea.Msg) Model { return Model{question: question,
 
 // Update implements components.Modal.
 func (m Model) Update(msg tea.Msg) (components.Modal, tea.Cmd) {
-	k, ok := msg.(tea.KeyPressMsg)
-	if !ok {
-		return m, nil
-	}
-	switch {
-	case key.Matches(k, keys.ConfirmYes):
-		then := m.then
-		return m, func() tea.Msg { return DoneMsg{Then: then} }
-	case key.Matches(k, keys.ConfirmNo):
-		return m, func() tea.Msg { return DoneMsg{} }
+	switch msg := msg.(type) {
+	case tea.KeyPressMsg:
+		switch {
+		case key.Matches(msg, keys.ConfirmYes):
+			return m, m.answer(true)
+		case key.Matches(msg, keys.ConfirmNo):
+			return m, m.answer(false)
+		}
+	case components.ClickMsg:
+		_, b := m.render()
+		switch b.At(msg.X, msg.Y) {
+		case 0:
+			return m, m.answer(true)
+		case 1:
+			return m, m.answer(false)
+		}
 	}
 	return m, nil
 }
 
+// answer returns the command that reports the answer.
+func (m Model) answer(yes bool) tea.Cmd {
+	if !yes {
+		return func() tea.Msg { return DoneMsg{} }
+	}
+	then := m.then
+	return func() tea.Msg { return DoneMsg{Then: then} }
+}
+
 // View implements components.Modal.
 func (m Model) View() string {
-	return boxStyle.Render(titleStyle.Render(m.question))
+	v, _ := m.render()
+	return v
+}
+
+// render builds the View and the place of its buttons together.
+func (m Model) render() (string, components.ModalButtons) {
+	var b strings.Builder
+	b.WriteString(titleStyle.Render(m.question) + "\n\n")
+	btns := components.AddButtons(&b, YesButton, NoButton)
+	return boxStyle.Render(b.String()), btns
 }
 
 // Hints implements components.Hinter: the footer shows the answers.

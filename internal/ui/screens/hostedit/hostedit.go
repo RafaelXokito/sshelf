@@ -177,12 +177,16 @@ func (m Model) Cancel() tea.Msg { return CancelledMsg{} }
 
 // Update implements components.Screen.
 func (m Model) Update(msg tea.Msg) (components.Screen, tea.Cmd) {
-	switch msg.(type) {
+	var ev components.FormEvent
+	var cmd tea.Cmd
+	switch msg := msg.(type) {
 	case tea.KeyPressMsg, tea.PasteMsg:
+		ev, cmd = m.form.Update(msg)
+	case components.ClickMsg:
+		ev = m.form.Click(msg.X, msg.Y-formTop) // FR-NAV-015
 	default:
 		return m, nil
 	}
-	ev, cmd := m.form.Update(msg)
 	switch ev {
 	case components.FormCancel:
 		if m.form.Dirty() {
@@ -280,6 +284,10 @@ func (m Model) SaveFailed(err error) Model {
 	m.err = domain.Sanitize(components.ErrorText(err))
 	return m
 }
+
+// formTop is the line of View where the form starts, below the title and
+// a blank line.
+const formTop = 2
 
 // View implements components.Screen.
 func (m Model) View() string {

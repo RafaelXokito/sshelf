@@ -126,6 +126,10 @@ func (f *SecretField) Update(msg tea.Msg) tea.Cmd {
 	return cmd
 }
 
+// click puts the cursor at the end of what was typed; a disabled field
+// is only focused (FR-NAV-015).
+func (f *SecretField) click(int, bool) { f.in.End() }
+
 // View implements FormField: the status while empty, else Mask.
 func (f *SecretField) View() string {
 	if f.disabled != "" {
