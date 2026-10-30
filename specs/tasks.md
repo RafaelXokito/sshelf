@@ -632,7 +632,7 @@ tests:
 - SEC-CRED-009 AC1: no Keychain dialog after installing an unsigned new build.
 - FR-CRED-001: the OS unlock prompt (macOS Keychain, Linux keyring).
 - NFR-PORT-002: the named terminal emulators.
-- ADR-007 (T-000): the `devcheck` raw-mode and `stty` round trip.
+- ADR-007 (T-000): the keys-on-the-wire and `stty` round trip (acceptance §10; the `devcheck` program was removed in T-037).
 
 ## Traceability matrix
 

@@ -20,7 +20,7 @@ run that whole checklist on macOS and Linux before a release.
   `stty -a` round trip in iTerm2, Terminal.app, kitty, WezTerm, Alacritty,
   Ghostty, GNOME Terminal, Konsole, xterm, tmux and screen, as available
   (acceptance §12.2).
-- [ ] **ADR-007 devcheck:** raw bytes, first keystroke after return and
+- [ ] **ADR-007:** keys on the wire, first keystroke after a session and
   `stty -a` round trip (acceptance §10).
 
 ## Credential store

@@ -8,7 +8,9 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"os/signal"
 	"runtime/debug"
+	"syscall"
 
 	tea "charm.land/bubbletea/v2"
 	xterm "golang.org/x/term"
@@ -105,11 +107,40 @@ func run(args []string) (code int) {
 
 	p := tea.NewProgram(guard{model: ui.New(svc)}, tea.WithoutCatchPanics())
 	svc.SetSend(func(msg any) { p.Send(msg) }) // prompts reach the UI (design §8.3)
-	if _, err := p.Run(); err != nil {
+	// Bubble Tea quits on SIGTERM; SIGHUP (the terminal went away) quits
+	// the same way instead of killing the process.
+	stopHangup := quitOnHangup(p)
+	final, err := p.Run()
+	stopHangup()
+	// Whatever ended the program, no session outlives it (ARCH-SESS-010).
+	if g, ok := final.(guard); ok {
+		if m, ok := g.model.(ui.Model); ok {
+			m.CloseSessions()
+		}
+	}
+	if err != nil {
 		fmt.Fprintln(os.Stderr, "sshelf:", err)
 		return 1
 	}
 	return 0
+}
+
+// quitOnHangup quits p when sshelf receives SIGHUP, until stop is called.
+func quitOnHangup(p *tea.Program) (stop func()) {
+	sig := make(chan os.Signal, 1)
+	done := make(chan struct{})
+	signal.Notify(sig, syscall.SIGHUP)
+	term.SafeGo(func() {
+		select {
+		case <-sig:
+			p.Quit()
+		case <-done:
+		}
+	}, func(any) {})
+	return func() {
+		signal.Stop(sig)
+		close(done)
+	}
 }
 
 func isTerminal(f *os.File) bool {

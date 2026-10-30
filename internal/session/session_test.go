@@ -7,6 +7,7 @@ import (
 	"image/color"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -137,12 +138,19 @@ func TestARCH_SESS_003_M2_OutputOnlyToEmulator(t *testing.T) {
 		t.Fatalf("emulator received %d bytes, want the %d bytes the server sent, unchanged", rec.out.Len(), len(out))
 	}
 	// Nothing in the session's code can reach the local terminal.
-	for _, f := range []string{"session.go", "emulator.go", "keys.go", "snapshot.go"} {
+	files, err := filepath.Glob("*.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range files {
+		if strings.HasSuffix(f, "_test.go") {
+			continue
+		}
 		src, err := os.ReadFile(f) //nolint:gosec // a source file of this package
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, bad := range []string{"os.Stdout", "os.Stderr", "golang.org/x/term"} {
+		for _, bad := range []string{"os.Stdout", "os.Stderr", "os.Stdin", "golang.org/x/term", "MakeRaw", "cancelreader"} {
 			if bytes.Contains(src, []byte(bad)) {
 				t.Errorf("%s refers to %s", f, bad)
 			}

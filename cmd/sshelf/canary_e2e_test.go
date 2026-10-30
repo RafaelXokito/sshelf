@@ -95,10 +95,12 @@ func (c *canaryRun) addHost(f hostForm) {
 	c.waitText(off, f.label+": saved")
 }
 
-// connectShell presses Enter on the selected host, waits for its shell
-// (the n-th one on srv), exits it and waits for the host list to report
-// the exit. answer, when not empty, is typed into the prompt that appears
-// first, whose title contains prompt.
+// connectShell presses Enter on the selected host and waits for its
+// shell (the n-th one on srv) to open in a tab with the host's label.
+// There it types a command and waits for its output inside the frame,
+// then exits, waits for the ended tab, closes it with x and waits for the
+// host list. answer, when not empty, is typed into the prompt that
+// appears first, whose title contains prompt.
 func (c *canaryRun) connectShell(label string, srv *sshtest.Server, n int, prompt, answer string) {
 	c.t.Helper()
 	off := c.out.Len()
@@ -110,9 +112,11 @@ func (c *canaryRun) connectShell(label string, srv *sshtest.Server, n int, promp
 	if !srv.WaitFor(10*time.Second, func() bool { return len(srv.RequestsOfType("shell")) == n }) {
 		c.t.Fatalf("%s: no shell; output:\n%q", label, c.out.From(0))
 	}
-	off = c.waitText(off, "$")
-	c.typeKeys("exit 0" + keyEnter)
-	c.waitText(off, label+": exited (0)")
+	c.tabs++
+	off = c.waitText(off, fmt.Sprintf("[%d %s]", c.tabs, label)) // the focused tab
+	c.typeKeys("echo in-the-frame" + keyEnter)
+	off = c.waitText(off, "in-the-frame")
+	c.endSession(off, "exit 0", "exited (0)")
 }
 
 // typeUntil types keys until done reports true, for a prompt that may not
@@ -391,15 +395,15 @@ func TestFR_IDENT_004_DebugLogHasNoPassword(t *testing.T) {
 }
 
 // TestARCH_SEC_001_CanaryScanAfterPanic: sshelf connects with a stored
-// password and then panics on the goroutine that runs the session. The
-// crash report, the terminal output, the log and every file stay free of
-// the password.
+// password and then panics in Update while the session is open in its tab
+// (on its first output). The crash report, the terminal output, the log
+// and every file stay free of the password.
 func TestARCH_SEC_001_CanaryScanAfterPanic(t *testing.T) {
 	const pw = "CANARY-panic-pw-e19f42" //nolint:gosec // a made-up test secret
 	srv := sshtest.New(t, sshtest.WithPassword("alice", pw))
 	c := startCanary(t, canaries{{"password", pw}, {"panic value", faultCanary}}, func(_, cfgDir string) {
 		writeKnownHosts(t, cfgDir, srv.KnownHostsLine())
-	}, "SSHELF_DEBUG=1", "SSHELF_FAULT=session-run", "SSHELF_FAULT_CANARY="+faultCanary)
+	}, "SSHELF_DEBUG=1", "SSHELF_FAULT=session-update", "SSHELF_FAULT_CANARY="+faultCanary)
 	c.waitText(0, "Add host")
 	c.addHost(hostForm{label: "pw-host", srv: srv, user: "alice", password: pw})
 	c.typeKeys(keyEnter)

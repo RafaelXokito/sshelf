@@ -66,9 +66,3 @@ func TestResetSequenceCoversDesign(t *testing.T) {
 		}
 	}
 }
-
-func TestResizesStop(t *testing.T) {
-	_, stop := NewTTY(nil).Resizes()
-	stop()
-	stop() // idempotent
-}

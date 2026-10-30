@@ -109,7 +109,9 @@ func TestNFR_REL_001_GoroutinePackagesCheckLeaks(t *testing.T) {
 		}
 		src := string(b)
 		if strings.HasSuffix(path, "_test.go") {
-			if strings.Contains(src, "VerifyTestMain(") {
+			// cmd/sshelf's TestMain needs its own setup and calls
+			// goleak.Find after m.Run, which is the same check.
+			if strings.Contains(src, "VerifyTestMain(") || strings.Contains(src, "goleak.Find(") {
 				verifies[rel] = true
 			}
 			return nil

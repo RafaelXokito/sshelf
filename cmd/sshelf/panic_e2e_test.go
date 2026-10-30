@@ -106,10 +106,11 @@ func TestARCH_SEC_004_PanicInUpdateExit70(t *testing.T) {
 	s.waitText(off, "crash report:")
 }
 
-// TestARCH_SEC_004_PanicInSessionRunExit70: a panic on the goroutine that
-// runs the attached session, while the terminal is in raw mode.
-func TestARCH_SEC_004_PanicInSessionRunExit70(t *testing.T) {
-	s := startFault(t, "session-run")
+// TestARCH_SEC_004_PanicWithSessionOpenExit70: a panic in Update while a
+// session is open in its tab (on the session's first output). sshelf
+// exits 70 with the terminal restored.
+func TestARCH_SEC_004_PanicWithSessionOpenExit70(t *testing.T) {
+	s := startFault(t, "session-update")
 	off := s.waitText(0, "web-prod demo@127.0.0.1")
 	s.typeKeys("\r")
 	if code := s.waitExit(); code != 70 {
@@ -120,19 +121,48 @@ func TestARCH_SEC_004_PanicInSessionRunExit70(t *testing.T) {
 }
 
 // TestARCH_SEC_004_PanicInSessionGoroutine: a panic in a session goroutine
-// (the stdin pump, on the first key typed into the session) ends the
-// session with "internal error"; the TUI keeps running and quits normally.
+// (the input writer, on the first key typed into the session) ends the
+// session with "internal error" in its tab; the TUI keeps running and
+// quits normally.
 func TestARCH_SEC_004_PanicInSessionGoroutine(t *testing.T) {
-	s := startFault(t, "session-goroutine")
-	off := s.waitText(0, "web-prod demo@127.0.0.1")
-	s.typeKeys("\r")
-	off = s.waitText(off, "$")
+	s := startFault(t, "session-input")
+	s.waitText(0, "web-prod demo@127.0.0.1")
+	off := s.openSession(s.srv, 1)
 	s.typeKeys("x")
-	off = s.waitText(off, "web-prod: internal error")
+	off = s.waitText(off, "internal error · r reconnect · x close")
+	s.typeKeys("x")
+	off = s.waitText(off, "enter connect")
 	s.typeKeys("j")
 	s.quit()
 	s.checkCrash()
 	if bytes.Contains(s.out.From(off), []byte("crash report:")) {
 		t.Fatal("a recovered goroutine panic was announced as a crash")
 	}
+}
+
+// TestARCH_SESS_005_M2_OtherSessionSurvivesPanic: with two sessions open,
+// a panic in one session's goroutine ends that session with "internal
+// error" while the other still echoes input; quitting then restores the
+// terminal (stty -a unchanged, checkCrash).
+func TestARCH_SESS_005_M2_OtherSessionSurvivesPanic(t *testing.T) {
+	s := startServers(t, faultBinary(t), 2, "SSHELF_FAULT=session-input", "SSHELF_FAULT_ONCE=1", "SSHELF_FAULT_CANARY="+faultCanary)
+	s.waitText(0, "web-test demo@127.0.0.1")
+	s.openSession(s.srvs[0], 1) // tab 1: web-prod
+	s.prefix("h")
+	s.typeKeys("j")
+	off := s.openSession(s.srvs[1], 1) // tab 2: web-test
+	s.typeKeys("z")                    // the first input written panics
+	off = s.waitText(off, "internal error · r reconnect · x close")
+	s.prefix("1")
+	s.typeKeys("echo alive\r")
+	s.waitText(off, "alive")
+	if !s.srvs[0].WaitFor(5*time.Second, func() bool { return bytes.Contains(s.srvs[0].Received(1, 1), []byte("echo alive\r")) }) {
+		t.Fatalf("web-prod did not get the input; output:\n%q", s.out.From(0))
+	}
+	s.prefix("h")
+	s.typeKeys("q")
+	s.waitText(off, "Quit and close 1 session?")
+	s.typeKeys("y")
+	s.waitQuit()
+	s.checkCrash()
 }

@@ -201,29 +201,20 @@ func TestNFR_UX_001_NoMouseTracking(t *testing.T) {
 }
 
 // TestNFR_PORT_002_TermMatrix starts sshelf under each supported TERM,
-// connects to the test server, exits the remote shell and checks that the
-// host list is redrawn, the session got the same TERM, no mouse tracking
-// was enabled and stty -a is unchanged after quitting.
+// connects to the test server, exits the remote shell inside the frame,
+// closes the ended tab and checks that the host list is redrawn, the
+// remote PTY is xterm-256color (the emulator's terminal, whatever the
+// local TERM), no mouse tracking was enabled and stty -a is unchanged
+// after quitting.
 func TestNFR_PORT_002_TermMatrix(t *testing.T) {
 	for _, term := range []string{"xterm", "xterm-256color", "screen-256color", "tmux-256color", "xterm-kitty", "linux"} {
 		t.Run(term, func(t *testing.T) {
 			s := startSlice(t, "TERM="+term)
-			off := s.waitText(0, "web-prod demo@127.0.0.1")
-			s.typeKeys("\r")
-			if !s.srv.WaitFor(10*time.Second, func() bool { return len(s.srv.RequestsOfType("shell")) == 1 }) {
-				t.Fatalf("no shell was started; output:\n%q", s.out.From(0))
-			}
-			off = s.waitText(off, "$")
-			s.typeKeys("exit 3\r")
-			// The host list is drawn again after the session.
-			s.waitText(off, "web-prod demo@127.0.0.1")
-			s.waitText(off, "web-prod: exited (3)")
+			s.run() // ends on the redrawn host list
 			s.quit()
-			if after := stty(t, s.tty); after != s.before {
-				t.Fatalf("stty -a changed:\nbefore:\n%s\nafter:\n%s", s.before, after)
-			}
-			if reqs := s.srv.RequestsOfType("pty-req"); len(reqs) != 1 || reqs[0].Term != term {
-				t.Fatalf("pty-req = %+v, want TERM %q", reqs, term)
+			s.checkStty()
+			if reqs := s.srv.RequestsOfType("pty-req"); len(reqs) != 1 || reqs[0].Term != "xterm-256color" {
+				t.Fatalf("pty-req = %+v, want TERM xterm-256color", reqs)
 			}
 			checkNoMouseTracking(t, s.out.From(0))
 		})

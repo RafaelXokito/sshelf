@@ -15,9 +15,9 @@ import (
 	"testing"
 )
 
-// buildTags makes go list also see the files behind the devcheck and
-// sshelf_faultinject tags, so the bans cover them too.
-const buildTags = "devcheck,sshelf_faultinject"
+// buildTags makes go list also see the files behind the
+// sshelf_faultinject tag, so the bans cover them too.
+const buildTags = "sshelf_faultinject"
 
 var bubbleTea = []string{"charm.land/bubbletea/v2/...", "github.com/charmbracelet/bubbletea/..."}
 
@@ -37,7 +37,9 @@ var rules = []rule{
 	{pkg: "internal/store", allow: []string{"internal/domain"}, forbid: []string{"internal/ui/...", "internal/app", "internal/sshclient", "internal/session"}},
 	{pkg: "internal/secrets", allow: []string{"internal/domain", "internal/term"}, forbid: []string{"internal/ui/...", "internal/app", "internal/sshclient", "internal/session"}},
 	{pkg: "internal/sshclient", allow: []string{"internal/domain"}, forbid: append([]string{"internal/secrets", "internal/store", "internal/ui/...", "internal/app"}, bubbleTea...)},
-	{pkg: "internal/session", allow: []string{"internal/sshclient", "internal/term"}, forbid: append([]string{"internal/secrets", "internal/store", "internal/ui/...", "internal/app"}, bubbleTea...)},
+	// The session never touches the local terminal: no raw mode, no
+	// cancelable stdin (ARCH-SESS-003 revision).
+	{pkg: "internal/session", allow: []string{"internal/sshclient", "internal/term"}, forbid: append([]string{"internal/secrets", "internal/store", "internal/ui/...", "internal/app", "golang.org/x/term", "github.com/muesli/cancelreader"}, bubbleTea...)},
 	{pkg: "internal/ui/...", allow: []string{"internal/app", "internal/domain", "internal/search", "internal/session", "internal/ui/..."}, forbid: []string{"internal/secrets", "internal/store", "internal/sshclient", "golang.org/x/crypto/ssh/..."}},
 	{pkg: "internal/app", forbid: []string{"internal/ui/..."}},
 }

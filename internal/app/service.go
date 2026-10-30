@@ -4,9 +4,7 @@ import (
 	"cmp"
 	"context"
 	"errors"
-	"io"
 	"log/slog"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -18,7 +16,6 @@ import (
 	"github.com/RafaelXokito/sshelf/internal/session"
 	"github.com/RafaelXokito/sshelf/internal/sshclient"
 	"github.com/RafaelXokito/sshelf/internal/store"
-	"github.com/RafaelXokito/sshelf/internal/term"
 )
 
 // ErrHostNotFound means the host ID is not in the loaded config.
@@ -28,17 +25,6 @@ var ErrHostNotFound = errors.New("host not found")
 // The file is never written afterwards (FR-CFG-003). Err is
 // store.ErrCorrupt, store.ErrNewerVersion or the underlying I/O error.
 type LoadError = store.LoadError
-
-// Session is the handle of an attached session. *session.Attached satisfies
-// it, and its method set includes tea.ExecCommand's, so the UI can pass it
-// to tea.Exec. Close releases a session that will never run.
-type Session interface {
-	SetStdin(io.Reader)
-	SetStdout(io.Writer)
-	SetStderr(io.Writer)
-	Run() error
-	Close() error
-}
 
 // Loaded is the result of Service.Load.
 type Loaded struct {
@@ -59,9 +45,10 @@ type Service interface {
 	// modes, and reads config.json. Every failure is a *LoadError.
 	Load(ctx context.Context) (Loaded, error)
 	// Connect dials, verifies and authenticates the host, then opens an
-	// interactive session ready for tea.Exec. Nothing is handed to the
-	// terminal unless all of that succeeded (ARCH-SESS-002).
-	Connect(ctx context.Context, hostID domain.ID) (Session, error)
+	// interactive session whose PTY and emulator have size, the session
+	// area. No session is opened unless all of that succeeded
+	// (ARCH-SESS-002).
+	Connect(ctx context.Context, hostID domain.ID, size Size) (Session, error)
 	// SaveHost adds h (when h.ID is "") or updates the host with h.ID,
 	// and writes config.json atomically. See App.SaveHost.
 	SaveHost(ctx context.Context, h domain.Host) (SavedHost, error)
@@ -114,8 +101,6 @@ type Config struct {
 	// Home is the directory "~" in key paths expands to; "" means
 	// os.UserHomeDir.
 	Home string
-	// Terminal is the local terminal sessions attach to; default os.Stdin.
-	Terminal session.Terminal
 }
 
 // App implements Service, and sshclient.Prompter for its own connections.
@@ -134,9 +119,6 @@ type App struct {
 
 // New returns an App. It does no I/O.
 func New(cfg Config) *App {
-	if cfg.Terminal == nil {
-		cfg.Terminal = term.NewTTY(os.Stdin)
-	}
 	return &App{cfg: cfg}
 }
 
@@ -206,7 +188,7 @@ func modesNotice(dir string, fixed []string) string {
 }
 
 // Connect implements Service.
-func (a *App) Connect(ctx context.Context, hostID domain.ID) (Session, error) {
+func (a *App) Connect(ctx context.Context, hostID domain.ID, size Size) (Session, error) {
 	a.mu.Lock()
 	i := slices.IndexFunc(a.data.Hosts, func(h domain.Host) bool { return h.ID == hostID })
 	if i < 0 {
@@ -231,10 +213,11 @@ func (a *App) Connect(ctx context.Context, hostID domain.ID) (Session, error) {
 		slog.Debug("connect: failed", "host", h.Label, "err", err)
 		return nil, err
 	}
-	s, err := session.NewAttached(client, a.cfg.Terminal, session.Options{
+	s, err := session.New(client, session.Options{
 		Term:    h.Options.Term,
 		Env:     h.Options.SetEnv,
 		Command: h.Options.RemoteCommand,
+		Size:    size,
 	})
 	if err != nil {
 		slog.Debug("connect: session failed", "host", h.Label, "err", err)

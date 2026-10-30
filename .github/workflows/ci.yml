@@ -23,7 +23,6 @@ jobs:
       - name: go vet
         run: |
           go vet ./...
-          go vet -tags devcheck ./...
           go vet -tags integration_keyring ./...
       - name: Traceability gate (NFR-QUAL-001)
         run: go run ./scripts/tracecheck
@@ -31,7 +30,7 @@ jobs:
         uses: golangci/golangci-lint-action@v9
         with:
           version: latest
-          args: --build-tags=devcheck,integration_keyring
+          args: --build-tags=integration_keyring
       - name: govulncheck (SEC-SESSION-004)
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 

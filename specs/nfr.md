@@ -48,7 +48,7 @@ When the user presses Enter on a host, the system shall send the SSH client vers
 ### NFR-PERF-004 · Keystroke overhead
 While a session tab is focused, when the root model receives a key press, the system shall write the encoded key to the session's SSH channel within 5 ms at the 99th percentile.
 
-- **Priority:** M2 · **Status:** Draft · **Source:** D-009 (was v1 "Session passthrough latency", measured against the MVP's raw passthrough)
+- **Priority:** M2 · **Status:** Implemented · **Source:** D-009 (was v1 "Session passthrough latency", measured against the MVP's raw passthrough)
 - **Check:** `TestNFR_PERF_004_KeystrokeOverhead` drives the root model directly (as `tea.Program` would) with a real session connected to the in-process server, sends 1,000 `tea.KeyPressMsg` values for printable keys and arrows, and timestamps each from the call to `Update` until sshtest's channel reader has received the bytes. p99 ≤ 5 ms on the CI runner. A second run while another session streams output at 1 MB/s must meet the same bound (the input path never waits for output processing, ARCH-SESS-014).
 
 ### NFR-PERF-005 · Output throughput
@@ -60,7 +60,7 @@ When a session receives a burst of output, the system shall process at least 1 M
 ### NFR-PERF-006 · Ten concurrent sessions
 While 10 sessions are open, each receiving output at 100 KB/s, the system shall render a newly focused tab's first frame within 50 ms and keep keystroke overhead within 20 ms at the 99th percentile.
 
-- **Priority:** M2 · **Status:** Draft · **Source:** D-010
+- **Priority:** M2 · **Status:** Implemented · **Source:** D-010
 - **Check:** `TestNFR_PERF_006_TenSessions` (PTY E2E, Linux) runs the real binary against sshtest, opens 10 sessions to `stream 100K` shells, then: switching with `Ctrl+]` `n` produces the new tab's status bar in the PTY output within 50 ms (median of 10 switches); 200 keystrokes to the focused session have a p99 overhead ≤ 20 ms measured as in NFR-PERF-004; RSS stays within NFR-SIZE-003's bound times 10 plus NFR-SIZE-001's base.
 
 ---

@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
-	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -116,16 +115,19 @@ func screenText(b []byte) string {
 }
 
 // slice is the T-004 demo: sshelf in a PTY, with a config dir holding one
-// key-file host that points at an in-process sshtest server.
+// key-file host, web-prod, that points at an in-process sshtest server,
+// and optionally more hosts on servers of their own (see startServers).
 type slice struct {
 	t       *testing.T
-	srv     *sshtest.Server
+	srv     *sshtest.Server   // web-prod's
+	srvs    []*sshtest.Server // every host's, in list order; srvs[0] is srv
 	master  *os.File
 	tty     *os.File
 	cmd     *exec.Cmd
 	out     *syncBuffer
 	exited  chan struct{} // closed once the process has exited
 	exitErr error
+	tabs    int    // session tabs opened so far; numbers are never reused
 	before  string // stty -a before launch
 	state   string // sshelf state dir (log and crash reports) under home
 	cfgDir  string // sshelf config dir (XDG_CONFIG_HOME/sshelf)
@@ -164,6 +166,17 @@ func startSlice(t *testing.T, env ...string) *slice {
 
 func startSliceBin(t *testing.T, bin string, env ...string) *slice {
 	t.Helper()
+	return startServers(t, bin, 1, env...)
+}
+
+// hostLabels are the labels of the hosts startServers configures, in
+// list order.
+var hostLabels = []string{"web-prod", "web-test", "web-uat"}
+
+// startServers starts bin with n (at most 3) key-file hosts, each on its
+// own sshtest server: web-prod, web-test and web-uat.
+func startServers(t *testing.T, bin string, n int, env ...string) *slice {
+	t.Helper()
 	if _, err := exec.LookPath("stty"); err != nil {
 		t.Skip("stty not available")
 	}
@@ -176,18 +189,25 @@ func startSliceBin(t *testing.T, bin string, env ...string) *slice {
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := sshtest.New(t, sshtest.WithAuthorizedKey("demo", pub))
+	srvs := make([]*sshtest.Server, n)
+	var known, hosts []string
+	for i := range srvs {
+		srvs[i] = sshtest.New(t, sshtest.WithAuthorizedKey("demo", pub))
+		known = append(known, srvs[i].KnownHostsLine())
+		hosts = append(hosts, fmt.Sprintf(`{"id": "0192a000-0000-7000-8000-00000000000%d", "label": %q, "hostname": "127.0.0.1",
+             "port": %d, "user": "demo", "identity_id": "0192a000-0000-7000-8000-000000000001"}`, i+2, hostLabels[i], srvs[i].Port()))
+	}
+	srv := srvs[0]
 	cfgDir := filepath.Join(xdg, "sshelf")
 	if err := os.Mkdir(cfgDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(cfgDir, "known_hosts"), []byte(srv.KnownHostsLine()+"\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(cfgDir, "known_hosts"), []byte(strings.Join(known, "\n")+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	cfg := `{"version": 1,
   "identities": [{"id": "0192a000-0000-7000-8000-000000000001", "name": "demo", "key_path": "~/.ssh/id_ed25519"}],
-  "hosts": [{"id": "0192a000-0000-7000-8000-000000000002", "label": "web-prod", "hostname": "127.0.0.1",
-             "port": ` + strconv.Itoa(srv.Port()) + `, "user": "demo", "identity_id": "0192a000-0000-7000-8000-000000000001"}]}`
+  "hosts": [` + strings.Join(hosts, ",\n") + `]}`
 	if err := os.WriteFile(filepath.Join(cfgDir, "config.json"), []byte(cfg), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -199,7 +219,7 @@ func startSliceBin(t *testing.T, bin string, env ...string) *slice {
 	if err := pty.Setsize(master, &pty.Winsize{Cols: 80, Rows: 24}); err != nil {
 		t.Fatal(err)
 	}
-	s := &slice{t: t, srv: srv, master: master, tty: tty, out: &syncBuffer{}, exited: make(chan struct{}), cfgDir: cfgDir, home: home}
+	s := &slice{t: t, srv: srv, srvs: srvs, master: master, tty: tty, out: &syncBuffer{}, exited: make(chan struct{}), cfgDir: cfgDir, home: home}
 	s.state = stateDir(home)
 	s.before = stty(t, tty)
 
@@ -261,32 +281,77 @@ func (s *slice) typeKeys(keys string) {
 	}
 }
 
-// run performs the demo: Enter on web-prod, `exit 3` in the remote shell,
-// then waits for the host list to show the result. It returns the output
-// offset after the result appeared.
-func (s *slice) run() int {
+// shells counts the shells srv has started.
+func shells(srv *sshtest.Server) int { return len(srv.RequestsOfType("shell")) }
+
+// openSession presses Enter on the selected host, whose server is srv,
+// waits for srv's n-th shell and for the new tab to be focused in the
+// header ("[<number> <label>]"), and returns the output offset after it.
+// The prompt itself may not be redrawn: the renderer skips cells that
+// equal the previous tab's.
+func (s *slice) openSession(srv *sshtest.Server, n int) int {
 	s.t.Helper()
-	off := s.waitText(0, "web-prod demo@127.0.0.1")
+	off := s.out.Len()
 	s.typeKeys("\r")
-	if !s.srv.WaitFor(10*time.Second, func() bool { return len(s.srv.RequestsOfType("shell")) == 1 }) {
+	if !srv.WaitFor(10*time.Second, func() bool { return shells(srv) >= n }) {
 		s.t.Fatalf("no shell was started; output:\n%q", s.out.From(0))
 	}
-	off = s.waitText(off, "$")
-	s.typeKeys("exit 3\r")
-	return s.waitText(off, "web-prod: exited (3)")
+	s.tabs++
+	return s.waitText(off, fmt.Sprintf("[%d ", s.tabs))
+}
+
+// endSession types cmd (an exit) into the focused session, waits for the
+// ended tab's status bar to show reason, closes the tab with x and waits
+// for the host list. It returns the output offset after the list.
+func (s *slice) endSession(off int, cmd, reason string) int {
+	s.t.Helper()
+	s.typeKeys(cmd + "\r")
+	off = s.waitText(off, reason+" · r reconnect · x close")
+	s.typeKeys("x")
+	return s.waitText(off, "enter connect")
+}
+
+// prefix types Ctrl+] and then key.
+func (s *slice) prefix(key string) {
+	s.t.Helper()
+	s.typeKeys("\x1d" + key)
+}
+
+// run performs the demo: Enter on web-prod, `exit 3` in the remote shell
+// inside the frame, then x on the ended tab. It returns the output offset
+// after the host list came back.
+func (s *slice) run() int {
+	s.t.Helper()
+	s.waitText(0, "web-prod demo@127.0.0.1")
+	off := s.openSession(s.srv, 1)
+	return s.endSession(off, "exit 3", "exited (3)")
 }
 
 // quit presses q on the host list and waits for sshelf to exit.
 func (s *slice) quit() {
 	s.t.Helper()
 	s.typeKeys("q")
+	s.waitQuit()
+}
+
+// waitQuit waits for sshelf to exit with status 0.
+func (s *slice) waitQuit() {
+	s.t.Helper()
 	select {
 	case <-s.exited:
 		if s.exitErr != nil {
 			s.t.Fatalf("sshelf exited with %v; output:\n%q", s.exitErr, s.out.From(0))
 		}
 	case <-time.After(10 * time.Second):
-		s.t.Fatalf("sshelf did not quit after q; output:\n%q", s.out.From(0))
+		s.t.Fatalf("sshelf did not quit; output:\n%q", s.out.From(0))
+	}
+}
+
+// checkStty fails unless the terminal is back in its startup mode.
+func (s *slice) checkStty() {
+	s.t.Helper()
+	if after := stty(s.t, s.tty); after != s.before {
+		s.t.Fatalf("stty -a changed:\nbefore:\n%s\nafter:\n%s", s.before, after)
 	}
 }
 
@@ -294,21 +359,53 @@ func TestFR_CONN_001_E2EKeyFileSlice(t *testing.T) {
 	s := startSlice(t)
 	s.run()
 	s.quit()
-	if after := stty(t, s.tty); after != s.before {
-		t.Fatalf("stty -a changed:\nbefore:\n%s\nafter:\n%s", s.before, after)
-	}
+	s.checkStty()
 	if _, err := os.Stat(s.state); !os.IsNotExist(err) {
 		t.Fatalf("state dir created without SSHELF_DEBUG (SEC-LOG-003): %v", err)
 	}
+}
+
+// TestFR_CONN_001_M2_TermIsXterm256color: whatever the local TERM, the
+// remote PTY is xterm-256color, the terminal the emulator implements, and
+// its size is the session area: the 80×24 terminal minus the header and
+// the status bar.
+func TestFR_CONN_001_M2_TermIsXterm256color(t *testing.T) {
+	s := startSlice(t, "TERM=screen-256color")
+	s.run()
+	s.quit()
 	pty := s.srv.RequestsOfType("pty-req")
-	if len(pty) != 1 || pty[0].Term != "xterm-256color" || pty[0].Width != 80 || pty[0].Height != 24 {
-		t.Fatalf("pty-req = %+v", pty)
+	if len(pty) != 1 || pty[0].Term != "xterm-256color" {
+		t.Fatalf("pty-req = %+v, want TERM xterm-256color", pty)
 	}
 }
 
+// TestFR_CONN_001_M2_PtySizeIsSessionArea: the PTY is the session area,
+// and the remote's output is drawn inside the frame.
+func TestFR_CONN_001_M2_PtySizeIsSessionArea(t *testing.T) {
+	s := startSlice(t)
+	start := s.waitText(0, "web-prod demo@127.0.0.1")
+	off := s.openSession(s.srv, 1)
+	if pty := s.srv.RequestsOfType("pty-req"); len(pty) != 1 || pty[0].Width != 80 || pty[0].Height != 22 {
+		t.Fatalf("pty-req = %+v, want 80×22", pty)
+	}
+	s.waitText(start, "connected · demo@127.0.0.1") // the frame's status bar
+	s.typeKeys("size\r")
+	off = s.waitText(off, "80x22")
+	s.endSession(off, "exit 0", "exited (0)")
+	s.quit()
+}
+
+// TestFR_CONN_005_TerminalRestored: modes the remote turns on stay in its
+// emulator and never reach the real terminal; after the session the TUI
+// owns the keyboard, and after quitting stty -a is unchanged.
 func TestFR_CONN_005_TerminalRestored(t *testing.T) {
 	s := startSlice(t)
-	off := s.run()
+	s.waitText(0, "web-prod demo@127.0.0.1")
+	off := s.openSession(s.srv, 1)
+	s.typeKeys("modes 1,1004\r") // application cursor keys, focus events
+	s.typeKeys("echo set\r")
+	off = s.waitText(off, "set")
+	off = s.endSession(off, "exit 3", "exited (3)")
 	// The TUI is back and owns the keyboard: the first key after the
 	// session reaches it (j on a one-host list changes nothing, q quits).
 	s.typeKeys("j")
@@ -317,12 +414,11 @@ func TestFR_CONN_005_TerminalRestored(t *testing.T) {
 		t.Fatalf("remote output after return: %q", out)
 	}
 	s.quit()
-	if after := stty(t, s.tty); after != s.before {
-		t.Fatalf("stty -a changed:\nbefore:\n%s\nafter:\n%s", s.before, after)
-	}
-	all := s.out.From(0)
-	if !bytes.Contains(all, []byte("\x1b[?1049l\x1b[?1000l")) {
-		t.Fatal("the session reset sequence was not written")
+	s.checkStty()
+	for _, seq := range []string{"\x1b[?1h", "\x1b[?1004h"} {
+		if bytes.Contains(s.out.From(0), []byte(seq)) {
+			t.Errorf("the remote's %q reached the terminal", seq)
+		}
 	}
 }
 

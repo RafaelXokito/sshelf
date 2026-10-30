@@ -14,6 +14,7 @@ import (
 
 	"github.com/RafaelXokito/sshelf/internal/paths"
 	"github.com/RafaelXokito/sshelf/internal/term"
+	"github.com/RafaelXokito/sshelf/internal/ui"
 )
 
 // exitCrash is the exit status after a panic (EX_SOFTWARE).
@@ -112,8 +113,11 @@ func (g guard) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if p, ok := msg.(cmdPanic); ok {
 		panic(p)
 	}
-	if _, ok := msg.(tea.KeyPressMsg); ok {
+	switch msg.(type) {
+	case tea.KeyPressMsg:
 		term.Fault("update")
+	case ui.SessionUpdateMsg:
+		term.Fault("session-update") // a crash while a session is open
 	}
 	m, cmd := g.model.Update(msg)
 	return guard{model: m}, guardCmd(cmd)

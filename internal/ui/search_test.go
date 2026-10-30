@@ -26,7 +26,7 @@ func shownLabels(d *driver) []string {
 }
 
 func TestFR_NAV_002_EnterConnectsTopMatch(t *testing.T) {
-	svc := &fakeService{hosts: searchHosts, session: &stubSession{}}
+	svc := &fakeService{hosts: searchHosts}
 	d := newDriver(t, svc)
 	d.press('j', "j")
 	d.press('j', "j") // web-prod-eu selected before searching
@@ -43,6 +43,7 @@ func TestFR_NAV_002_EnterConnectsTopMatch(t *testing.T) {
 	if len(svc.connected) != 1 || svc.connected[0] != "s2" {
 		t.Fatalf("connected %v, want web-prod (s2)", svc.connected)
 	}
+	d.focus(0) // the session opened in a tab; back to the list
 
 	// The arrows pick another result; letters keep typing.
 	d.press('/', "/") // the field still has focus: / is part of the query
@@ -52,6 +53,7 @@ func TestFR_NAV_002_EnterConnectsTopMatch(t *testing.T) {
 	if len(svc.connected) != 2 || svc.connected[1] != "s3" {
 		t.Fatalf("connected %v, want web-prod-eu (s3) second", svc.connected)
 	}
+	d.focus(0)
 
 	// Hostname and user match too, case-insensitively.
 	for q, want := range map[string]string{"10.0.1": "db-staging", "DEPLOY": "web-prod-eu", "intern": "zeta"} {

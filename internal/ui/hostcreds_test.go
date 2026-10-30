@@ -71,7 +71,7 @@ func (d *driver) tabTo(n int) {
 
 func TestFR_HOST_010_FirstTimeUserPasswordInForm(t *testing.T) {
 	const canary = "canary-host-pw-1d2c"
-	svc := &fakeService{session: &stubSession{}} // first run: Welcome
+	svc := &fakeService{} // first run: Welcome
 	d := newDriver(t, svc)
 	d.press('a', "a")
 	d.typeText("web")

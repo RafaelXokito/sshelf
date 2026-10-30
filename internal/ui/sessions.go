@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"image/color"
 	"net"
 	"strconv"
 	"strings"
@@ -26,7 +27,7 @@ import (
 // (design §9.4).
 type SessionUpdateMsg struct {
 	Num  int
-	sess app.FramedSession
+	sess app.Session
 }
 
 // SessionEndedMsg reports that the session of tab Num ended. Err is nil
@@ -35,7 +36,7 @@ type SessionUpdateMsg struct {
 type SessionEndedMsg struct {
 	Num  int
 	Err  error
-	sess app.FramedSession
+	sess app.Session
 }
 
 // tickMsg redraws the focused session's duration once a second.
@@ -47,7 +48,7 @@ type sessionTab struct {
 	hostID  domain.ID
 	label   string // the host label as typed; sanitised when drawn
 	addr    string // user@host:port
-	sess    app.FramedSession
+	sess    app.Session
 	started time.Time
 	seq     uint64 // Snapshot.Seq when last seen
 	seenSeq uint64 // Snapshot.Seq when last focused; activity = seq > seenSeq
@@ -81,7 +82,7 @@ func (t *sessionTab) activity() bool { return t.seq > t.seenSeq }
 
 // listenSession waits for the next update of s and reports it as a
 // SessionUpdateMsg, or as a SessionEndedMsg once Updates is closed.
-func listenSession(num int, s app.FramedSession) tea.Cmd {
+func listenSession(num int, s app.Session) tea.Cmd {
 	return func() tea.Msg {
 		if _, ok := <-s.Updates(); ok {
 			return SessionUpdateMsg{Num: num, sess: s}
@@ -148,15 +149,51 @@ func (m Model) areaSize() app.Size {
 
 // openTab adds a tab for s after the last one, with the next unused number,
 // and focuses it (FR-TAB-002).
-func (m Model) openTab(hostID domain.ID, label, addr string, s app.FramedSession) (Model, tea.Cmd) {
+func (m Model) openTab(hostID domain.ID, label, addr string, s app.Session) (Model, tea.Cmd) {
 	m.nextNum++
 	t := &sessionTab{num: m.nextNum, hostID: hostID, label: label, addr: addr, sess: s, started: m.now()}
-	if m.width > 0 {
-		s.Resize(m.areaSize())
-	}
+	m.prepare(s)
 	m.tabs = append(m.tabs, t)
 	m, cmd := m.focusTab(len(m.tabs))
 	return m, tea.Batch(m.listen(t.num, s), cmd)
+}
+
+// prepare gives a new session the session area and the terminal's
+// colours, as far as they are known (FR-CONN-001, ARCH-SESS-016).
+func (m Model) prepare(s app.Session) {
+	if m.width > 0 {
+		s.Resize(m.areaSize())
+	}
+	if m.fg != nil || m.bg != nil {
+		s.SetDefaultColors(m.fg, m.bg)
+	}
+}
+
+// setColors records the terminal's default colours and passes them to
+// every live session (ARCH-SESS-016).
+func (m Model) setColors(fg, bg color.Color) Model {
+	if fg != nil {
+		m.fg = fg
+	}
+	if bg != nil {
+		m.bg = bg
+	}
+	for _, t := range m.tabs {
+		if !t.done {
+			t.sess.SetDefaultColors(m.fg, m.bg)
+		}
+	}
+	return m
+}
+
+// CloseSessions closes every session. main calls it after the program
+// has ended, whatever ended it (a signal included), so that no
+// connection outlives the UI (ARCH-SESS-010). Close does not wait on
+// the network for long: it closes the connection.
+func (m Model) CloseSessions() {
+	for _, t := range m.tabs {
+		_ = t.sess.Close()
+	}
 }
 
 // focusTab focuses tab i: 0 is the Hosts tab, i is m.tabs[i-1]. Focusing
@@ -232,14 +269,12 @@ func (m Model) attemptTabPtr() *sessionTab {
 
 // reconnected runs s in the ended tab t, keeping its number and position;
 // the old screen and scrollback go with the old session (FR-CONN-010).
-func (m Model) reconnected(t *sessionTab, s app.FramedSession) (Model, tea.Cmd) {
+func (m Model) reconnected(t *sessionTab, s app.Session) (Model, tea.Cmd) {
 	old := t.sess
 	t.sess, t.started = s, m.now()
 	t.done, t.ended, t.failure, t.scroll = false, nil, "", nil
 	t.seq, t.seenSeq = 0, 0
-	if m.width > 0 {
-		s.Resize(m.areaSize())
-	}
+	m.prepare(s)
 	m.ticking = m.ticking && m.focused() != t // the clock may have stopped on the ended tab
 	m, cmd := m.focusTab(m.tabIndex(t.num) + 1)
 	return m, tea.Batch(func() tea.Msg { _ = old.Close(); return nil }, m.listen(t.num, s), cmd)
@@ -287,7 +322,7 @@ func (m Model) quit() (tea.Model, tea.Cmd) {
 // quits.
 func (m Model) closeAllAndQuit() (tea.Model, tea.Cmd) {
 	m.cancelAttempt()
-	sessions := make([]app.FramedSession, len(m.tabs))
+	sessions := make([]app.Session, len(m.tabs))
 	for i, t := range m.tabs {
 		sessions[i] = t.sess
 	}
@@ -340,6 +375,12 @@ func (m Model) updateSessions(msg tea.Msg) (Model, tea.Cmd, bool) {
 	case quitMsg:
 		next, cmd := m.closeAllAndQuit()
 		return next.(Model), cmd, true
+
+	case tea.BackgroundColorMsg:
+		return m.setColors(nil, msg.Color), nil, true
+
+	case tea.ForegroundColorMsg:
+		return m.setColors(msg.Color, nil), nil, true
 
 	case tickMsg:
 		m.ticking = false

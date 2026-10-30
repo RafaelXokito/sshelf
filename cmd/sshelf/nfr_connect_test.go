@@ -26,13 +26,6 @@ import (
 	"github.com/RafaelXokito/sshelf/internal/ui/screens/hostlist"
 )
 
-// stillTerm is a session.Terminal that never resizes and needs no TTY.
-type stillTerm struct{}
-
-func (stillTerm) MakeRaw() (func() error, error)     { return func() error { return nil }, nil }
-func (stillTerm) Size() (int, int, error)            { return 80, 24, nil }
-func (stillTerm) Resizes() (<-chan struct{}, func()) { return nil, func() {} }
-
 // startModel runs the root model's Init as Bubble Tea would. Since T-023,
 // Init returns a batch of the config load and the asynchronous
 // credential-store probe (D-101), so each command runs on its own goroutine
@@ -118,7 +111,7 @@ func TestNFR_PERF_001_NoSecretReadAtStartup(t *testing.T) {
 	first := writeFixture1k(t, xdg)
 	store := secrets.NewMemStore()
 	svc := heldProbe{
-		Service: app.New(app.Config{Dir: filepath.Join(xdg, "sshelf"), Secrets: store, Home: home, Terminal: stillTerm{}}),
+		Service: app.New(app.Config{Dir: filepath.Join(xdg, "sshelf"), Secrets: store, Home: home}),
 		release: make(chan struct{}),
 	}
 	m, rest := startModel(t, svc)
@@ -257,7 +250,7 @@ func TestNFR_PERF_003_ConnectOverhead(t *testing.T) {
 	}
 
 	store := secrets.NewMemStore()
-	svc := app.New(app.Config{Dir: dir, KnownHostsFiles: []string{filepath.Join(dir, "known_hosts")}, Secrets: store, Home: home, Terminal: stillTerm{}})
+	svc := app.New(app.Config{Dir: dir, KnownHostsFiles: []string{filepath.Join(dir, "known_hosts")}, Secrets: store, Home: home})
 	// Progress messages are dropped; a prompt would block Connect and time out.
 	svc.SetSend(func(any) {})
 
@@ -288,6 +281,7 @@ func TestNFR_PERF_003_ConnectOverhead(t *testing.T) {
 			t.Fatalf("run %d: connect result %#v", i, msg)
 		}
 		_ = connected.Session.Close()
+		<-connected.Session.Done()
 	}
 	if n := store.Calls(secrets.OpGet); n != 0 {
 		t.Errorf("%d secret reads for a key-file host", n)

@@ -177,7 +177,7 @@ func TestARCH_DATA_001_DeleteClearsReferences(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	l, err := New(Config{Dir: dir, Terminal: stillTerm{}}).Load(context.Background())
+	l, err := New(Config{Dir: dir}).Load(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}

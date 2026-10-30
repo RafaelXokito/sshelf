@@ -29,7 +29,7 @@ func importApp(t *testing.T, sshConfig string) (*App, *secrets.MemStore, string)
 	}
 	ms := secrets.NewMemStore()
 	dir := filepath.Join(t.TempDir(), "sshelf")
-	a := New(Config{Dir: dir, Home: home, Secrets: ms, Terminal: stillTerm{}})
+	a := New(Config{Dir: dir, Home: home, Secrets: ms})
 	if _, err := a.Load(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -109,7 +109,7 @@ func TestFR_IMPORT_001_KeysReferencedNotCopied(t *testing.T) {
 	if !bytes.Contains(cfg, []byte(filepath.Join(home, ".ssh", "aws.pem"))) {
 		t.Fatal("config.json lacks the key path")
 	}
-	l, err := New(Config{Dir: a.cfg.Dir, Terminal: stillTerm{}}).Load(context.Background())
+	l, err := New(Config{Dir: a.cfg.Dir}).Load(context.Background())
 	if err != nil || len(l.Hosts) != 7 || len(l.Identities) != 2 {
 		t.Fatalf("after restart: %d hosts, %d identities, %v", len(l.Hosts), len(l.Identities), err)
 	}

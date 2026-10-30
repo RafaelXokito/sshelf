@@ -22,7 +22,7 @@ func TestSEC_CRED_006_DeniedNoRetryNoCache(t *testing.T) {
 		a := credApp(t, store, []*sshtest.Server{srv}, `[{"id": "i1", "name": "ops", "has_password": true}]`, oneHost)
 		prompts := cancelPrompts(a)
 		store.FailNext(secrets.OpGet, tc.err)
-		s, err := a.Connect(context.Background(), "h1")
+		s, err := a.Connect(context.Background(), "h1", Size{})
 		if err == nil {
 			_ = s.Close()
 			t.Fatalf("%v: connected", tc.err)

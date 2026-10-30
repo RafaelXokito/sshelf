@@ -19,7 +19,7 @@ var testIdentities = []domain.Identity{
 }
 
 func formService() *fakeService {
-	return &fakeService{hosts: slices.Clone(testHosts), identities: testIdentities, session: &stubSession{}}
+	return &fakeService{hosts: slices.Clone(testHosts), identities: testIdentities}
 }
 
 func (d *driver) typeText(s string) {

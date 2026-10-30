@@ -104,7 +104,7 @@ func TestFR_CONN_008_PasswordPlusOTPEndToEnd(t *testing.T) {
 	a := credApp(t, store, []*sshtest.Server{srv}, `[{"id": "i1", "name": "ops", "has_password": true}]`, oneHost)
 	var p answerPrompts
 	p.install(a, func(AuthPromptMsg) []string { return []string{"424242"} })
-	s, err := a.Connect(context.Background(), "h1")
+	s, err := a.Connect(context.Background(), "h1", Size{})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -79,7 +79,6 @@ func (f *trustFixture) app() *App {
 		Dir:             f.dir,
 		KnownHostsFiles: []string{paths.KnownHostsFile(f.dir), f.openssh},
 		Home:            f.home,
-		Terminal:        stillTerm{},
 	})
 	f.prompts = make(chan HostKeyPromptMsg, 4)
 	a.SetSend(func(msg any) {
@@ -101,7 +100,7 @@ type connectResult struct {
 func (f *trustFixture) connectAsync(a *App) chan connectResult {
 	done := make(chan connectResult, 1)
 	go func() {
-		s, err := a.Connect(context.Background(), "h1")
+		s, err := a.Connect(context.Background(), "h1", Size{})
 		done <- connectResult{s, err}
 	}()
 	return done
@@ -239,7 +238,7 @@ func TestFR_KH_004_TrustSurvivesRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	a := f.app() // restart
-	s, err := a.Connect(context.Background(), "h1")
+	s, err := a.Connect(context.Background(), "h1", Size{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -309,7 +308,7 @@ func TestHostKeyPromptCancelledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() {
-		s, err := a.Connect(ctx, "h1")
+		s, err := a.Connect(ctx, "h1", Size{})
 		if s != nil {
 			_ = s.Close()
 		}
@@ -341,7 +340,7 @@ func TestFR_KH_002_ChangedKeyBlocksWithoutPrompt(t *testing.T) {
 	attempts := len(f.srv.AuthAttempts())
 	before, _ := os.ReadFile(f.openssh) //nolint:gosec // test temp file
 	a := f.app()
-	_, err := a.Connect(context.Background(), "h1")
+	_, err := a.Connect(context.Background(), "h1", Size{})
 	me, ok := errors.AsType[*HostKeyMismatchError](err)
 	if !ok || !errors.Is(err, ErrHostKeyMismatch) || me.Stale[0].File != paths.KnownHostsFile(f.dir) || me.Stale[0].Line != 2 {
 		t.Fatalf("err = %#v", err)

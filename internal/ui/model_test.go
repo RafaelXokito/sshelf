@@ -3,7 +3,6 @@ package ui
 import (
 	"context"
 	"errors"
-	"io"
 	"runtime"
 	"slices"
 	"strconv"
@@ -34,19 +33,6 @@ func goroutineID() uint64 {
 	return id
 }
 
-// stubSession is an app.Session whose Run returns a fixed result.
-type stubSession struct {
-	result error
-	ran    atomic.Bool
-	closed atomic.Bool
-}
-
-func (s *stubSession) SetStdin(io.Reader)  {}
-func (s *stubSession) SetStdout(io.Writer) {}
-func (s *stubSession) SetStderr(io.Writer) {}
-func (s *stubSession) Run() error          { s.ran.Store(true); return s.result }
-func (s *stubSession) Close() error        { s.closed.Store(true); return nil }
-
 // fakeService is an app.Service that panics when it is called on the
 // goroutine that runs Update (ARCH-UI-002).
 type fakeService struct {
@@ -54,7 +40,6 @@ type fakeService struct {
 	notices    []string
 	loadErr    error
 	connectErr error
-	session    *stubSession
 	updateGID  atomic.Uint64
 
 	identities []domain.Identity
@@ -62,24 +47,15 @@ type fakeService struct {
 
 	fakeIdentities // identities_test.go
 
-	// framed are the framed sessions the next Connect calls return, in
-	// order, before falling back to session.
+	// framed are the sessions the next Connect calls return, in order;
+	// after them Connect returns a new FakeSession showing a prompt.
 	framed []*apptest.FakeSession
 
 	mu        sync.Mutex
 	connected []domain.ID
+	sizes     []app.Size    // the session area passed to each Connect
 	saves     []domain.Host // hosts passed to SaveHost
 }
-
-// framedStub is what fakeService.Connect returns for a framed session:
-// the M2 fake, plus the MVP methods app.Session still requires until
-// T-037.
-type framedStub struct{ *apptest.FakeSession }
-
-func (framedStub) SetStdin(io.Reader)  {}
-func (framedStub) SetStdout(io.Writer) {}
-func (framedStub) SetStderr(io.Writer) {}
-func (framedStub) Run() error          { panic("Run called on a framed session") }
 
 // SaveHost mimics app.App.SaveHost in memory.
 func (f *fakeService) SaveHost(_ context.Context, h domain.Host) (app.SavedHost, error) {
@@ -123,10 +99,11 @@ func (f *fakeService) Load(context.Context) (app.Loaded, error) {
 	return app.Loaded{Hosts: f.hosts, Identities: f.identities, Notices: f.notices}, nil
 }
 
-func (f *fakeService) Connect(_ context.Context, id domain.ID) (app.Session, error) {
+func (f *fakeService) Connect(_ context.Context, id domain.ID, size app.Size) (app.Session, error) {
 	f.checkGoroutine("Connect")
 	f.mu.Lock()
 	f.connected = append(f.connected, id)
+	f.sizes = append(f.sizes, size)
 	var framed *apptest.FakeSession
 	if len(f.framed) > 0 {
 		framed, f.framed = f.framed[0], f.framed[1:]
@@ -135,20 +112,19 @@ func (f *fakeService) Connect(_ context.Context, id domain.ID) (app.Session, err
 	if f.connectErr != nil {
 		return nil, f.connectErr
 	}
-	if framed != nil {
-		return framedStub{framed}, nil
+	if framed == nil {
+		framed = apptest.NewFakeSession("$ ")
 	}
-	return f.session, nil
+	return framed, nil
 }
 
 // driver runs the root model the way tea.Program does: Update on one
 // goroutine, every command on another.
 type driver struct {
-	t     *testing.T
-	svc   *fakeService
-	m     tea.Model
-	execs int
-	quit  bool
+	t    *testing.T
+	svc  *fakeService
+	m    tea.Model
+	quit bool
 
 	// Session listeners and the status-bar clock would block a
 	// synchronous driver, so they are parked: pump runs a tab's pending
@@ -165,13 +141,9 @@ var testEpoch = time.Date(2026, 10, 30, 9, 0, 0, 0, time.UTC)
 func newDriver(t *testing.T, svc *fakeService) *driver {
 	d := &driver{t: t, svc: svc, listeners: map[int]tea.Cmd{}, clock: testEpoch}
 	m := New(svc)
-	m.exec = func(c tea.ExecCommand, fn tea.ExecCallback) tea.Cmd {
-		d.execs++
-		return func() tea.Msg { return fn(c.Run()) }
-	}
 	m.now = func() time.Time { return d.clock }
 	m.tick = func() tea.Cmd { d.ticks++; return nil }
-	m.listen = func(num int, s app.FramedSession) tea.Cmd {
+	m.listen = func(num int, s app.Session) tea.Cmd {
 		d.listeners[num] = listenSession(num, s)
 		return nil
 	}
@@ -278,53 +250,33 @@ func connectSecond(d *driver) {
 }
 
 func TestFR_CONN_005_ExitStatusShown(t *testing.T) {
-	sess := &stubSession{result: &session.ExitError{Status: 3}}
-	d := newDriver(t, &fakeService{hosts: testHosts, session: sess})
+	sess := apptest.NewFakeSession("$ exit 3")
+	d := newDriver(t, &fakeService{hosts: testHosts, framed: []*apptest.FakeSession{sess}})
 	connectSecond(d)
-	if !sess.ran.Load() || d.execs != 1 {
-		t.Fatalf("session ran = %v, execs = %d", sess.ran.Load(), d.execs)
-	}
-	if v := d.view(); !strings.Contains(v, "web-prod: exited (3)") {
-		t.Fatalf("view lacks the exit status:\n%s", v)
-	}
-
-	sess.result = nil
-	d.press(tea.KeyEnter, "")
-	if v := d.view(); !strings.Contains(v, "web-prod: exited (0)") {
-		t.Fatalf("view lacks exit status 0:\n%s", v)
+	sess.End(&session.ExitError{Status: 3})
+	d.pump(1)
+	if v := plain(d.view()); !strings.Contains(v, "✕ exited (3)") || !strings.Contains(v, "$ exit 3") {
+		t.Fatalf("view lacks the exit status or the last screen:\n%s", v)
 	}
 }
 
 func TestFR_CONN_005_ConnectionLostShown(t *testing.T) {
-	sess := &stubSession{result: &session.DisconnectError{Err: errors.New("connection reset by peer")}}
-	d := newDriver(t, &fakeService{hosts: testHosts, session: sess})
+	sess := apptest.NewFakeSession()
+	d := newDriver(t, &fakeService{hosts: testHosts, framed: []*apptest.FakeSession{sess}})
 	connectSecond(d)
-	if v := d.view(); !strings.Contains(v, "web-prod: connection lost: connection reset by peer") {
+	sess.End(&session.DisconnectError{Err: errors.New("connection reset by peer")})
+	d.pump(1)
+	if v := plain(d.view()); !strings.Contains(v, "✕ connection lost: connection reset by peer") {
 		t.Fatalf("view lacks the disconnect reason:\n%s", v)
 	}
 }
 
-func TestFR_CONN_005_SameHostSelected(t *testing.T) {
-	sess := &stubSession{result: &session.ExitError{Status: 1}}
-	d := newDriver(t, &fakeService{hosts: testHosts, session: sess})
-	connectSecond(d)
-	if h := selected(t, d); h.ID != "h2" {
-		t.Fatalf("selected %s after the session, want h2 (web-prod)", h.ID)
-	}
-	if v := d.view(); !strings.Contains(v, "> web-prod") {
-		t.Fatalf("web-prod not highlighted:\n%s", v)
-	}
-	if len(d.root().modals) != 0 {
-		t.Fatal("a modal is still open after the session")
-	}
-}
-
-func TestARCH_SESS_002_AuthFailureNeverExecs(t *testing.T) {
+func TestARCH_SESS_002_AuthFailureOpensNoTab(t *testing.T) {
 	svc := &fakeService{hosts: testHosts, connectErr: errors.New("ssh: handshake failed: ssh: unable to authenticate")}
 	d := newDriver(t, svc)
 	connectSecond(d)
-	if d.execs != 0 {
-		t.Fatalf("tea.Exec called %d times after a failed connect", d.execs)
+	if len(d.root().tabs) != 0 {
+		t.Fatalf("%d tabs opened after a failed connect", len(d.root().tabs))
 	}
 	if len(svc.connected) != 1 || svc.connected[0] != "h2" {
 		t.Fatalf("Connect calls = %v", svc.connected)
@@ -344,13 +296,13 @@ func TestARCH_SESS_002_AuthFailureNeverExecs(t *testing.T) {
 func TestARCH_UI_002_NoIOInUpdate(t *testing.T) {
 	// The fake panics if Load or Connect runs on the Update goroutine; the
 	// driver runs Update on the test goroutine and commands elsewhere.
-	sess := &stubSession{}
-	svc := &fakeService{hosts: testHosts, session: sess}
+	svc := &fakeService{hosts: testHosts}
 	d := newDriver(t, svc)
 	connectSecond(d)
+	d.focus(0)
 	d.press(tea.KeyEnter, "")
-	if len(svc.connected) != 2 || !sess.ran.Load() {
-		t.Fatalf("connects = %d, ran = %v", len(svc.connected), sess.ran.Load())
+	if len(svc.connected) != 2 || len(d.root().tabs) != 2 {
+		t.Fatalf("connects = %d, tabs = %d", len(svc.connected), len(d.root().tabs))
 	}
 
 	// And the fake really does panic when called from Update's goroutine.
@@ -395,7 +347,7 @@ func TestConnectingModalCancel(t *testing.T) {
 
 func TestSEC_FILE_002_NoticeInStatusBar(t *testing.T) {
 	notice := "permissions of config.json were too open; set to 0700/0600"
-	d := newDriver(t, &fakeService{hosts: testHosts, notices: []string{notice}, session: &stubSession{}})
+	d := newDriver(t, &fakeService{hosts: testHosts, notices: []string{notice}})
 	if v := d.view(); !strings.Contains(v, notice) {
 		t.Fatalf("view lacks the notice:\n%s", v)
 	}
@@ -411,7 +363,7 @@ type blockingService struct {
 	release chan struct{}
 }
 
-func (b *blockingService) Connect(ctx context.Context, _ domain.ID) (app.Session, error) {
+func (b *blockingService) Connect(ctx context.Context, _ domain.ID, _ app.Size) (app.Session, error) {
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()

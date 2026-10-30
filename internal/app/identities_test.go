@@ -21,7 +21,7 @@ import (
 func storeApp(t *testing.T, store secrets.Store) (*App, string) {
 	t.Helper()
 	dir := filepath.Join(t.TempDir(), "sshelf")
-	a := New(Config{Dir: dir, Secrets: store, Home: t.TempDir(), Terminal: stillTerm{}})
+	a := New(Config{Dir: dir, Secrets: store, Home: t.TempDir()})
 	if _, err := a.Load(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -185,7 +185,7 @@ func TestSEC_CRED_002_RenameKeepsKeys(t *testing.T) {
 		t.Fatalf("rename lost flags: %+v", renamed.Identity)
 	}
 	// And after a restart.
-	l, err := New(Config{Dir: dir, Terminal: stillTerm{}}).Load(ctx)
+	l, err := New(Config{Dir: dir}).Load(ctx)
 	if err != nil || len(l.Identities) != 1 || l.Identities[0].ID != id || l.Identities[0].Label != "operations" {
 		t.Fatalf("after restart: %+v, %v", l.Identities, err)
 	}
@@ -249,7 +249,7 @@ func TestFR_IDENT_004_StatusFromFlagsAndMissing(t *testing.T) {
 		t.Fatalf("before connect: %+v", p)
 	}
 	cancelPrompts(a)
-	if s, err := a.Connect(ctx, "h1"); err == nil {
+	if s, err := a.Connect(ctx, "h1", Size{}); err == nil {
 		_ = s.Close()
 	}
 	list, _ = a.Identities(ctx)

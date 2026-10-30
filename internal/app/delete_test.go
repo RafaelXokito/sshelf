@@ -24,7 +24,7 @@ func appWithConfig(t *testing.T, cfg string) (*App, string) {
 	if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte(cfg), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	a := New(Config{Dir: dir, Terminal: stillTerm{}})
+	a := New(Config{Dir: dir})
 	if _, err := a.Load(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -51,7 +51,7 @@ func TestFR_HOST_002_SharedIdentityKept(t *testing.T) {
 		t.Fatalf("second delete: %+v, %v", rest, err)
 	}
 
-	l, err := New(Config{Dir: dir, Terminal: stillTerm{}}).Load(context.Background())
+	l, err := New(Config{Dir: dir}).Load(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}

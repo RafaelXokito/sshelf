@@ -30,7 +30,7 @@ func TestARCH_CONN_004_BlockGolden(t *testing.T) {
 	d := newDriver(t, svc)
 	connectSecond(d)
 	golden(t, "keychanged", d.m)
-	if d.execs != 0 {
+	if len(d.root().tabs) != 0 {
 		t.Fatal("a session ran after a changed key")
 	}
 }
@@ -55,8 +55,8 @@ func TestFR_KH_002_NoConnectAnyway(t *testing.T) {
 	for _, k := range []string{"y", "a", "c"} {
 		d.press(rune(k[0]), k)
 	}
-	if len(svc.connected) != 1 || d.execs != 0 || len(d.root().modals) != 1 {
-		t.Fatalf("connects = %d, execs = %d, modals = %d", len(svc.connected), d.execs, len(d.root().modals))
+	if len(svc.connected) != 1 || len(d.root().tabs) != 0 || len(d.root().modals) != 1 {
+		t.Fatalf("connects = %d, tabs = %d, modals = %d", len(svc.connected), len(d.root().tabs), len(d.root().modals))
 	}
 	d.press(tea.KeyEscape, "")
 	if len(d.root().modals) != 0 || len(svc.connected) != 1 {
