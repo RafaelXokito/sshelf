@@ -1226,17 +1226,21 @@ ssh-agent priority, stored keys, the label grammar, a `--host` launch flag for
 tmux users (D-107: not for now, revisit `Later`) and secrets on a second
 machine (D-108: re-enter them; shown as "not set on this device").
 
-Open for M2. The spec uses the default shown until the product owner rules:
+The M2 questions are answered too (status at the M2 gate, T-043):
 
 1. **Scrollback size.** 10,000 lines per session costs about 65 MB at 80×24
    and 130 MB at 200×50 with the chosen emulator (measured, ADR-013), so 10
-   sessions could need more than 1 GB. Default: **2,000 lines**, about 30 MB
+   sessions could need more than 1 GB. **D-013: 2,000 lines**, about 30 MB
    per session at 120×40 (NFR-SIZE-003). A setting for it is v1 (FR-CFG-009).
-2. **Wide characters at the right margin.** The emulator drops a
-   double-width character (CJK, emoji) that lands on the last one or two
-   columns of a line (ADR-013). Default: fix it upstream during T-031; if no
-   fixed release exists at the M2 gate, ship M2 with it as a known issue
-   rather than fork the library (D-007).
-3. **Remote window titles.** Default: tabs show the host label only, and a
+2. **Wide characters at the right margin.** `x/vt` v0.1.0 drops a
+   double-width character (CJK, emoji) that lands on the last column of a
+   line (ADR-013 limitation 2). **D-015: worked around in sshelf's emulator
+   wrapper** (T-031): the character wraps to the next line as in xterm, and
+   `TestARCH_TEST_002_WideCharacterAtMargin` pins it. M2 ships without the
+   known issue; the wrapper's workaround is removed once an upstream release
+   fixes it (re-checked on every `x/vt` upgrade, ADR-013).
+3. **Remote window titles.** **D-014:** tabs show the host label only, and a
    title set by the remote is ignored (FR-TAB-003, SEC-SESSION-005).
+
+No question is open for M2.
 
