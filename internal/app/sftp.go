@@ -26,7 +26,7 @@ func (a *App) OpenSFTP(ctx context.Context, hostID domain.ID) (Browser, error) {
 	}
 	b, err := files.Open(lease, files.Options{HostID: hostID}) // owns the lease, also on failure
 	if err != nil {
-		slog.Debug("sftp: open failed", "host", h.Label, "err", err)
+		slog.Debug("sftp: open failed", "host", h.Label, "err", files.Reason(err.Error()))
 		return nil, err // never a typed nil inside the interface
 	}
 	slog.Debug("sftp: open", "host", h.Label)

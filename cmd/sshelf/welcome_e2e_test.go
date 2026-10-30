@@ -30,6 +30,13 @@ func startFresh(t *testing.T, setup func(home string)) *slice {
 // first.
 func startFreshBin(t *testing.T, bin string, setup func(home, xdg string), env ...string) *slice {
 	t.Helper()
+	return startFreshIn(t, bin, "", setup, env...)
+}
+
+// startFreshIn is startFreshBin with sshelf's working directory dir; ""
+// is the test's.
+func startFreshIn(t *testing.T, bin, dir string, setup func(home, xdg string), env ...string) *slice {
+	t.Helper()
 	home, xdg := t.TempDir(), t.TempDir()
 	if setup != nil {
 		setup(home, xdg)
@@ -53,6 +60,7 @@ func startFreshBin(t *testing.T, bin string, setup func(home, xdg string), env .
 	s.cmd = exec.Command(bin) //nolint:gosec // a binary this test run built
 	s.cmd.Env = []string{"HOME=" + home, "XDG_CONFIG_HOME=" + xdg, "TERM=xterm-256color", "PATH=" + os.Getenv("PATH")}
 	s.cmd.Env = append(s.cmd.Env, env...)
+	s.cmd.Dir = dir
 	s.cmd.Stdin, s.cmd.Stdout, s.cmd.Stderr = tty, tty, tty
 	s.cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	if err := s.cmd.Start(); err != nil {

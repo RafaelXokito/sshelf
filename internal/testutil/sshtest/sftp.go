@@ -53,7 +53,7 @@ type SFTPHostile struct {
 	Entries  int    // ManyDir lists this many files (SEC-SFTP-004: 150,000)
 	NameLen  int    // the length of each name in ManyDir; at least 8
 	Depth    int    // DeepDir holds this many nested directories (SEC-SFTP-004: 70)
-	Oversize int64  // OversizeFile's reported size; reads never end
+	Oversize int64  // OversizeFile's reported size; reads never end. A negative size goes out as a huge unsigned one, read back as negative
 	Status   string // DeniedFile's open and list fail with this message
 	Realpath string // realpath of "." and "" answers this instead of SFTPHome
 }
@@ -278,7 +278,7 @@ func (h *sftpFS) virtual(p string) (info, bool) {
 			return info{}, false
 		}
 		return info{name: name, mode: fs.ModeDir | 0o755}, true
-	case hs.Oversize > 0 && p == OversizeFile:
+	case hs.Oversize != 0 && p == OversizeFile:
 		return info{name: name, size: hs.Oversize, mode: 0o644}, true
 	case hs.Status != "" && p == DeniedFile:
 		return info{name: name, mode: 0o644}, true
@@ -315,7 +315,7 @@ func (h *sftpFS) Fileread(r *sftp.Request) (io.ReaderAt, error) {
 			return nil, errors.New(hs.Status)
 		case fi.IsDir():
 			return nil, fmt.Errorf("%s: is a directory", p)
-		case hs.Oversize > 0 && p == OversizeFile:
+		case hs.Oversize != 0 && p == OversizeFile:
 			return h.handle(p, endless{}, false), nil
 		case strings.HasPrefix(p, HostileDir+"/"):
 			return h.handle(p, strings.NewReader(HostileContent), false), nil

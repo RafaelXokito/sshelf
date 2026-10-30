@@ -39,6 +39,7 @@ func paste(s string) string { return "\x1b[200~" + s + "\x1b[201~" }
 type canaryRun struct {
 	*slice
 	tmp    string
+	work   string // the working directory: the SFTP tab's local pane; not scanned
 	frames string
 	cs     canaries
 	// echoed are canaries the remote was sent and printed back in the
@@ -47,14 +48,14 @@ type canaryRun struct {
 	echoed canaries
 }
 
-// startCanary starts the fault-injection build with env added. setup,
-// when not nil, prepares HOME and the sshelf config dir (which exists
-// already, mode 0700).
+// startCanary starts the fault-injection build with env added, in a
+// working directory of its own. setup, when not nil, prepares HOME and the
+// sshelf config dir (which exists already, mode 0700).
 func startCanary(t *testing.T, cs canaries, setup func(home, cfgDir string), env ...string) *canaryRun {
 	t.Helper()
-	tmp := t.TempDir()
+	tmp, work := t.TempDir(), t.TempDir()
 	frames := filepath.Join(tmp, "frames.txt")
-	s := startFreshBin(t, faultBinary(t), func(home, xdg string) {
+	s := startFreshIn(t, faultBinary(t), work, func(home, xdg string) {
 		cfgDir := filepath.Join(xdg, "sshelf")
 		if _, err := paths.EnsureDir(cfgDir); err != nil {
 			t.Fatal(err)
@@ -63,7 +64,7 @@ func startCanary(t *testing.T, cs canaries, setup func(home, cfgDir string), env
 			setup(home, cfgDir)
 		}
 	}, append([]string{"TMPDIR=" + tmp, "SSHELF_FAULT_FRAMES=" + frames}, env...)...)
-	return &canaryRun{slice: s, tmp: tmp, frames: frames, cs: cs}
+	return &canaryRun{slice: s, tmp: tmp, work: work, frames: frames, cs: cs}
 }
 
 // chrome returns the headers and the bottom lines of the frames sshelf

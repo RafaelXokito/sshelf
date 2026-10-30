@@ -364,7 +364,7 @@ func listingWarning(l app.Listing) string {
 		if w != "" {
 			w += "; "
 		}
-		w += "listing cut at 100,000 entries"
+		w += "listing stopped at 100,000 entries"
 	}
 	return w
 }
@@ -570,9 +570,9 @@ func (m Model) edit(p *pane) (Model, tea.Cmd) {
 	case r.parent || r.e.Kind == app.KindDir:
 		m.setMessage("cannot edit a directory")
 	case r.e.Kind == app.KindOther:
-		m.setMessage(displayName(r.e) + ": not a regular file")
+		m.setMessage(displayName(*r.e) + ": not a regular file")
 	case r.e.Kind == app.KindFile && r.e.Size > app.EditMaxSize:
-		m.setMessage(displayName(r.e) + ": too large to edit (over 64 MiB)")
+		m.setMessage(displayName(*r.e) + ": too large to edit (over 64 MiB)")
 	default:
 		tab, dir, name := m.tab, p.dir, r.e.Name
 		return m, func() tea.Msg { return EditRequestMsg{Tab: tab, Dir: dir, Name: name} }
@@ -617,7 +617,7 @@ func (m Model) open(p *pane) (Model, tea.Cmd) {
 // just left (FR-SFTP-007).
 func (m Model) parent(p *pane) tea.Cmd {
 	dir, name, ok := p.parentDir()
-	if !ok || !p.loaded {
+	if !ok || p.dir == "" { // a start directory that failed to list still has a parent
 		return nil
 	}
 	return m.list(p.side, dir, name)

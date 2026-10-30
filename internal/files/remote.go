@@ -75,7 +75,7 @@ func OpenRemote(lease *sshclient.Lease) (*RemoteFS, error) {
 	if t, err := sftp.NewClient(client, sftp.UseConcurrentWrites(true)); err == nil {
 		r.transfer = t
 	} else {
-		slog.Debug("sftp: one channel only", "err", err)
+		slog.Debug("sftp: one channel only", "err", Reason(err.Error()))
 	}
 	r.start = "/"
 	if wd, err := browse.RealPath("."); err == nil && path.IsAbs(wd) {

@@ -690,7 +690,7 @@ the contract; goleak and sshtest's connection-close count test it.
   `Fstat` with the `Lstat`). `Seek` the remote file to the part's size and
   `WriteTo` a writer that counts bytes, stops at the recorded size
   (SEC-SFTP-004) and fails when the job is cancelled. Then check the size,
-  `Sync`, close, `Chmod(mode & 0777)`, `Chtimes`, and `Rename` the part over
+  `Sync`, close, `Chmod(mode & 0777 &^ umask)`, `Chtimes`, and `Rename` the part over
   the final name inside the root (a symlink at the final name is replaced,
   never followed; SEC-SFTP-002, SEC-SFTP-003).
 - **Upload.** `Lstat` the local file (regular, or the explicitly marked
@@ -727,7 +727,8 @@ the contract; goleak and sshtest's connection-close count test it.
 
 **Consequences.** Big trees are not walked up front, so the total of a
 directory copy is known only as it proceeds; the progress line shows the
-current file. Remote permission bits are copied as `mode & 0777`; owners,
+current file. Permission bits are copied as `mode & 0777` (less the umask
+when downloading, FR-SFTP-001); owners,
 ACLs and hard links are not (out of scope, `product/requirements.md` §3.2).
 
 ### ADR-019: Edit locally suspends the UI with `tea.ExecProcess`, from one package (revises ADR-009 and ADR-012)

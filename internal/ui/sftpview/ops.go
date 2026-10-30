@@ -134,7 +134,7 @@ func (p *pane) targets() []app.Entry {
 		return out
 	}
 	if r, ok := p.current(); ok && !r.parent {
-		out = append(out, r.e)
+		out = append(out, *r.e)
 	}
 	return out
 }
@@ -146,7 +146,7 @@ func (m Model) rename(p *pane) tea.Cmd {
 		return nil
 	}
 	tab, side, dir, from := m.tab, p.side, p.dir, r.e.Name
-	title := "Rename " + displayName(r.e) + " to:"
+	title := "Rename " + displayName(*r.e) + " to:"
 	modal := input.New(title, from, nameCheck(p, from), func(to string) tea.Msg {
 		return renameMsg{tab: tab, side: side, dir: dir, from: from, to: to}
 	})

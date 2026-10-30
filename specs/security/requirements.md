@@ -459,7 +459,7 @@ cross TB-6 and are untrusted.
 When a remote directory listing contains an entry whose name is empty, `.` or `..`, or contains `/`, NUL or a
 control character (C0, DEL or C1), the system shall leave that entry out of the listing and out of every operation,
 and shall report how many entries it left out.
-Priority: M3 · Status: Draft · Threats: T-22, T-15 · Source: D-020
+Priority: M3 · Status: Implemented · Threats: T-22, T-15 · Source: D-020
 - AC1: sshtest's hostile SFTP mode (ARCH-TEST-004) lists `ok.txt`, `../evil`, `a/b`, `x/..`, `.`, `..`, an empty
   name, `x\x00y`, `bell\x07`, `esc\x1b[31m`, `c1\u009b`, `del\x7f` and `tab\tname`. `github.com/pkg/sftp` drops
   `.` and `..` and reduces every name to its last path element (`../evil` arrives as `evil`, `a/b` as `b`, `x/..`
@@ -505,7 +505,7 @@ Priority: M3 · Status: Implemented · Threats: T-18, T-23 · Source: D-020
 The system shall stop reading a remote directory listing after 100,000 entries or 64 MiB of listing data, shall not
 descend more than 64 directory levels in a recursive copy, delete or count, and shall stop a download once it has
 received the size the server reported when the file was opened.
-Priority: M3 · Status: Draft · Threats: T-24
+Priority: M3 · Status: Implemented · Threats: T-24
 - Note: when the server allows only one SFTP channel per tab (ADR-018), listing data cannot be told apart from
   transfer data, so the 64 MiB budget is replaced by a 30 s timeout on each listing; the 100,000-entry cap still
   applies.
@@ -538,7 +538,7 @@ Priority: M3 · Status: Implemented · Threats: T-26 · Source: D-019
 **SEC-SFTP-007: No file contents or paths in logs.**
 The system shall never write file contents to the debug log, the screen outside the panes, a crash report or test
 output, and shall write file paths and names to the debug log only at debug level.
-Priority: M3 · Status: Draft · Threats: T-27, T-17
+Priority: M3 · Status: Implemented · Threats: T-27, T-17
 - AC1: The canary harness (SEC-LOG-001) is extended with M3 flows, with `SSHELF_DEBUG=1`: upload and download of a
   file whose content holds the canary, a transfer cancelled, a resume, edit-locally (changed, remote changed), a
   dropped connection and a reconnect. The canary content appears in no log record, crash report, stdout or stderr.
@@ -551,7 +551,7 @@ Priority: M3 · Status: Draft · Threats: T-27, T-17
 The system shall pass every server-supplied string shown in the SFTP tab or written to the log (status messages,
 `realpath` results, symlink targets) through `domain.Sanitize` (SEC-SESSION-003), fold whitespace to single spaces,
 and cut it to 80 columns with `…`.
-Priority: M3 · Status: Draft · Threats: T-15
+Priority: M3 · Status: Implemented · Threats: T-15
 - AC1: sshtest's hostile mode answers a failed `open` with a status message holding an OSC 52 write, an OSC 0
   title, a CSI, a newline and 200 extra columns; the error line is one line of at most 80 columns of the message
   with no control rune, and the PTY output scan (SEC-SESSION-005 AC1) finds no `ESC ]`.

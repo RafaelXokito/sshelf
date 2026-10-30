@@ -52,3 +52,15 @@ func TestFR_SFTP_001_SummaryCountsFiles(t *testing.T) {
 		t.Fatalf("summary = %q", got)
 	}
 }
+
+// TestSEC_SFTP_004_SummaryCountsTooDeep: a directory skipped as too deep
+// is reported in the summary (AC2).
+func TestSEC_SFTP_004_SummaryCountsTooDeep(t *testing.T) {
+	got := batchSummary([]app.Transfer{
+		{Name: "deep", State: app.Done, Dir: true},
+		{Name: "deep/d", State: app.Skipped, Reason: "too many nested directories", Dir: true},
+	})
+	if got != "copied 0 files, skipped 1" {
+		t.Fatalf("summary = %q", got)
+	}
+}

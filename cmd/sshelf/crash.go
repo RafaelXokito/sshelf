@@ -129,7 +129,7 @@ func (g guard) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // (frames_fault.go).
 func (g guard) View() tea.View {
 	v := g.model.View()
-	recordFrame(v)
+	recordFrame(v, g.model)
 	return v
 }
 

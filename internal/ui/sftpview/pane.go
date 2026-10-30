@@ -13,11 +13,16 @@ import (
 	"github.com/RafaelXokito/sshelf/internal/ui/components"
 )
 
-// row is one row of a pane: the ".." row or an entry.
+// row is one row of a pane: the ".." row or an entry. e points into the
+// pane's entries, so a listing of 100,000 entries is held once
+// (SEC-SFTP-004); the ".." row's e is an empty entry.
 type row struct {
 	parent bool
-	e      app.Entry
+	e      *app.Entry
 }
+
+// noEntry is the ".." row's entry.
+var noEntry app.Entry
 
 // pane is one side of the tab: its directory, its sorted listing, and
 // the cursor, scroll position, marks, filter and item counts, which
@@ -125,14 +130,15 @@ func (p *pane) rebuild(hidden bool) {
 	keep, hadParent := p.cursorName()
 	p.rows = nil
 	if p.loaded && !p.atRoot() {
-		p.rows = append(p.rows, row{parent: true})
+		p.rows = append(p.rows, row{parent: true, e: &noEntry})
 	}
 	q := strings.ToLower(p.filter.Value())
-	for _, e := range p.entries {
+	for i := range p.entries {
+		e := &p.entries[i]
 		if hidden && hiddenName(e.Name) {
 			continue
 		}
-		if q != "" && !strings.Contains(strings.ToLower(displayName(e)), q) {
+		if q != "" && !strings.Contains(strings.ToLower(displayName(*e)), q) {
 			continue
 		}
 		p.rows = append(p.rows, row{e: e})
@@ -156,7 +162,7 @@ func (p *pane) cursorName() (string, bool) {
 // current is the row under the cursor.
 func (p *pane) current() (row, bool) {
 	if p.cursor < 0 || p.cursor >= len(p.rows) {
-		return row{}, false
+		return row{e: &noEntry}, false
 	}
 	return p.rows[p.cursor], true
 }

@@ -27,6 +27,16 @@ const DirMode fs.FileMode = 0o755
 // PartMode is the mode of a part file while it is written (SEC-SFTP-003).
 const PartMode fs.FileMode = 0o600
 
+// umask is the process's file mode creation mask, read once at start. A
+// download gets the source's permission bits less the umask, as cp and
+// OpenSSH's sftp get do, so a server cannot make a local file group- or
+// world-writable against the user's umask (FR-SFTP-001).
+var umask = func() fs.FileMode {
+	m := syscall.Umask(0)
+	syscall.Umask(m)
+	return fs.FileMode(m) & fs.ModePerm //nolint:gosec // a mode mask fits
+}()
+
 // LocalFS is the local side of an SFTP tab. Every method may block on the
 // file system and is called off the UI goroutine (ARCH-SFTP-002). Every
 // change goes through an os.Root opened on the directory it happens in, on
@@ -337,7 +347,7 @@ func (d *LocalDir) RemovePart(name string) error {
 
 // Finish completes a download whose size the caller has checked: it syncs
 // and closes f (name's part file), sets its permission bits to mode & 0777
-// and its modification time, and renames it over name. Rename replaces
+// less the umask and its modification time, and renames it over name. Rename replaces
 // whatever is at name, a symbolic link included, and never writes through
 // it (SEC-SFTP-002 AC1, SEC-SFTP-003). f is closed whatever the outcome.
 func (d *LocalDir) Finish(f *os.File, name string, mode fs.FileMode, mtime time.Time) error {
@@ -347,7 +357,7 @@ func (d *LocalDir) Finish(f *os.File, name string, mode fs.FileMode, mtime time.
 	}
 	err := f.Sync()
 	if err == nil {
-		err = f.Chmod(mode & 0o777)
+		err = f.Chmod(mode & 0o777 &^ umask)
 	}
 	if cerr := f.Close(); err == nil {
 		err = cerr

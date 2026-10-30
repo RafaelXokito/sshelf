@@ -815,3 +815,21 @@ func TestFR_SFTP_001_LocalNameRules(t *testing.T) {
 		}
 	}
 }
+
+// TestSEC_SFTP_004_NegativeSizeFails: a server that reports a size the
+// client reads back as negative (2^64-1 on the wire) and then sends data
+// fails the download cleanly, with nothing left behind, instead of
+// panicking in the transfer.
+func TestSEC_SFTP_004_NegativeSizeFails(t *testing.T) {
+	srv := sftpSrv(t, sshtest.WithSFTPHostile(sshtest.SFTPHostile{Oversize: -1}))
+	b := openBrowser(t, srv)
+	down := t.TempDir()
+	b.Copy(Remote, sshtest.SFTPHome, []string{path.Base(sshtest.OversizeFile)}, down)
+	ts := waitFor(t, b, 10*time.Second, settled)
+	if x := ts[0]; x.State != Failed || x.Reason != "the server reported an invalid size" || x.Done != 0 {
+		t.Fatalf("transfers:\n%s", dump(ts))
+	}
+	if ents, _ := os.ReadDir(down); len(ents) != 0 {
+		t.Fatalf("left %v", ents)
+	}
+}

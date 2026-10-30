@@ -131,7 +131,7 @@ func (m Model) rowText(p *pane, idx, inner int) string {
 		case r.e.Kind == app.KindDir:
 			mark = "▸"
 		}
-		name = displayName(r.e)
+		name = displayName(*r.e)
 		if r.e.Kind == app.KindDir {
 			n, ok := p.counts[r.e.Name]
 			if !ok {

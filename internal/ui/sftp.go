@@ -61,6 +61,11 @@ func (m Model) focusedSFTP() *sessionTab {
 	return nil
 }
 
+// SFTPFocused reports whether the focused tab is an SFTP tab: its whole
+// frame is sshelf's own text, with nothing a remote program printed (the
+// E2E canary harness records it, SEC-SFTP-007).
+func (m Model) SFTPFocused() bool { return m.focusedSFTP() != nil }
+
 // localHome is where ~ goes in a local pane.
 func localHome() string {
 	h, err := os.UserHomeDir()

@@ -138,6 +138,9 @@ func (b *Browser) download(ctx context.Context, t task) error {
 	if !fi.Mode().IsRegular() {
 		return skipKind(kindOf(fi.Mode()))
 	}
+	if fi.Size() < 0 { // a size past 2^63 on the wire
+		return errBadSize
+	}
 	srcInfo := FileInfo{Size: fi.Size(), ModTime: fi.ModTime()}
 	target, err := b.resolveTarget(t, srcInfo, parent.Lstat)
 	if err != nil {

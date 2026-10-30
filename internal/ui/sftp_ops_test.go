@@ -311,7 +311,7 @@ func TestFR_SFTP_024_SkippedWarning(t *testing.T) {
 	b.SetListingNotes(app.Remote, "/home/pi", 1, true)
 	d.clock = d.clock.Add(time.Minute)
 	d.keys("R")
-	if p := progressLine(d); p != "⚠ 1 entry with unsafe names not shown; listing cut at 100,000 entries" {
+	if p := progressLine(d); p != "⚠ 1 entry with unsafe names not shown; listing stopped at 100,000 entries" {
 		t.Fatalf("progress line = %q", p)
 	}
 }

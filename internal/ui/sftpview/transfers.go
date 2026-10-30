@@ -133,7 +133,7 @@ func batchSummary(ts []app.Transfer) string {
 	var done, skipped, failed, cancelled int
 	for _, t := range ts {
 		switch {
-		case t.Dir && t.State != app.Failed: // directories are counted by their files
+		case t.Dir && t.State != app.Failed && t.State != app.Skipped: // directories are counted by their files, unless they failed or were skipped (too deep, SEC-SFTP-004)
 		case t.State == app.Done:
 			done++
 		case t.State == app.Skipped:

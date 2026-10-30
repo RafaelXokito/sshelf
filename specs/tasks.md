@@ -679,7 +679,7 @@ order and rebase rather than resolve by hand.
 - **Delivers:** the end-to-end hostile-server suite through the real binary (unsafe names, symlink tricks in the download folder, 150,000 entries, a 70-level chain, an oversize file, escape sequences in status messages scanned in the PTY output); the canary harness (T-028, T-042) extended with the M3 flows of SEC-SFTP-007 and with every SFTP frame (pane titles, progress line, modals) added to what it scans; the debug-log rule (paths at debug only, never contents).
 - **Satisfies:** SEC-SFTP-007, SEC-SFTP-001 (E2E), SEC-SFTP-002 (E2E), SEC-SFTP-004 (E2E heap), SEC-SFTP-008 (PTY scan)
 - **Depends on:** T-054 (T-055 for the edit flows of the canary)
-- **Tests:** `TestSEC_SFTP_007_CanaryHarnessM3`, `TestSEC_SFTP_007_NoTransferRecordsWhenLoggingOff`, `TestSEC_SFTP_007_PasswordCanaryNotInFrames`, `TestSEC_SFTP_001_E2EHostileDownload`, `TestSEC_SFTP_002_E2EPlantedSymlink`, `TestSEC_SFTP_004_E2EHugeListingHeap`, `TestSEC_SFTP_008_PTYScan`.
+- **Tests:** `TestSEC_SFTP_007_CanaryHarnessM3`, `TestSEC_SFTP_007_NoTransferRecordsWhenLoggingOff`, `TestSEC_SFTP_007_PasswordCanaryNotInFrames`, `TestSEC_SFTP_001_E2EHostileDownload`, `TestSEC_SFTP_002_E2EPlantedSymlink`, `TestSEC_SFTP_004_E2EHugeListingHeap`, `TestSEC_SFTP_004_E2EDeepChainAndOversize`, `TestSEC_SFTP_008_PTYScan`; from the hostile-server review: `TestSEC_SFTP_004_NegativeSizeFails`, `TestSEC_SFTP_004_SummaryCountsTooDeep`, `TestFR_SFTP_001_DownloadModeLessUmask`.
 - **Done when:** zero canary hits and zero forbidden sequences across all M3 flows on both OSes.
 - **Estimate:** 1.5 d
 

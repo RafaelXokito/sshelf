@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path"
 	"path/filepath"
@@ -119,6 +120,7 @@ var (
 	ErrNotFile     = errors.New("exists and is not a file")
 	ErrInternal    = errors.New("internal error")
 	errSizeChanged = errors.New("size changed during transfer")
+	errBadSize     = errors.New("the server reported an invalid size")
 	errLost        = errors.New("connection lost")
 )
 
@@ -428,10 +430,28 @@ func (b *Browser) finish(j *job, err error) {
 		j.state, j.reason = Failed, errText(err)
 	}
 	j.samples = nil
+	rec := transferRecord(j)
 	b.schedule()
 	b.mu.Unlock()
 	b.wg.Done()
 	b.notify()
+	slog.Debug("sftp: transfer", rec...)
+}
+
+// transferRecord is the debug-log record of how a run of j ended: the
+// source path, the direction, the size and the outcome only, never any
+// content (SEC-SFTP-007). The path is sanitised (SEC-SFTP-008); with
+// logging off the record is discarded. The caller holds b.mu.
+func transferRecord(j *job) []any {
+	dir, src := "upload", filepath.Join(j.srcDir, j.name)
+	if j.from == Remote {
+		dir, src = "download", path.Join(j.srcDir, j.name)
+	}
+	outcome := j.state.String()
+	if j.reason != "" {
+		outcome += ": " + j.reason
+	}
+	return []any{"path", Display(src), "direction", dir, "size", j.total, "outcome", outcome}
 }
 
 // conflictError parks a job as Waiting.

@@ -372,6 +372,31 @@ func TestSEC_SFTP_003_PartModeAndRename(t *testing.T) {
 	}
 }
 
+// FR-SFTP-001: a downloaded file gets the server's permission bits less
+// the umask sshelf started with, so a hostile server's 0777 does not make
+// a local file group- or world-writable.
+func TestFR_SFTP_001_DownloadModeLessUmask(t *testing.T) {
+	for _, tc := range []struct{ umask, want fs.FileMode }{{0o022, 0o755}, {0o077, 0o700}, {0, 0o777}} {
+		setHook(t, &umask, tc.umask)
+		dl, _, _ := tree(t)
+		d := openDir(t, dl)
+		f, err := d.CreatePart("run.sh")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := d.Finish(f, "run.sh", fs.ModeSetgid|0o777, time.Now()); err != nil {
+			t.Fatal(err)
+		}
+		info, err := os.Lstat(filepath.Join(dl, "run.sh"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode() != tc.want {
+			t.Errorf("umask %04o: mode %v, want %v", tc.umask, info.Mode(), tc.want)
+		}
+	}
+}
+
 // FR-SFTP-005: the local pane starts in the working directory.
 func TestFR_SFTP_005_LocalStartsInWorkingDir(t *testing.T) {
 	dir := t.TempDir()

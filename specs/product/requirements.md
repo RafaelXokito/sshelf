@@ -1044,7 +1044,7 @@ When the user presses `c` in a pane, the system shall copy the marked entries, o
 - **Acceptance:**
   - A 100 MiB file uploaded and then downloaded again has the same SHA-256 as the original (sshtest SFTP subsystem, ARCH-TEST-004).
   - A directory tree with three levels, an empty directory and 200 small files is copied in both directions with the same relative paths and contents. Directories are created before their contents.
-  - Each copied file keeps its modification time (to the second) and its permission bits `rwxrwxrwx` (`mode & 0777`); setuid, setgid and sticky bits are never set on the target. Directory modification times are not preserved.
+  - Each copied file keeps its modification time (to the second) and its permission bits `rwxrwxrwx` (`mode & 0777`; a download also drops the bits of sshelf's umask, as `cp` and OpenSSH's `sftp get` do, so a server cannot make a local file group- or world-writable, D-020); setuid, setgid and sticky bits are never set on the target. Directory modification times are not preserved.
   - Every copy goes through the transfer queue (FR-SFTP-014, FR-SFTP-015): `c` returns at once, and the panes stay usable while it runs. When a transfer finishes, the target pane is refreshed if it shows the target directory.
   - `c` on `..` does nothing. Symbolic links inside a copied directory are skipped and counted ("skipped 3 symlinks"); a marked symlink to a file is copied as the file it points to.
   - Special files (devices, FIFOs, sockets) are skipped with the same kind of note.
