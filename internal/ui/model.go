@@ -112,11 +112,11 @@ type Model struct {
 	// Session tabs (design §9.4, ADR-015).
 	tabs    []*sessionTab // in opening order
 	focus   int           // 0 = Hosts tab, i = tabs[i-1]
-	nextNum int           // the last tab number given; numbers are never reused
+	nextID  int           // the last tab id given; ids route messages, are never reused and never shown (a tab's number is its position, D-023)
 	ticking bool          // a tickMsg is on its way
 	prefix  bool          // ctrl+] seen, waiting for the command key (design §8.5)
 
-	attemptTab int  // the ended tab the attempt in progress reconnects; 0 for a new tab
+	attemptTab int  // the id of the ended tab the attempt in progress reconnects; 0 for a new tab
 	quitAsked  bool // the "Quit and close N tabs?" confirmation is open
 
 	// fg and bg are the terminal's default colours once Bubble Tea

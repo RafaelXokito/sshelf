@@ -482,7 +482,7 @@ While a tab shows an ended session, when the user presses `r`, the system shall 
 - **Priority:** M2 · **Status:** Implemented · **Source:** Tabby, Termius, D-010 (was v1 "Reconnect after a drop")
 - **Acceptance:**
   - `r` is offered after a drop and after a normal `exit` alike (FR-CONN-005 revision). The host is connected exactly as from the host list, with the same modals, shown over the ended tab.
-  - The new session keeps the tab's number and position; the old screen and scrollback are discarded once the new session is established.
+  - The new session keeps the tab's position, and so its number (D-023); the old screen and scrollback are discarded once the new session is established.
   - If the reconnect fails or is cancelled, the tab keeps the ended session and its status bar shows the failure (FR-CONN-006 messages), still offering `r` and `x`.
   - sshelf never reconnects on its own (design §8.7).
 
@@ -1309,33 +1309,33 @@ sshelf │ Hosts │ 1 raspberrypi4 ● │[2 web-prod]│
 ### FR-TAB-001 · Switch between tabs
 While several tabs are open, when the user presses the prefix key followed by a tab number, `n`, `p`, `h` or `0`, the system shall focus that session tab, the next tab, the previous tab or the Hosts tab, and show the focused session's current screen.
 
-- **Priority:** M2 · **Status:** Implemented · **Source:** D-010 (was `Later` "In-app session switcher")
+- **Priority:** M2 · **Status:** Implemented · **Source:** D-010 (was `Later` "In-app session switcher"); v1: D-023
 - **Acceptance:**
   - With 2 sessions open, switching away and back shows the same screen content in each, plus any output that arrived while the tab was in the background.
-  - `Ctrl+]` `1` to `9` focus session tabs 1 to 9 by number; a number with no tab does nothing. `Ctrl+]` `h` and `Ctrl+]` `0` focus the Hosts tab while the sessions keep running.
+  - `Ctrl+]` `1` to `9` focus the 1st to 9th tab from the left, session or SFTP (D-023); a number with no tab does nothing. `Ctrl+]` `h` and `Ctrl+]` `0` focus the Hosts tab while the sessions keep running.
   - `Ctrl+]` `n` and `Ctrl+]` `p` cycle through all tabs, the Hosts tab included, wrapping at both ends.
   - With 10 sessions open, the first frame of the newly focused tab is rendered within 50 ms (NFR-PERF-006).
 
 ### FR-TAB-002 · Open a session in a new tab
-When a connection started from the host list succeeds, the system shall open a new session tab after the last tab, give it the next unused number, and focus it.
+When a connection started from the host list succeeds, the system shall open a new session tab after the last tab, number it by its position, and focus it.
 
-- **Priority:** M2 · **Status:** Implemented · **Source:** D-010
+- **Priority:** M2 · **Status:** Implemented · **Source:** D-010; v1: D-023
 - **Acceptance:**
   - Dialling, host-key checks, prompts and authentication still happen over the Hosts tab (Connecting, TOFU and prompt modals); the tab opens only when the session is established (ARCH-SESS-002 revision). A failed or cancelled connection opens no tab.
   - Connecting to `web-prod` twice opens two tabs, `1 web-prod` and `2 web-prod`, each with its own SSH connection.
-  - Numbers are not reused while sshelf runs: after closing tab 1 of tabs 1 to 3, the next session gets number 4. `Ctrl+]` `1`–`9` address these numbers.
+  - A tab's number is its position from the left (D-023). Closing a tab renumbers the tabs to its right: after closing tab 1 of tabs 1 to 3, the others become 1 and 2, and the next session gets number 3. The same holds when closing a middle or the last tab.
   - The host list stays fully usable while sessions run: the user can add, edit, delete or connect to hosts.
 
 ### FR-TAB-003 · Tab bar
 The system shall show a one-line header that starts with `sshelf`, then the `Hosts` tab, then one entry per session tab (`<number> <host label>`) and per SFTP tab (`<number> sftp: <host label>`) in opening order, separated by `│`, with the focused tab highlighted.
 
-- **Priority:** M3 · **Status:** Implemented · **Source:** D-009, D-010; M3: D-017
+- **Priority:** M3 · **Status:** Implemented · **Source:** D-009, D-010; M3: D-017; v1: D-023
 - **Acceptance:**
   - The focused tab is shown in reverse video, and its padding spaces are replaced by `[` and `]` (`│[2 web-prod]│`), so focus is not shown by colour alone (NFR-UX-003).
   - Labels are sanitised (SEC-SESSION-003) and cut to 20 columns with `…`. A tab shows the host label only; a window title set by the remote (OSC 0 or 2) is never shown (SEC-SESSION-005).
   - If the tabs do not fit, the bar keeps the focused tab visible and replaces the hidden tabs with `‹+N` on the left and `+N›` on the right. At 80 columns, 10 tabs with 12-character labels fit on one line (golden).
   - The header is shown on every screen, the Hosts tab and the Welcome screen included, and replaces the MVP's `sshelf` title line.
-  - Session and SFTP tabs share one numbering, so `Ctrl+]` `1`–`9` address both. Numbers are not reused.
+  - Session and SFTP tabs are numbered together by position from the left, so `Ctrl+]` `1`–`9` address both. Closing any tab renumbers the tabs to its right (D-023); a click on a tab, the `Ctrl+]` `q` and SFTP close questions ("SFTP tab 2 stays connected.", "Close SFTP tab 2?") use the current numbers.
   - The text after the number (`sftp: raspberrypi4`) is sanitised and cut to 20 columns with `…`, as a session label is.
   - Golden at 80×24 of the approved layout's header: `sshelf │ Hosts │ 1 raspberrypi4 │[2 sftp: raspberrypi4]│`.
   - An SFTP tab shows `●` when a transfer finishes or fails while the tab is in the background, and `✕` while its connection is lost (FR-SFTP-018), with the rules of FR-TAB-004.

@@ -154,31 +154,6 @@ func TestFR_TAB_002_SameHostTwice(t *testing.T) {
 	}
 }
 
-func TestFR_TAB_002_NumbersNotReused(t *testing.T) {
-	d := framedDriver(t, testHosts, apptest.NewFakeSession(), apptest.NewFakeSession(), apptest.NewFakeSession(), apptest.NewFakeSession())
-	for _, id := range []domain.ID{"h1", "h2", "h3"} {
-		connectHost(t, d, id)
-	}
-	first := d.root().tabs[0].sess.(*apptest.FakeSession)
-	m, cmd := d.root().closeTab(1)
-	d.m = m
-	d.run(cmd)
-	if first.Closes() != 1 {
-		t.Fatalf("closed tab's session Close calls = %d", first.Closes())
-	}
-	connectHost(t, d, "h1")
-	var nums []int
-	for _, tab := range d.root().tabs {
-		nums = append(nums, tab.num)
-	}
-	if fmt.Sprint(nums) != "[2 3 4]" {
-		t.Fatalf("tab numbers = %v, want [2 3 4]", nums)
-	}
-	if h := headerLine(d); !strings.Contains(h, "[4 db-staging]") {
-		t.Fatalf("header = %q", h)
-	}
-}
-
 func TestFR_TAB_002_FailedConnectOpensNoTab(t *testing.T) {
 	svc := &fakeService{hosts: testHosts, connectErr: app.ErrAuthFailed, framed: []*apptest.FakeSession{apptest.NewFakeSession()}}
 	d := newDriver(t, svc)

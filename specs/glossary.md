@@ -55,7 +55,7 @@ decisions are in [`decisions.md`](decisions.md).
 | **Secret** | A password, private key or key passphrase. Secrets are only ever stored in the OS credential store, never in the config directory. |
 | **Session** | A single SSH connection opened by sshelf: interactive, a non-interactive snippet run, tunnel-only, or file transfer. From M3 an interactive session and an SFTP tab may share one connection (see *Shared connection*). |
 | **Session area** | The rows of the frame between the header and the status bar: the terminal width by its height minus 2. It is the size of every session's emulator and remote PTY (M2). |
-| **Session tab** [Termius: tab] | A tab that shows one interactive session, numbered from 1 in opening order and labelled with the host label (`2 web-prod`). The same host can be open in several tabs (M2, D-010). |
+| **Session tab** [Termius: tab] | A tab that shows one interactive session, numbered by its position from the left, from 1, and labelled with the host label (`2 web-prod`). The same host can be open in several tabs (M2, D-010). |
 | **SFTP tab** | A tab with a local and a remote pane for one host, labelled `<n> sftp: <label>` (M3, D-017). Opened with `s` on the host list (new connection) or `Ctrl+]` `s` on a session tab (that session's connection, no second login). One per connection. |
 | **Shared connection** | An SSH connection used by both a session tab and its SFTP tab. Ending either tab leaves the other working (M3, D-018, FR-SFTP-004). |
 | **Snippet** | A saved, named command or script, optionally with `{{variables}}`, that can be run on one or many hosts. |

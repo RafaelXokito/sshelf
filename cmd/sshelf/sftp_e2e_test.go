@@ -260,17 +260,18 @@ func TestFR_SFTP_004_E2ECloseEitherFirst(t *testing.T) {
 		r.prefix("1")
 		r.typeKeys("exit 0\r")
 		off = r.waitText(off, "exited (0)")
-		r.typeKeys("x")
+		r.typeKeys("x") // the SFTP tab moves to position 1 (D-023)
+		r.tabs--
 		r.waitFile(filepath.Join(r.local, "keep.bin"), sum, 30*time.Second)
 		if n := disconnects(r.srv); n != 0 {
 			t.Fatalf("%d connection closes after the shell exited", n)
 		}
 		writeRandom(t, r.remote("late.txt"), 10)
-		r.prefix("2")
+		r.prefix("1")
 		r.typeKeys("R")
 		off = r.waitText(off, "late.txt")
 		r.prefix("q")
-		r.waitText(off, "Close SFTP tab 2?")
+		r.waitText(off, "Close SFTP tab 1?")
 		r.typeKeys("y")
 		r.waitDisconnects(1)
 		r.quit()

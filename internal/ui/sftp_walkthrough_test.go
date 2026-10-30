@@ -101,7 +101,7 @@ func TestARCH_UI_001_M3_Walkthrough(t *testing.T) {
 
 	// y: the SFTP tab opens, focused, both panes listed.
 	d.press('y', "y")
-	d.until("the SFTP tab", func(m Model) bool { st := m.focusedSFTP(); return st != nil && st.num == 1 })
+	d.until("the SFTP tab", func(m Model) bool { st := m.focusedSFTP(); return st != nil && st.id == 1 })
 	d.shows("12 items", "4 items", "backup.tar.gz")
 	if m := d.m.(Model); len(m.modals) != 0 || m.cancel != nil || len(svc.opened) != 1 || svc.opened[0] != "h2" {
 		t.Fatalf("modals %d, attempt running %v, opened %v", len(m.modals), m.cancel != nil, svc.opened)
@@ -138,11 +138,11 @@ func TestARCH_UI_001_M3_Walkthrough(t *testing.T) {
 	d.until("the Hosts tab", func(m Model) bool { return m.focus == 0 })
 	d.selectHost("h1")
 	d.press(tea.KeyEnter, "")
-	d.until("the session tab", func(m Model) bool { t := m.focused(); return t != nil && t.num == 2 })
+	d.until("the session tab", func(m Model) bool { t := m.focused(); return t != nil && t.id == 2 })
 
 	// Ctrl+] s: the SFTP tab of connection 1 is not reused.
 	d.prefix("s")
-	d.until("a second SFTP tab", func(m Model) bool { st := m.focusedSFTP(); return st != nil && st.num == 3 })
+	d.until("a second SFTP tab", func(m Model) bool { st := m.focusedSFTP(); return st != nil && st.id == 3 })
 	d.shows("12 items", "4 items")
 	if len(svc.openedOn) != 1 || svc.openedOn[0] != app.Session(sess) {
 		t.Fatalf("OpenSFTPOn %v", svc.openedOn)

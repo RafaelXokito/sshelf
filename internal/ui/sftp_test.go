@@ -449,7 +449,7 @@ func TestFR_TAB_005_M3_PrefixS(t *testing.T) {
 		if len(svc.connected) != 1 {
 			t.Fatalf("dialled again: %v", svc.connected)
 		}
-		if st := d.root().focusedSFTP(); st == nil || st.num != 2 {
+		if st := d.root().focusedSFTP(); st == nil || st.id != 2 {
 			t.Fatal("the new SFTP tab is not focused")
 		}
 		if s.Sent() {
@@ -521,7 +521,7 @@ func TestFR_SFTP_003_FocusesExistingTab(t *testing.T) {
 	connectHost(t, d, "pi") // 3
 	d.prefix("1")
 	d.prefix("s") // 4: sftp on connection 7
-	if st := d.root().focusedSFTP(); st == nil || st.num != 4 {
+	if st := d.root().focusedSFTP(); st == nil || st.id != 4 {
 		t.Fatal("no SFTP tab 4")
 	}
 	d.prefix("1")
@@ -531,12 +531,12 @@ func TestFR_SFTP_003_FocusesExistingTab(t *testing.T) {
 	if len(svc.openedOn) != 1 {
 		t.Fatalf("OpenSFTPOn called %d times; the existing tab should be focused", len(svc.openedOn))
 	}
-	if st := d.root().focusedSFTP(); st == nil || st.num != 4 {
+	if st := d.root().focusedSFTP(); st == nil || st.id != 4 {
 		t.Fatal("the existing SFTP tab is not focused")
 	}
 	d.prefix("3")
 	d.prefix("s") // a different connection gets its own tab
-	if st := d.root().focusedSFTP(); st == nil || st.num != 5 || len(svc.openedOn) != 2 {
+	if st := d.root().focusedSFTP(); st == nil || st.id != 5 || len(svc.openedOn) != 2 {
 		t.Fatalf("connection 8: opens %d", len(svc.openedOn))
 	}
 	// Ctrl+] q on a session whose connection an SFTP tab shares names it
@@ -559,7 +559,7 @@ func TestARCH_SFTP_007_SharedNumbering(t *testing.T) {
 		t.Fatalf("header = %q", h)
 	}
 	d.prefix("2")
-	if st := d.root().focusedSFTP(); st == nil || st.num != 2 {
+	if st := d.root().focusedSFTP(); st == nil || st.id != 2 {
 		t.Fatal("Ctrl+] 2 did not focus the SFTP tab")
 	}
 	d.prefix("q")
@@ -567,9 +567,10 @@ func TestARCH_SFTP_007_SharedNumbering(t *testing.T) {
 	if b.Closes() != 1 || len(d.root().tabs) != 2 || d.root().focus != 1 {
 		t.Fatalf("closes %d, tabs %d, focus %d", b.Closes(), len(d.root().tabs), d.root().focus)
 	}
+	// Tab 3 moved to position 2, so the new tab is number 3 (D-023).
 	openSFTP(t, d, "h2")
-	if st := d.root().focusedSFTP(); st == nil || st.num != 4 {
-		t.Fatal("numbers were reused")
+	if h := headerLine(d); !strings.Contains(h, " 1 db-staging │ 2 zeta │[3 sftp: web-prod]│") {
+		t.Fatalf("header = %q", h)
 	}
 }
 

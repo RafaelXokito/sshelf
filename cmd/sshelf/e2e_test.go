@@ -130,7 +130,7 @@ type slice struct {
 	out     *syncBuffer
 	exited  chan struct{} // closed once the process has exited
 	exitErr error
-	tabs    int    // session tabs opened so far; numbers are never reused
+	tabs    int    // tabs open; a tab's number is its position (D-023)
 	before  string // stty -a before launch
 	state   string // sshelf state dir (log and crash reports) under home
 	cfgDir  string // sshelf config dir (XDG_CONFIG_HOME/sshelf)
@@ -325,6 +325,7 @@ func (s *slice) endSession(off int, cmd, reason string) int {
 	s.typeKeys(cmd + "\r")
 	off = s.waitText(off, reason+" · r reconnect · x close")
 	s.typeKeys("x")
+	s.tabs--
 	return s.waitText(off, "enter connect")
 }
 

@@ -49,7 +49,7 @@ type Entry struct {
 // HostsEntry is the Hosts tab.
 func HostsEntry() Entry { return Entry{Text: "Hosts"} }
 
-// SessionEntry is the tab of session number num: the host label,
+// SessionEntry is the session tab at position num (D-023): the host label,
 // sanitised (SEC-SESSION-003) and cut to LabelWidth columns, with the end
 // marker taking precedence over the activity marker.
 func SessionEntry(num int, label string, activity, ended bool) Entry {
@@ -63,7 +63,7 @@ func SessionEntry(num int, label string, activity, ended bool) Entry {
 	return e
 }
 
-// SFTPEntry is the tab of SFTP tab number num (FR-TAB-003 M3 revision):
+// SFTPEntry is the SFTP tab at position num (FR-TAB-003, D-023):
 // "<num> sftp: <label>", the text after the number sanitised and cut to
 // LabelWidth columns, with the disconnected marker taking precedence over
 // the activity marker.

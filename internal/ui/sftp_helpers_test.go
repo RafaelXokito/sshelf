@@ -166,7 +166,7 @@ func (d *driver) keys(ks ...string) {
 	}
 }
 
-// sftpTabAt returns tab number num's SFTP state.
+// sftpTabAt returns the SFTP state of the tab with id num.
 func sftpTabAt(t *testing.T, d *driver, num int) *sftpTab {
 	t.Helper()
 	m := d.root()

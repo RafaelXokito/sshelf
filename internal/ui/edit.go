@@ -76,7 +76,7 @@ func (m Model) updateEdit(msg tea.Msg) (Model, tea.Cmd, bool) {
 		m.editing = true
 		name := domain.Sanitize(msg.Name)
 		m.setEditMessage(t, "downloading "+name+" to edit…")
-		b, tab, dir, raw := t.sftp.browser, t.num, msg.Dir, msg.Name
+		b, tab, dir, raw := t.sftp.browser, t.id, msg.Dir, msg.Name
 		return m, func() tea.Msg {
 			c, err := b.EditFetch(context.Background(), dir, raw)
 			if err != nil {
@@ -101,7 +101,7 @@ func (m Model) updateEdit(msg tea.Msg) (Model, tea.Cmd, bool) {
 		if m.cancel != nil {
 			return m, m.resolveEdit(t, msg.Copy, app.EditDiscard, "edit cancelled: a connection attempt is in progress"), true
 		}
-		tab, c := t.num, msg.Copy
+		tab, c := t.id, msg.Copy
 		return m, m.runEditor(c.Path, func(err error) tea.Msg { return editorDoneMsg{tab: tab, copy: c, err: err} }), true
 
 	case editorDoneMsg:
@@ -116,7 +116,7 @@ func (m Model) updateEdit(msg tea.Msg) (Model, tea.Cmd, bool) {
 		if msg.err != nil {
 			return m, tea.Batch(size, m.resolveEdit(t, msg.copy, app.EditDiscard, editorErrText(msg.err))), true
 		}
-		b, tab, c := t.sftp.browser, t.num, msg.copy
+		b, tab, c := t.sftp.browser, t.id, msg.copy
 		m.setEditMessage(t, "uploading "+domain.Sanitize(c.Name)+"…")
 		return m, tea.Batch(size, func() tea.Msg {
 			res, err := b.EditFinish(context.Background(), c)
@@ -146,7 +146,7 @@ func (m Model) updateEdit(msg tea.Msg) (Model, tea.Cmd, bool) {
 // editResult shows the outcome of an edit step, or asks the next
 // question.
 func (m Model) editResult(t *sessionTab, msg editResultMsg) (Model, tea.Cmd, bool) {
-	name, tab, c := domain.Sanitize(msg.copy.Name), t.num, msg.copy
+	name, tab, c := domain.Sanitize(msg.copy.Name), t.id, msg.copy
 	answer := func(ch app.EditChoice) tea.Msg { return editChoiceMsg{tab: tab, copy: c, choice: ch} }
 	if msg.err != nil {
 		local := filepath.Join(t.sftp.view.Dir(app.Local), name+app.LocalEditSuffix)
@@ -182,7 +182,7 @@ func (m Model) editResult(t *sessionTab, msg editResultMsg) (Model, tea.Cmd, boo
 // resolveEdit ends the edit of c on tab t with choice; text replaces the
 // status message of a discarded edit.
 func (m Model) resolveEdit(t *sessionTab, c *app.EditCopy, choice app.EditChoice, text string) tea.Cmd {
-	b, tab, localDir := t.sftp.browser, t.num, t.sftp.view.Dir(app.Local)
+	b, tab, localDir := t.sftp.browser, t.id, t.sftp.view.Dir(app.Local)
 	return func() tea.Msg {
 		res, err := b.EditResolve(context.Background(), c, choice, localDir)
 		return editResultMsg{tab: tab, copy: c, res: res, err: err, text: text}

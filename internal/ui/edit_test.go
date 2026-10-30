@@ -232,7 +232,7 @@ func TestARCH_SFTP_006_NoEditWhileConnecting(t *testing.T) {
 	m := d.root()
 	m.cancel = func() {}
 	d.m = m
-	d.send(sftpview.EditRequestMsg{Tab: m.focusedSFTP().num, Dir: "/home/pi", Name: ".bashrc"})
+	d.send(sftpview.EditRequestMsg{Tab: m.focusedSFTP().id, Dir: "/home/pi", Name: ".bashrc"})
 	wantCalls(t, b)
 	if len(fe.paths) != 0 || d.root().editing {
 		t.Fatal("an edit started")

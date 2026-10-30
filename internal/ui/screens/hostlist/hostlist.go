@@ -35,7 +35,7 @@ var (
 )
 
 // ConnectRequestMsg asks the root model to connect to a host. Tab is the
-// number of the ended session tab to reconnect in, or 0 for a new tab
+// id of the ended session tab to reconnect in, or 0 for a new tab
 // (FR-CONN-010).
 type ConnectRequestMsg struct {
 	HostID domain.ID

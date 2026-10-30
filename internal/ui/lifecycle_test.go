@@ -91,7 +91,7 @@ func TestFR_CONN_005_M2_CloseSelectsHost(t *testing.T) {
 	d.prefix("2")
 	endTab(d, 2, ss[1], nil)
 	d.press('x', "x")
-	if d.root().focus != 1 || d.root().tabs[0].num != 1 || d.root().tabs[1].num != 3 {
+	if d.root().focus != 1 || d.root().tabs[0].id != 1 || d.root().tabs[1].id != 3 {
 		t.Fatalf("focus = %d, tabs = %d after closing tab 2", d.root().focus, len(d.root().tabs))
 	}
 }
@@ -131,8 +131,8 @@ func TestFR_CONN_010_ReconnectSameTab(t *testing.T) {
 		t.Fatalf("connects = %v", got)
 	}
 	r := d.root()
-	if len(r.tabs) != 2 || r.tabs[0].num != 1 || r.focus != 1 {
-		t.Fatalf("tabs = %d, first = %d, focus = %d", len(r.tabs), r.tabs[0].num, r.focus)
+	if len(r.tabs) != 2 || r.tabs[0].id != 1 || r.focus != 1 {
+		t.Fatalf("tabs = %d, first = %d, focus = %d", len(r.tabs), r.tabs[0].id, r.focus)
 	}
 	if r.tabs[0].sess.(*apptest.FakeSession) != fresh || old.Closes() != 1 {
 		t.Fatal("the tab does not run the new session, or the old one is open")

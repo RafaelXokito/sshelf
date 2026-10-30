@@ -23,14 +23,14 @@ import (
 	"github.com/RafaelXokito/sshelf/internal/ui/tabs"
 )
 
-// SessionUpdateMsg reports that session tab Num has new output
+// SessionUpdateMsg reports that the session tab with id Num has new output
 // (design §9.4).
 type SessionUpdateMsg struct {
 	Num  int
 	sess app.Session
 }
 
-// SessionEndedMsg reports that the session of tab Num ended. Err is nil
+// SessionEndedMsg reports that the session of the tab with id Num ended. Err is nil
 // for exit status 0, a *session.ExitError, a *session.DisconnectError, or
 // another error.
 type SessionEndedMsg struct {
@@ -44,7 +44,7 @@ type tickMsg struct{}
 
 // sessionTab is one session tab (design §9.4, ADR-015).
 type sessionTab struct {
-	num     int
+	id      int // stable identity that routes messages; never shown (D-023)
 	hostID  domain.ID
 	label   string // the host label as typed; sanitised when drawn
 	addr    string // user@host:port
@@ -129,10 +129,10 @@ func (m Model) hostByID(id domain.ID) (domain.Host, bool) {
 	return domain.Host{}, false
 }
 
-// tabIndex returns the index in m.tabs of tab number num.
-func (m Model) tabIndex(num int) int {
+// tabIndex returns the index in m.tabs of the tab with id id, or -1.
+func (m Model) tabIndex(id int) int {
 	for i, t := range m.tabs {
-		if t.num == num {
+		if t.id == id {
 			return i
 		}
 	}
@@ -157,15 +157,15 @@ func (m Model) areaSize() app.Size {
 	return app.Size{Cols: m.width, Rows: max(m.height-2, 1)}
 }
 
-// openTab adds a tab for s after the last one, with the next unused number,
-// and focuses it (FR-TAB-002).
+// openTab adds a tab for s after the last one and focuses it
+// (FR-TAB-002).
 func (m Model) openTab(hostID domain.ID, label, addr string, s app.Session) (Model, tea.Cmd) {
-	m.nextNum++
-	t := &sessionTab{num: m.nextNum, hostID: hostID, label: label, addr: addr, sess: s, started: m.now()}
+	m.nextID++
+	t := &sessionTab{id: m.nextID, hostID: hostID, label: label, addr: addr, sess: s, started: m.now()}
 	m.prepare(s)
 	m.tabs = append(m.tabs, t)
 	m, cmd := m.focusTab(len(m.tabs))
-	return m, tea.Batch(m.listen(t.num, s), cmd)
+	return m, tea.Batch(m.listen(t.id, s), cmd)
 }
 
 // prepare gives a new session the session area and the terminal's
@@ -236,9 +236,9 @@ func (m Model) focusTab(i int) (Model, tea.Cmd) {
 	return m, tea.Batch(cmd, progress)
 }
 
-// focusNum focuses session tab number num, if there is one.
-func (m Model) focusNum(num int) (Model, tea.Cmd) {
-	if i := m.tabIndex(num); i >= 0 {
+// focusID focuses the tab with id id, if there is one.
+func (m Model) focusID(id int) (Model, tea.Cmd) {
+	if i := m.tabIndex(id); i >= 0 {
 		return m.focusTab(i + 1)
 	}
 	return m, nil
@@ -251,12 +251,13 @@ func (m Model) focusNext(delta int) (Model, tea.Cmd) {
 	return m.focusTab(((m.focus+delta)%n + n) % n)
 }
 
-// closeTab closes session tab number num and its session, and focuses the
-// tab to its left when it was focused; on the Hosts tab, the session's
-// host is selected (FR-CONN-005 revision). Close runs off the Update
-// goroutine, since it may wait on the network.
-func (m Model) closeTab(num int) (Model, tea.Cmd) {
-	i := m.tabIndex(num)
+// closeTab closes the tab with id id and its session or browser, and
+// focuses the tab to its left when it was focused; on the Hosts tab, the
+// session's host is selected (FR-CONN-005 revision). The tabs to its
+// right move one position left, and so do their numbers (D-023). Close
+// runs off the Update goroutine, since it may wait on the network.
+func (m Model) closeTab(id int) (Model, tea.Cmd) {
+	i := m.tabIndex(id)
 	if i < 0 {
 		return m, nil
 	}
@@ -297,7 +298,7 @@ func (m Model) attemptTabPtr() *sessionTab {
 	return nil
 }
 
-// reconnected runs s in the ended tab t, keeping its number and position;
+// reconnected runs s in the ended tab t, keeping its position;
 // the old screen and scrollback go with the old session (FR-CONN-010).
 func (m Model) reconnected(t *sessionTab, s app.Session) (Model, tea.Cmd) {
 	old := t.sess
@@ -306,8 +307,8 @@ func (m Model) reconnected(t *sessionTab, s app.Session) (Model, tea.Cmd) {
 	t.seq, t.seenSeq = 0, 0
 	m.prepare(s)
 	m.ticking = m.ticking && m.focused() != t // the clock may have stopped on the ended tab
-	m, cmd := m.focusTab(m.tabIndex(t.num) + 1)
-	return m, tea.Batch(func() tea.Msg { _ = old.Close(); return nil }, m.listen(t.num, s), cmd)
+	m, cmd := m.focusTab(m.tabIndex(t.id) + 1)
+	return m, tea.Batch(func() tea.Msg { _ = old.Close(); return nil }, m.listen(t.id, s), cmd)
 }
 
 // openWork counts what quitting would stop (FR-TAB-009 M3 revision):
@@ -415,7 +416,7 @@ func (m Model) updateSessions(msg tea.Msg) (Model, tea.Cmd, bool) {
 		if m.focus == i+1 {
 			t.seenSeq = t.seq
 		}
-		return m, m.listen(t.num, t.sess), true
+		return m, m.listen(t.id, t.sess), true
 
 	case SessionEndedMsg:
 		i := m.tabIndex(msg.Num)
@@ -448,13 +449,14 @@ func (m Model) updateSessions(msg tea.Msg) (Model, tea.Cmd, bool) {
 	return m, nil, false
 }
 
-// closeTabMsg closes tab Num and its session; the Disconnect confirmation
+// closeTabMsg closes the tab with id Num and its session; the Disconnect confirmation
 // delivers it on y (FR-CONN-014).
 type closeTabMsg struct{ Num int }
 
 // disconnectQuestion is the Ctrl+] q question (FR-CONN-014 M3 revision).
-// sftpTab is the number of the SFTP tab on the session's connection, or 0
-// when none uses it: then closing the session closes the connection too.
+// sftpTab is the number (position, D-023) of the SFTP tab on the
+// session's connection, or 0 when none uses it: then closing the session
+// closes the connection too.
 func disconnectQuestion(label string, sftpTab int) string {
 	label = domain.Sanitize(label)
 	if sftpTab == 0 {
@@ -463,12 +465,12 @@ func disconnectQuestion(label string, sftpTab int) string {
 	return fmt.Sprintf("Close this %s session? SFTP tab %d stays connected.", label, sftpTab)
 }
 
-// sftpTabOn returns the number of the open SFTP tab on connection id, or
+// sftpTabOn returns the tab id of the open SFTP tab on connection id, or
 // 0 (ADR-017), found by app.Browser.ConnID.
 func (m Model) sftpTabOn(id uint64) int {
 	for _, t := range m.tabs {
 		if t.sftp != nil && t.sftp.browser.ConnID() == id {
-			return t.num
+			return t.id
 		}
 	}
 	return 0
@@ -503,17 +505,19 @@ func (m Model) runPrefix(r keys.PrefixResult) (tea.Model, tea.Cmd) {
 		if t != nil {
 			sftp := 0
 			if !t.done {
-				sftp = m.sftpTabOn(t.sess.ConnID())
+				if id := m.sftpTabOn(t.sess.ConnID()); id > 0 {
+					sftp = m.tabIndex(id) + 1
+				}
 			}
 			q := disconnectQuestion(t.label, sftp)
-			m.modals = append(m.modals, confirm.New(q, closeTabMsg{Num: t.num}))
+			m.modals = append(m.modals, confirm.New(q, closeTabMsg{Num: t.id}))
 		}
 	case keys.PrefixDoHelp:
 		m.modals = append(m.modals, help.New())
 	case keys.PrefixDoHosts:
 		return m.focusTab(0)
 	case keys.PrefixDoTab:
-		return m.focusNum(r.Tab)
+		return m.focusTab(r.Tab) // the Nth tab from the left (D-023)
 	case keys.PrefixDoNext:
 		return m.focusNext(1)
 	case keys.PrefixDoPrev:
@@ -544,10 +548,10 @@ func (m Model) sessionKey(t *sessionTab, k tea.KeyPressMsg) (tea.Model, tea.Cmd)
 	case t.scroll != nil:
 		m.scrollKey(t, k)
 	case t.done && key.Matches(k, keys.Reconnect):
-		hostID, label, num := t.hostID, t.label, t.num
-		return m, func() tea.Msg { return hostlist.ConnectRequestMsg{HostID: hostID, Label: label, Tab: num} }
+		hostID, label, id := t.hostID, t.label, t.id
+		return m, func() tea.Msg { return hostlist.ConnectRequestMsg{HostID: hostID, Label: label, Tab: id} }
 	case t.done && key.Matches(k, keys.CloseTab):
-		return m.closeTab(t.num)
+		return m.closeTab(t.id)
 	case !t.done:
 		_ = t.sess.SendKey(toKeyEvent(k)) // never blocks; a full queue drops it (ARCH-SESS-014)
 	}
@@ -605,10 +609,10 @@ func (m Model) headerSpans() []tabs.Span {
 	entries = append(entries, tabs.HostsEntry())
 	for i, t := range m.tabs {
 		if t.sftp != nil {
-			entries = append(entries, sftpEntry(t, m.focus == i+1))
+			entries = append(entries, sftpEntry(t, i+1, m.focus == i+1))
 			continue
 		}
-		entries = append(entries, tabs.SessionEntry(t.num, t.label, m.focus != i+1 && t.activity(), t.done))
+		entries = append(entries, tabs.SessionEntry(i+1, t.label, m.focus != i+1 && t.activity(), t.done))
 	}
 	return tabs.Layout(m.viewWidth(), entries, m.focus)
 }

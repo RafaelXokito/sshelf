@@ -52,7 +52,7 @@ Each connection opens in a tab. While a session has focus, all keys go to the re
 
 | Key | Action |
 |---|---|
-| `1`–`9` | switch to that tab |
+| `1`–`9` | switch to the Nth tab from the left (closing a tab renumbers the ones after it) |
 | `n` / `p` | next / previous tab |
 | `h` | back to the host list (sessions keep running) |
 | `[` | scrollback (`esc` to leave) |

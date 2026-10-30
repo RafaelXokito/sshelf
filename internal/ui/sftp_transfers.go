@@ -82,7 +82,7 @@ func progressTick(num int, b app.Browser) tea.Cmd {
 // listenTab arms tab t's listener.
 func (m Model) listenTab(t *sessionTab) tea.Cmd {
 	st := t.sftp
-	return m.listenSFTP(t.num, st.gen, st.browser, !st.disconnected, st.stop)
+	return m.listenSFTP(t.id, st.gen, st.browser, !st.disconnected, st.stop)
 }
 
 // snapshot gives tab t's view a snapshot; a focused tab has seen what
@@ -90,7 +90,7 @@ func (m Model) listenTab(t *sessionTab) tea.Cmd {
 func (m Model) snapshot(t *sessionTab, ts []app.Transfer) tea.Cmd {
 	st := t.sftp
 	var cmd tea.Cmd
-	st.view, cmd = st.view.Update(sftpview.SnapshotMsg{Tab: t.num, Transfers: ts})
+	st.view, cmd = st.view.Update(sftpview.SnapshotMsg{Tab: t.id, Transfers: ts})
 	if m.focusedSFTP() == t {
 		st.seen()
 	}
@@ -105,12 +105,12 @@ func (m Model) ensureProgress(t *sessionTab) tea.Cmd {
 		return nil
 	}
 	st.ticking = true
-	return m.progressTick(t.num, st.browser)
+	return m.progressTick(t.id, st.browser)
 }
 
-// sftpTabNum returns the SFTP tab numbered num, or nil.
-func (m Model) sftpTabNum(num int) *sessionTab {
-	if i := m.tabIndex(num); i >= 0 && m.tabs[i].sftp != nil {
+// sftpTabNum returns the SFTP tab with id id, or nil.
+func (m Model) sftpTabNum(id int) *sessionTab {
+	if i := m.tabIndex(id); i >= 0 && m.tabs[i].sftp != nil {
 		return m.tabs[i]
 	}
 	return nil
@@ -163,7 +163,7 @@ func (m Model) updateTransfers(msg tea.Msg) (Model, tea.Cmd, bool) {
 		st.disconnected, t.failure = false, ""
 		st.gen++
 		st.view = st.view.SetDisconnected(false)
-		m, focus := m.focusTab(m.tabIndex(t.num) + 1)
+		m, focus := m.focusTab(m.tabIndex(t.id) + 1)
 		return m, tea.Batch(st.view.Refresh(), m.listenTab(t), focus), true
 
 	case ConnectFailedMsg:
@@ -204,10 +204,10 @@ func (m Model) reconnectSFTP(t *sessionTab) (tea.Model, tea.Cmd) {
 	svc := m.svc
 	ctx, cancel := context.WithCancel(context.Background())
 	m.attempt++
-	m.attemptHost, m.attemptTab = t.hostID, t.num
+	m.attemptHost, m.attemptTab = t.hostID, t.id
 	m.cancel = cancel
 	m.modals = append(m.modals, connecting.New(t.label))
-	attempt, num, hostID, label, b := m.attempt, t.num, t.hostID, t.label, t.sftp.browser
+	attempt, num, hostID, label, b := m.attempt, t.id, t.hostID, t.label, t.sftp.browser
 	return m, func() tea.Msg {
 		if err := svc.ReconnectSFTP(ctx, b); err != nil {
 			return ConnectFailedMsg{attempt: attempt, HostID: hostID, Label: label, Err: err}
@@ -216,15 +216,15 @@ func (m Model) reconnectSFTP(t *sessionTab) (tea.Model, tea.Cmd) {
 	}
 }
 
-// closeQuestion is the close confirmation of SFTP tab t (FR-SFTP-025):
-// "Close SFTP tab 2? 3 transfers will stop.", or for a disconnected tab
-// "Close and drop 3 paused transfers?" (FR-SFTP-018).
-func closeQuestion(t *sessionTab) string {
+// closeQuestion is the close confirmation of SFTP tab t at position pos
+// (FR-SFTP-025, D-023): "Close SFTP tab 2? 3 transfers will stop.", or for
+// a disconnected tab "Close and drop 3 paused transfers?" (FR-SFTP-018).
+func closeQuestion(t *sessionTab, pos int) string {
 	n := t.sftp.view.Pending()
 	if t.sftp.disconnected && n > 0 {
 		return fmt.Sprintf("Close and drop %d paused %s?", n, map[bool]string{true: "transfer", false: "transfers"}[n == 1])
 	}
-	q := fmt.Sprintf("Close SFTP tab %d?", t.num)
+	q := fmt.Sprintf("Close SFTP tab %d?", pos)
 	if n > 0 {
 		q += fmt.Sprintf(" %d %s will stop.", n, map[bool]string{true: "transfer", false: "transfers"}[n == 1])
 	}
@@ -235,8 +235,8 @@ func closeQuestion(t *sessionTab) string {
 // disconnected tab with nothing paused closes it at once (FR-SFTP-018).
 func (m Model) closeSFTPAsk(t *sessionTab, immediateIfIdle bool) (tea.Model, tea.Cmd) {
 	if immediateIfIdle && t.sftp.view.Pending() == 0 {
-		return m.closeTab(t.num)
+		return m.closeTab(t.id)
 	}
-	m.modals = append(m.modals, confirm.New(closeQuestion(t), closeTabMsg{Num: t.num}))
+	m.modals = append(m.modals, confirm.New(closeQuestion(t, m.tabIndex(t.id)+1), closeTabMsg{Num: t.id}))
 	return m, nil
 }

@@ -512,7 +512,7 @@ clipboard code is added (SEC-CLIP-005).
 **Context.** ADR-002 planned a `session.Manager` for detach and reattach.
 M2 has tabs but no detach and no sessions outliving the UI.
 
-**Decision.** The root model holds `[]sessionTab` (number, host ID, label,
+**Decision.** The root model holds `[]sessionTab` (id, host ID, label,
 `user@host:port`, start time, the `app.Session`, activity and end state,
 scrollback position). Each session runs its own goroutines (ARCH-SESS-010),
 so "background" needs no extra machinery: an unfocused tab is simply not
@@ -792,8 +792,8 @@ sees only the editor; sshelf's tabs are not visible until it exits.
 **Decision.**
 
 - The root model's tab list holds session tabs and SFTP tabs in one opening
-  order with one numbering (FR-TAB-003). An SFTP tab entry holds
-  its number, host ID and label, the `app.Browser`, its `sftpview.Model`, and
+  order, numbered together by position (FR-TAB-003, D-023). An SFTP tab entry holds
+  its id, host ID and label, the `app.Browser`, its `sftpview.Model`, and
   its connection state.
 - `internal/ui/sftpview` is the SFTP tab's view: the two panes, the progress
   line, the footer, the transfers view, the filter field and the drag state.
@@ -857,7 +857,7 @@ removed in revision 2.
 
 **ARCH-SESS-008**: When a session ends, the system shall report the cause to the UI exactly once, as `nil` (exit 0), `*ExitError`, `*DisconnectError` or `ErrInternal`, after its channel is closed and its connection lease is released.
 - Priority: M3 · Status: Implemented · Source: FR-CONN-005 revision, FR-CONN-010 (replaces the v1 "Disconnected" modal: the ended tab shows the cause and offers `r`); M3: D-018, ADR-017
-- Acceptance: Table test over sshtest's `exit 0`, `exit 3`, signal, dropped connection and a forced panic: `Err()` returns the right type, `Updates()` is closed exactly once after `Done()`, and sshtest has seen the session channel close, and the connection close too when the session held the only lease. With a second lease held by an SFTP browser, `exit 0` ends the session with `nil` and sshtest records no connection close; a dropped connection ends it with `*DisconnectError`. Pressing `r` on the ended tab produces a `ConnectRequestMsg` with the same host ID and the tab's number.
+- Acceptance: Table test over sshtest's `exit 0`, `exit 3`, signal, dropped connection and a forced panic: `Err()` returns the right type, `Updates()` is closed exactly once after `Done()`, and sshtest has seen the session channel close, and the connection close too when the session held the only lease. With a second lease held by an SFTP browser, `exit 0` ends the session with `nil` and sshtest records no connection close; a dropped connection ends it with `*DisconnectError`. Pressing `r` on the ended tab produces a `ConnectRequestMsg` with the same host ID and the tab's id.
 
 **ARCH-SESS-009**: Where agent forwarding is enabled for a host, the system shall forward the local ssh-agent (`SSH_AUTH_SOCK`) to the server, and shall never forward an agent by default.
 - Priority: v1
@@ -1912,6 +1912,17 @@ stateDiagram-v2
 The Hosts tab is the state machine of §9.1; `Connecting → SessionTab` opens
 a tab.
 
+**Tab numbers are positions (D-023).** Each tab has an internal id, given
+from a counter that never goes back, which routes its messages
+(`SessionUpdateMsg`, `SessionEndedMsg`, the SFTP messages, the reconnect
+attempt) and is never shown. The number in the tab bar is the tab's index
+in `tabs` plus one, computed when the header is laid out; `ctrl+] 1`–`9`
+focuses that index, and clicks hit-test the same layout. Closing a tab
+removes it from `tabs`, so the tabs to its right move left and their
+numbers drop by one. The questions that name a tab ("SFTP tab 2 stays
+connected.", "Close SFTP tab 2?") use its position when they open; while
+a modal is open no tab can close.
+
 **Root model (M2),** abridged from `internal/ui/model.go` and `sessions.go`.
 
 ```go
@@ -1921,9 +1932,9 @@ type Model struct {
 	modals  []components.Modal // global, drawn over the focused tab
 	tabs    []*sessionTab      // in opening order
 	focus   int                // 0 = Hosts tab, i = tabs[i-1]
-	nextNum int                // tab numbers are never reused while sshelf runs
+	nextID  int                // the last tab id given; ids are never reused and never shown
 	prefix  bool               // ctrl+] seen, waiting for the command key
-	attemptTab int             // the ended tab a reconnect reuses; 0 for a new tab
+	attemptTab int             // the id of the ended tab a reconnect reuses; 0 for a new tab
 	quitAsked  bool            // the quit confirmation is open
 	fg, bg  color.Color        // reported by the terminal, passed to every session
 	clicks  components.ClickTracker
@@ -1933,7 +1944,7 @@ type Model struct {
 }
 
 type sessionTab struct {
-	num      int
+	id       int       // stable identity that routes messages; never shown
 	hostID   domain.ID
 	label    string    // the host label as typed; sanitised when drawn
 	addr     string    // user@host:port
@@ -1952,8 +1963,8 @@ type sessionTab struct {
 
 | Message | From | Effect |
 |---|---|---|
-| `SessionUpdateMsg{num}` | listener on `Updates()` | re-arm the listener; mark activity if the tab is not focused; redraw |
-| `SessionEndedMsg{num, err}` | listener, when `Updates()` closes | tab ended (`✕`), reason in its status bar |
+| `SessionUpdateMsg{id}` | listener on `Updates()` | re-arm the listener; mark activity if the tab is not focused; redraw |
+| `SessionEndedMsg{id, err}` | listener, when `Updates()` closes | tab ended (`✕`), reason in its status bar |
 | `tickMsg` | `tea.Tick(1s)` while a live session tab is focused | redraw the duration |
 | `tea.BackgroundColorMsg`, `tea.ForegroundColorMsg` | Bubble Tea, requested in `Init` | store; `SetDefaultColors` on every session |
 | `components.ClickMsg{X, Y, Double}`, `components.WheelMsg{X, Y, Delta}` | root model, from `tea.MouseClickMsg`/`tea.MouseWheelMsg` | handled by the component under the pointer |

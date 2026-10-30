@@ -102,14 +102,14 @@ func (m Model) startSFTPConnect(hostID domain.ID, label string) (tea.Model, tea.
 // openSFTPOn opens an SFTP tab on session tab t's connection, or focuses
 // the one already there (FR-SFTP-003).
 func (m Model) openSFTPOn(t *sessionTab) (tea.Model, tea.Cmd) {
-	if num := m.sftpTabOn(t.sess.ConnID()); num > 0 {
-		return m.focusNum(num)
+	if id := m.sftpTabOn(t.sess.ConnID()); id > 0 {
+		return m.focusID(id)
 	}
-	svc, s, num, hostID, label := m.svc, t.sess, t.num, t.hostID, t.label
+	svc, s, id, hostID, label := m.svc, t.sess, t.id, t.hostID, t.label
 	return m, func() tea.Msg {
 		b, err := svc.OpenSFTPOn(s, hostID)
 		if err != nil {
-			return sftpOnFailedMsg{num: num, err: err}
+			return sftpOnFailedMsg{num: id, err: err}
 		}
 		return ConnectedSFTPMsg{HostID: hostID, Label: label, Browser: b}
 	}
@@ -118,12 +118,12 @@ func (m Model) openSFTPOn(t *sessionTab) (tea.Model, tea.Cmd) {
 // openSFTPTab adds an SFTP tab for b after the last tab, focuses it and
 // lists both panes (FR-SFTP-002, FR-SFTP-005).
 func (m Model) openSFTPTab(hostID domain.ID, label string, b app.Browser) (Model, tea.Cmd) {
-	m.nextNum++
-	v := sftpview.New(m.nextNum, b, sftpview.Options{Home: m.home, Now: m.now})
+	m.nextID++
+	v := sftpview.New(m.nextID, b, sftpview.Options{Home: m.home, Now: m.now})
 	if m.width > 0 {
 		v = v.SetSize(m.width, m.height)
 	}
-	t := &sessionTab{num: m.nextNum, hostID: hostID, label: label, started: m.now(), sftp: &sftpTab{browser: b, view: v, stop: make(chan struct{})}}
+	t := &sessionTab{id: m.nextID, hostID: hostID, label: label, started: m.now(), sftp: &sftpTab{browser: b, view: v, stop: make(chan struct{})}}
 	m.tabs = append(m.tabs, t)
 	m, cmd := m.focusTab(len(m.tabs))
 	return m, tea.Batch(v.Init(), m.listenTab(t), cmd)
@@ -249,10 +249,10 @@ func (m Model) sftpFrame(t *sessionTab) ([]string, frameLayout) {
 	return out, lay
 }
 
-// sftpEntry is an SFTP tab's entry in the tab bar (FR-TAB-003 M3
-// revision).
-func sftpEntry(t *sessionTab, focused bool) tabs.Entry {
-	return tabs.SFTPEntry(t.num, t.label, !focused && t.sftp.activity(), t.sftp.disconnected)
+// sftpEntry is the entry in the tab bar of SFTP tab t at position pos
+// (FR-TAB-003, D-023).
+func sftpEntry(t *sessionTab, pos int, focused bool) tabs.Entry {
+	return tabs.SFTPEntry(pos, t.label, !focused && t.sftp.activity(), t.sftp.disconnected)
 }
 
 // activity reports a transfer that finished or failed while the tab was
