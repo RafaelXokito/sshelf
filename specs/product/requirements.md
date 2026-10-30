@@ -676,7 +676,7 @@ When the user presses Space on a host, the system shall toggle its selection and
 ### FR-NAV-012 · Mouse on the host list
 While the host list is shown, the system shall select a host on a left click, connect to it on a double-click, move the selection with the wheel, and focus the search field on a click in it.
 
-- **Priority:** M2 · **Status:** Draft · **Source:** D-011 (was `Later` behind a setting; M2 has no setting)
+- **Priority:** M2 · **Status:** Implemented · **Source:** D-011 (was `Later` behind a setting; M2 has no setting)
 - **Acceptance:**
   - A click on a host row selects it; a click on a blank row below the last host does nothing.
   - A double-click is two left presses on the same row within 400 ms (ARCH-UI-007) and connects exactly like Enter. Two presses on different rows, or more than 400 ms apart, only select.
@@ -696,7 +696,7 @@ While `config.json` contains no hosts, the system shall show a Welcome screen of
 ### FR-NAV-014 · Mouse on the Welcome screen
 When the user clicks one of the Welcome screen's choices, the system shall act as if that choice's key had been pressed.
 
-- **Priority:** M2 · **Status:** Draft · **Source:** D-011
+- **Priority:** M2 · **Status:** Implemented · **Source:** D-011
 - **Acceptance:**
   - A click anywhere on the `[I] Import from ~/.ssh/config` line starts the import; a click on the `[a] Add host` line opens the host form. Clicks elsewhere do nothing.
 

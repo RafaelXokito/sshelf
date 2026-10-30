@@ -168,9 +168,73 @@ func (m Model) Update(msg tea.Msg) (components.Screen, tea.Cmd) {
 			return m.updateSearch(msg)
 		}
 		return m.updateList(msg)
+	case components.ClickMsg:
+		return m.click(msg)
+	case components.WheelMsg:
+		m.move(WheelRows * msg.Delta)
+		return m, nil
 	}
 	return m, nil
 }
+
+// WheelRows is how many rows one wheel notch moves the selection
+// (FR-NAV-012).
+const WheelRows = 3
+
+// click handles a left press at line Y of View (FR-NAV-012): on the
+// search line it focuses the search field as / does; on a host row it
+// selects that host, moving the keyboard back to the list and keeping the
+// query, and a double-click connects as Enter does. Blank rows do
+// nothing.
+func (m Model) click(c components.ClickMsg) (components.Screen, tea.Cmd) {
+	row, search := m.rowAt(c.Y)
+	switch {
+	case search:
+		if !m.searching {
+			m.searching = true
+			m.search.Focus()
+			m.search.End()
+			m.scroll()
+		}
+		return m, nil
+	case row < 0:
+		return m, nil
+	}
+	if m.searching {
+		m.searching = false
+		m.search.Blur()
+	}
+	m.cursor = row
+	m.scroll()
+	if c.Double {
+		return m, m.connect()
+	}
+	return m, nil
+}
+
+// rowAt returns what is at line y of View: the index of a shown host
+// (or -1), or search when y is the search line. It follows View's layout.
+func (m Model) rowAt(y int) (row int, search bool) {
+	if m.searchShown() {
+		if y == 0 {
+			return -1, true
+		}
+		y--
+	}
+	if y < 0 || len(m.shown) == 0 {
+		return -1, false
+	}
+	end := min(m.offset+m.rows(), len(m.shown))
+	if i := m.offset + y; i < end {
+		return i, false
+	}
+	return -1, false
+}
+
+// searchShown reports whether View shows the search line: while the
+// search field has the keyboard, and while a query is kept after a click
+// moved the keyboard back to the list.
+func (m Model) searchShown() bool { return m.searching || m.search.Value() != "" }
 
 func (m Model) updateList(k tea.KeyPressMsg) (components.Screen, tea.Cmd) {
 	switch {
@@ -261,7 +325,7 @@ func (m Model) rows() int {
 		return len(m.shown)
 	}
 	n := m.height
-	if m.searching {
+	if m.searchShown() {
 		n-- // the search line
 	}
 	return max(n, 1)
@@ -282,7 +346,7 @@ func (m *Model) scroll() {
 // View implements components.Screen.
 func (m Model) View() string {
 	var b strings.Builder
-	if m.searching {
+	if m.searchShown() {
 		b.WriteString(m.fit(searchStyle.Render("/ ") + m.search.View()))
 		b.WriteString("\n")
 	}

@@ -89,6 +89,26 @@ var (
 	ConfirmNo  = key.NewBinding(key.WithKeys("n", "enter", "esc"), key.WithHelp("n/enter/esc", "no"))
 )
 
+// MouseAction is something the mouse does on sshelf's screens (D-011),
+// with the bindings that do the same from the keyboard (NFR-UX-001).
+type MouseAction struct {
+	Name string
+	Keys []key.Binding
+}
+
+// MouseActions returns every mouse action of design §9.5 on sshelf's
+// screens with its keyboard equivalents.
+func MouseActions() []MouseAction {
+	return []MouseAction{
+		{"host list: click a host", []key.Binding{Up, Down, First, Last}},
+		{"host list: double-click a host", []key.Binding{Connect}},
+		{"host list: wheel", []key.Binding{Up, Down}},
+		{"host list: click the search field", []key.Binding{Search}},
+		{"welcome: click Import", []key.Binding{WelcomeImport}},
+		{"welcome: click Add host", []key.Binding{WelcomeAdd}},
+	}
+}
+
 // Map is the keymap of one view: every binding active while it has the
 // keyboard. Within a Map no two bindings share a key (ARCH-UI-004).
 type Map struct {
