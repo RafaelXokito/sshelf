@@ -35,7 +35,7 @@ func (f *faultyTerm) Resizes() (<-chan struct{}, func()) {
 	return f.events, func() {}
 }
 
-func setupFaulty(t *testing.T, resizesPanics bool) (master, tty *os.File, s *Session, h *ptyHarness, ft *faultyTerm) {
+func setupFaulty(t *testing.T, resizesPanics bool) (master, tty *os.File, s *Attached, h *ptyHarness, ft *faultyTerm) {
 	t.Helper()
 	master, tty, s, h = setupPTYTerm(t, readyThenBlock, func(tty *os.File) Terminal {
 		ft = &faultyTerm{TTY: term.NewTTY(tty), events: make(chan struct{}, 1), panicResizes: resizesPanics}

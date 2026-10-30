@@ -284,13 +284,6 @@ func (s *screen) resize(cols, rows int) {
 	s.emu.Resize(cols, rows)
 }
 
-// size returns the screen size.
-func (s *screen) size() Size {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return Size{Cols: s.emu.Width(), Rows: s.emu.Height()}
-}
-
 // snapshot copies the visible screen.
 func (s *screen) snapshot() Snapshot {
 	s.mu.Lock()

@@ -29,7 +29,7 @@ var ErrHostNotFound = errors.New("host not found")
 // store.ErrCorrupt, store.ErrNewerVersion or the underlying I/O error.
 type LoadError = store.LoadError
 
-// Session is the handle of an attached session. *session.Session satisfies
+// Session is the handle of an attached session. *session.Attached satisfies
 // it, and its method set includes tea.ExecCommand's, so the UI can pass it
 // to tea.Exec. Close releases a session that will never run.
 type Session interface {
@@ -231,7 +231,7 @@ func (a *App) Connect(ctx context.Context, hostID domain.ID) (Session, error) {
 		slog.Debug("connect: failed", "host", h.Label, "err", err)
 		return nil, err
 	}
-	s, err := session.New(client, a.cfg.Terminal, session.Options{
+	s, err := session.NewAttached(client, a.cfg.Terminal, session.Options{
 		Term:    h.Options.Term,
 		Env:     h.Options.SetEnv,
 		Command: h.Options.RemoteCommand,

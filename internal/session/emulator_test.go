@@ -12,6 +12,8 @@ import (
 	"time"
 
 	uv "github.com/charmbracelet/ultraviolet"
+
+	"github.com/RafaelXokito/sshelf/internal/testutil/sshtest"
 )
 
 // replies collects what a screen sends to the remote, as the reply pump
@@ -225,25 +227,6 @@ func checkRendered(t testing.TB, lines []string) {
 	}
 }
 
-// hostileCorpus is the sequence set of ARCH-SESS-011 and SEC-SESSION-005.
-var hostileCorpus = []string{
-	"\x1b]52;c;c2VjcmV0\x07",                                // OSC 52 clipboard write
-	"\x1b]0;evil title\x07",                                 // OSC 0 title
-	"\x1b]2;evil title\x1b\\",                               // OSC 2 title
-	"\x1b]8;;https://evil.example/\x1b\\link\x1b]8;;\x1b\\", // OSC 8 link
-	"\x1b]4;1;rgb:ff/00/00\x07",                             // OSC 4 palette set
-	"\x1b]10;#ff0000\x07\x1b]11;#00ff00\x07",
-	"\x1bP+q544e\x1b\\",         // DCS (XTGETTCAP)
-	"\x1bP$qm\x1b\\",            // DECRQSS
-	"\x1b_Gf=100;AAAA\x1b\\",    // APC (kitty graphics)
-	"\x1b^privacy\x1b\\",        // PM
-	"\x1bXsos\x1b\\",            // SOS
-	"\x1b[21t",                  // title report
-	"\x1bc",                     // RIS
-	"\x9b31m\x9d0;c1 title\x9c", // 8-bit C1 forms
-	"\xc2\x9b31m",               // UTF-8 encoded CSI
-}
-
 func TestARCH_SESS_011_NoLinksRendered(t *testing.T) {
 	s, _ := drainScreen(t, 40, 5)
 	s.write([]byte("\x1b]8;;https://evil.example/\x1b\\click\x1b]8;;\x1b\\ \x1b[1mbold\x1b[m"))
@@ -252,7 +235,7 @@ func TestARCH_SESS_011_NoLinksRendered(t *testing.T) {
 	if !strings.Contains(snap.Lines[0], "click") || strings.Contains(snap.Lines[0], "evil") {
 		t.Fatalf("line 0 = %q", snap.Lines[0])
 	}
-	for _, h := range hostileCorpus {
+	for _, h := range sshtest.HostileCorpus {
 		s.write([]byte(h))
 	}
 	checkRendered(t, s.snapshot().Lines)
@@ -261,7 +244,7 @@ func TestARCH_SESS_011_NoLinksRendered(t *testing.T) {
 }
 
 func FuzzSEC_SESSION_005_RenderOnlySGR(f *testing.F) {
-	for _, h := range hostileCorpus {
+	for _, h := range sshtest.HostileCorpus {
 		f.Add([]byte(h))
 	}
 	f.Add([]byte("日本語ab👍x\x1b[31mred\x1b[0m\r\n\x1b[?1049h\x1b[2J"))
