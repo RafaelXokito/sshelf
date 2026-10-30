@@ -1,6 +1,6 @@
 # MVP manual acceptance checklist
 
-(The M2 checklist follows the MVP sign-off at the end of this file.)
+(The M2 checklist follows the MVP sign-off, and the M3 checklist follows the M2 sign-off, at the end of this file.)
 
 Status: Ready to run · Owner: product owner · Task: T-030
 
@@ -1144,5 +1144,286 @@ copy with ctrl+shift+C. Repeat M2.12 in GNOME Terminal, Konsole and xterm.
 | | macOS | Linux |
 |---|---|---|
 | All M2 steps pass (or N/A with reason) | [ ] | [ ] |
+| Failures (step numbers, issue links) | | |
+| Signed off by | | |
+
+---
+
+# M3 manual acceptance checklist (SFTP)
+
+Status: Draft (run at the M3 gate) · Owner: product owner · Task: T-059
+
+This is the hands-on part of the M3 gate. Everything else is automated
+(`go test -race ./...`, `go run ./scripts/tracecheck`, which then covers
+MVP, M2 and M3, and `go run ./scripts/covercheck`). These steps cover what
+needs a person: a real OpenSSH `sftp-server`, a real editor, the mouse in a
+real terminal, and how the SFTP tab feels.
+
+Run it top to bottom on **macOS** (required), then repeat on Linux as M3.10
+says. Tick **Pass** or **Fail** for each step and write anything odd under
+it.
+
+| | macOS | Linux |
+|---|---|---|
+| OS version | | |
+| Terminal emulator(s) | | |
+| `sshelf --version` | | |
+| Real host used (M3.0.3) | | |
+| `$VISUAL` / `$EDITOR` used | | |
+| Tester, date | | |
+
+**What this run touches.** The config directory is redirected to a scratch
+directory, and every local file of the run lives under `$SSHELF_ACC`. On the
+real host the steps write only under `~/sshelf-acc-m3`, which M3.11 deletes.
+The password typed in M3.1 goes to your login Keychain under the service
+`sshelf`; M3.11 deletes it.
+
+---
+
+## M3.0 Setup
+
+Open three terminal windows: **main** (sshelf), **A** (test server) and
+**side** (checks). Paste into each:
+
+```sh
+cd /path/to/sshelf
+export SSHELF_ACC=/tmp/sshelf-acceptance-m3
+export XDG_CONFIG_HOME="$SSHELF_ACC/xdg"
+export CFG="$XDG_CONFIG_HOME/sshelf"
+```
+
+- [ ] **M3.0.1 Start clean, build, make test files.** In **side**:
+
+  ```sh
+  rm -rf "$SSHELF_ACC" && mkdir -m 700 -p "$SSHELF_ACC/local" "$SSHELF_ACC/srv/home/pi"
+  go build -o "$SSHELF_ACC/sshelf" ./cmd/sshelf && "$SSHELF_ACC/sshelf" --version
+  head -c 200000000 /dev/urandom > "$SSHELF_ACC/local/big.bin"
+  mkdir -p "$SSHELF_ACC/local/tree/a/b" "$SSHELF_ACC/local/tree/empty"
+  for i in 1 2 3; do echo "file $i" > "$SSHELF_ACC/local/tree/a/f$i.txt"; done
+  echo 'hello from sshelf' > "$SSHELF_ACC/srv/home/pi/notes.txt"
+  shasum -a 256 "$SSHELF_ACC/local/big.bin"
+  ```
+
+  Expected: the version line and one checksum line (write it down).
+  — Pass [ ] Fail [ ]
+
+- [ ] **M3.0.2 Test server A with SFTP (port 2201).** In **A**:
+
+  ```sh
+  go run ./internal/testutil/sshtest/cmd/sshtestd -dir "$SSHELF_ACC/target-a" -port 2201 -password acc-pw-A -sftp "$SSHELF_ACC/srv"
+  ```
+
+  Expected: `sshtestd listening on 127.0.0.1:2201`. Leave it running.
+  — Pass [ ] Fail [ ]
+
+- [ ] **M3.0.3 A real OpenSSH server** with SFTP enabled (Remote Login on
+  macOS, or any host you can log in to). In **side**:
+
+  ```sh
+  export REAL_HOST=127.0.0.1 REAL_PORT=22 REAL_USER="$USER"
+  ssh -p "$REAL_PORT" "$REAL_USER@$REAL_HOST" 'mkdir -p ~/sshelf-acc-m3 && echo ok'
+  ```
+
+  Expected: `ok`. — Pass [ ] Fail [ ]
+
+## M3.1 Open SFTP tabs
+
+In **main**: `cd "$SSHELF_ACC/local" && "$SSHELF_ACC/sshelf"`. With the host
+form, add `acc-a` (127.0.0.1, port 2201, user `pi`, password `acc-pw-A`) and
+`acc-real` (the real host).
+
+- [ ] **M3.1.1 `s` on the host list.** Select `acc-a`, press `s`, trust the
+  key with `y`.
+
+  Expected: tab `1 sftp: acc-a` opens and is focused; the left pane is
+  titled `Local: /tmp/sshelf-acceptance-m3/local` (where sshelf was started)
+  and lists `tree/` then `big.bin`; the right pane, `Remote: /home/pi`, is
+  focused (`>` on its cursor row) and lists `notes.txt`; the footer reads
+  `tab switch pane · c copy · r rename · d delete · m mkdir`. The layout
+  matches the approved mock-up. — Pass [ ] Fail [ ]
+
+- [ ] **M3.1.2 Width and hidden files.** Widen the window past 104 columns,
+  then back to 80; press `.` twice.
+
+  Expected: wide, an mtime column appears; at 80 it is gone and nothing
+  wraps. The first `.` hides dotfiles and the titles show `(hidden off)`;
+  the second shows them again. — Pass [ ] Fail [ ]
+
+- [ ] **M3.1.3 Same connection from a session.** `ctrl+]` `h`, select
+  `acc-real`, `enter` and log in; then `ctrl+]` `s`.
+
+  Expected: `3 sftp: acc-real` opens at once with no password prompt or
+  TOFU and shows your remote home. `ctrl+]` `2` then `ctrl+]` `s` focuses
+  tab 3 again instead of opening a fourth tab. — Pass [ ] Fail [ ]
+
+- [ ] **M3.1.4 Ending the shell keeps SFTP.** In tab 2 type `exit`.
+
+  Expected: tab 2 shows `✕`; tab 3 still lists and opens directories. `x`
+  closes tab 2; tab 3 still works. — Pass [ ] Fail [ ]
+
+## M3.2 Copy, conflicts and progress (tab 1)
+
+- [ ] **M3.2.1 Upload a large file.** `ctrl+]` `1`, `tab` to the local pane,
+  select `big.bin`, `c`.
+
+  Expected: the progress line shows `↑ big.bin  N/200 MB  ███░░░░░░░ NN%
+  NN MB/s` and updates smoothly; the cursor keys keep working while it runs.
+  When done the remote pane lists `big.bin`, and in **side**
+  `shasum -a 256 "$SSHELF_ACC/srv/home/pi/big.bin"` matches M3.0.1.
+  — Pass [ ] Fail [ ]
+
+- [ ] **M3.2.2 A folder both ways.** Upload `tree/`. Then in the local pane
+  rename `tree` to `tree-orig` with `r`, `tab` to the remote pane, select
+  `tree/` and `c` to download it.
+
+  Expected: in **side**,
+  `diff -r "$SSHELF_ACC/local/tree-orig" "$SSHELF_ACC/local/tree" && echo same`
+  prints `same`, and `tree/empty` exists. — Pass [ ] Fail [ ]
+
+- [ ] **M3.2.3 Existing target.** Upload `big.bin` again.
+
+  Expected: the question shows both sizes and times and offers
+  `[o] Overwrite · [s] Skip · [n] Keep both · [a] apply to all`; `n` creates
+  `big (1).bin` on the remote side. — Pass [ ] Fail [ ]
+
+- [ ] **M3.2.4 Transfers view.** Upload `big.bin` once more with `o`, and
+  while it runs press `t`.
+
+  Expected: one row per transfer with its state in words, bytes, rate and
+  ETA. `x` on the running row cancels it within a second, and
+  `ls "$SSHELF_ACC/srv/home/pi"` shows no `big.bin.sshelf-part`. `r` retries
+  it; Esc returns to the panes. — Pass [ ] Fail [ ]
+
+## M3.3 Interrupt and resume
+
+- [ ] **M3.3.1 Connection lost.** Download the remote `big (1).bin` into the
+  local pane; at about 40 % stop **A** with `ctrl+c`.
+
+  Expected: tab 1 shows `✕` and `⏸ 1 transfers paused: connection lost · r
+  reconnect`; `big (1).bin.sshelf-part` exists locally. — Pass [ ] Fail [ ]
+
+- [ ] **M3.3.2 Reconnect and resume.** Restart A with M3.0.2's command and
+  press `r` in tab 1.
+
+  Expected: the transfer continues from about 40 %, not from 0, and finishes;
+  its checksum matches M3.0.1; no `.sshelf-part` file remains.
+  — Pass [ ] Fail [ ]
+
+- [ ] **M3.3.3 Against the real server.** In tab 3, upload `big.bin` into
+  `~/sshelf-acc-m3` and break the connection at about 40 % (turn the network
+  off for a remote host, or on the host run `pkill -f "sshd: $USER"` from
+  another login). Reconnect with `r`.
+
+  Expected: it resumes, or says "restarted: <reason>". Note which.
+  — Pass [ ] Fail [ ]
+
+## M3.4 Rename, delete, mkdir, filter
+
+- [ ] **M3.4.1** In tab 3's remote pane, inside `~/sshelf-acc-m3`: `m` →
+  `docs`; `r` → `docs2`; `/` `doc` shows only it, Esc clears; upload
+  `tree/` into `docs2`; `d` on `docs2`.
+
+  Expected: the question names `docs2/` and the number of entries in it and
+  defaults to No; `y` deletes it. — Pass [ ] Fail [ ]
+
+## M3.5 Edit locally
+
+- [ ] **M3.5.1 Your editor.** In tab 1's remote pane select `notes.txt`,
+  press `e`, add a line, save and quit.
+
+  Expected: your editor replaces sshelf's screen, then sshelf comes back
+  with "saved notes.txt"; `cat "$SSHELF_ACC/srv/home/pi/notes.txt"` shows the
+  new line; `ls -d "${TMPDIR:-/tmp}"/sshelf-edit-*` finds nothing.
+  — Pass [ ] Fail [ ]
+
+- [ ] **M3.5.2 Sessions keep running.** Open a session to `acc-real`, run
+  `while true; do date; sleep 1; done`, go to tab 1, `e` on `notes.txt`,
+  wait 10 s in the editor, quit without saving.
+
+  Expected: "notes.txt: no changes"; in the session tab the clock has no
+  gap. — Pass [ ] Fail [ ]
+
+- [ ] **M3.5.3 Remote changed meanwhile.** `e` on `notes.txt`; while the
+  editor is open run in **side**
+  `echo other >> "$SSHELF_ACC/srv/home/pi/notes.txt"`; change the file in
+  the editor, save and quit.
+
+  Expected: the question offers `[o] Overwrite · [k] Keep remote · [s] Save
+  mine as notes.txt.local-edit`; `s` creates `notes.txt.local-edit` beside
+  it. — Pass [ ] Fail [ ]
+
+- [ ] **M3.5.4 A GUI editor.** Quit sshelf, `export VISUAL='code -w'` (or
+  your GUI editor with its wait flag), start sshelf and repeat M3.5.1.
+  — Pass [ ] Fail [ ] N/A [ ]
+
+## M3.6 Mouse and drag
+
+- [ ] **M3.6.1** Click rows in both panes (the pane focuses and the row is
+  selected); double-click a directory (it opens); use the wheel over each
+  pane (3 rows a notch); click a tab in the tab bar (it focuses).
+  — Pass [ ] Fail [ ]
+
+- [ ] **M3.6.2 Drag.** Press on `big.bin` in the local pane, move into the
+  remote pane, release.
+
+  Expected: while dragging, the progress line shows the `drag: copy …` hint
+  and the remote pane's border is highlighted; the release queues the copy
+  (answer the existing-file question with `s`). Releasing over the same pane
+  copies nothing. — Pass [ ] Fail [ ]
+
+## M3.7 A planted symlink
+
+- [ ] **M3.7.1** In **side**:
+  `echo keep > "$SSHELF_ACC/victim" && ln -s "$SSHELF_ACC/victim" "$SSHELF_ACC/local/notes.txt"`.
+  In tab 1, `R`, then download the remote `notes.txt` into the local pane
+  and answer `o`.
+
+  Expected: `cat "$SSHELF_ACC/victim"` still prints `keep`, and
+  `ls -l "$SSHELF_ACC/local/notes.txt"` shows a regular file.
+  — Pass [ ] Fail [ ]
+
+## M3.8 Close and quit
+
+- [ ] **M3.8.1** Start an upload of `big.bin` (answer `o`), then `ctrl+]` `q`
+  in tab 1.
+
+  Expected: "Close SFTP tab 1?" with "1 transfers will stop.", defaulting to
+  No; `y` closes it, and no `.sshelf-part` remains on A. — Pass [ ] Fail [ ]
+
+- [ ] **M3.8.2** In tab 3 start a transfer, `ctrl+]` `h`, `q`.
+
+  Expected: "Quit and close N tabs? M transfers will stop."; `y` quits;
+  the shell prompt is normal and moving the mouse prints nothing.
+  — Pass [ ] Fail [ ]
+
+## M3.9 Other terminals
+
+- [ ] **M3.9.1** Repeat M3.1.1, M3.2.1 and M3.6 in the other terminals of
+  NFR-PORT-002 you have. Note any difference: ______________
+  — Pass [ ] Fail [ ]
+
+## M3.10 Linux run
+
+- [ ] **M3.10.1** Repeat M3.0 to M3.8 on Linux, with `sha256sum` for
+  `shasum -a 256` and `sudo systemctl start ssh` for the real server.
+  — Pass [ ] Fail [ ] N/A [ ]
+
+## M3.11 Teardown
+
+- [ ] **M3.11.1** In sshelf delete `acc-a` and `acc-real` (`d`, `y`) and
+  quit; stop A with `ctrl+c`; then in **side**:
+
+  ```sh
+  ssh -p "$REAL_PORT" "$REAL_USER@$REAL_HOST" 'rm -rf ~/sshelf-acc-m3'
+  rm -rf "$SSHELF_ACC"; ls -d "${TMPDIR:-/tmp}"/sshelf-edit-* 2>/dev/null; echo removed
+  ```
+
+  Expected: only `removed`. — Pass [ ] Fail [ ]
+
+## M3 sign-off
+
+| | macOS | Linux |
+|---|---|---|
+| All M3 steps pass (or N/A with reason) | [ ] | [ ] |
 | Failures (step numbers, issue links) | | |
 | Signed off by | | |

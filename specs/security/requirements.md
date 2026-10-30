@@ -1,15 +1,15 @@
 # sshelf: security requirements and threat model
 
-Status: **Draft** · Owner: security · Last updated: 2026-10-29
+Status: **Draft** · Owner: security · Last updated: 2026-10-30 (M3: D-017 to D-020)
 Companion: [`credential-storage.md`](credential-storage.md), which covers the config format, keychain keying, the
 `secrets` API, the flows and the tests.
 Binding inputs: [`../decisions.md`](../decisions.md). The most relevant are D-002 (no master password), D-003
 (secrets in the OS credential store), D-006 (sessions are never closed for security reasons), D-007 (keep it
 simple), D-008 (`zalando/go-keyring`, no cgo), D-101 (no store means no saved secrets), D-102 (sshelf's own
-`known_hosts`) and D-106 (`config.json`).
+`known_hosts`), D-106 (`config.json`) and, for M3, D-019 (the editor exception) and D-020 (path safety).
 
-Format follows [`../README.md`](../README.md): one EARS sentence per requirement, a priority (`MVP` / `v1` /
-`Later`) and testable acceptance criteria (`TestSEC_CRED_004_...`). Gaps in the numbering are IDs retired with the
+Format follows [`../README.md`](../README.md): one EARS sentence per requirement, a priority (`MVP` / `M2` /
+`M3` / `v1` / `Later`) and testable acceptance criteria (`TestSEC_CRED_004_...`). Gaps in the numbering are IDs retired with the
 encrypted-vault design. They are not reused.
 
 ---
@@ -40,6 +40,8 @@ connection" prompt (not achievable from a plain Go binary, see credential-storag
 | A-3 | Trust store: accepted host keys | **I** | sshelf `known_hosts` (0600), plus `~/.ssh/known_hosts` (read-only) |
 | A-4 | Referenced key files (`~/.ssh/id_*`) | C | User's disk. sshelf only reads them. |
 | A-5 | Live sessions and forwarded agents | C, I | Process memory and the network |
+| A-6 | The user's local files, above all those outside the folder a download targets | I, C | User's disk |
+| A-7 | File contents in transit and the edit-locally copy (M3) | C, I | Network, process memory, a private temp dir |
 
 | ID | Actor | Capability |
 |----|-------|-----------|
@@ -59,6 +61,8 @@ connection" prompt (not achievable from a plain Go binary, see credential-storag
 | TB-3 | sshelf ↔ network and SSH server | handshake, host key, authentication, session |
 | TB-4 | sshelf ↔ terminal, clipboard and OS | rendered text, copied text, memory paging, core dumps |
 | TB-5 | sshelf ↔ ssh-agent (v1) | signing requests, and forwarding to remote hosts |
+| TB-6 | sshelf ↔ SFTP server (M3) | directory listings (names, sizes, times, types), file contents, status messages |
+| TB-7 | sshelf ↔ the user's editor (M3) | one temp file path; the terminal while the editor runs |
 
 ---
 
@@ -86,6 +90,12 @@ connection" prompt (not achievable from a plain Go binary, see credential-storag
 | T-18 | D | **Config corruption** from a crash, two instances or an external edit. | Atomic write (SEC-FILE-003), change detection (SEC-FILE-005, v1). | None known. |
 | T-19 | E | **Malicious `~/.ssh/config` import** (`ProxyCommand`, `LocalCommand`, `Match exec`). | Import flags these as unsupported and never executes them (ARCH-DATA-003). There is no system ssh fallback (D-104). | None known. |
 | T-20 | E | **Vulnerable dependencies** (`x/crypto/ssh`, the keyring library, `godbus`). | Minimal dependencies, `govulncheck` in CI, Terrapin-fixed x/crypto (SEC-SESSION-004). | None known. |
+| T-22 | T, E | **Path traversal by a malicious SFTP server** (AC-7): listing entries named `../../.ssh/authorized_keys`, `a/b`, `.`, `..`, or with NUL or control characters, so that a download writes outside the chosen folder or the UI is spoofed. | Names are validated before they are shown or used; unsafe entries are skipped with a warning (SEC-SFTP-001). Local writes are confined to the target folder (SEC-SFTP-002). | None known. |
+| T-23 | T | **Local symlink tricks**: a symlink planted in the download folder (`notes.txt -> ~/.bashrc`, or `photos -> /`) so that a download writes through it; or a race that swaps a file for a link between check and open. | Never follow a local symlink when writing: `os.Root`, `O_EXCL`/`O_NOFOLLOW` creates, `Lstat` checks, and rename into place (SEC-SFTP-002, SEC-SFTP-003). | An attacker who can write into the user's folders is a same-user process (AC-4). Accepted beyond this. |
+| T-24 | D | **Resource exhaustion by a server**: millions of directory entries, endless directory depth, a file that never ends. | Listing cap and byte budget, recursion depth cap, transfers bounded by the size the server reported (SEC-SFTP-004). | A server can still make transfers slow; the user cancels. |
+| T-25 | I | **The edit-locally copy is read or left behind.** | Private 0700 directory, 0600 file, deleted in every path including a crash (SEC-SFTP-005). | `SIGKILL` or power loss leaves the copy in the user's temp dir, readable only by the user. Accepted. |
+| T-26 | E | **Command injection through the editor launch** (a file name with shell metacharacters, a hostile `$EDITOR`). | No shell; the file path is one argv element; `os/exec` exists in one package (SEC-SFTP-006). | `$EDITOR` is set by the user or a same-user process (AC-4). Accepted. |
+| T-27 | I | **File contents or private paths in logs.** | Contents never logged; paths only at debug level; canary harness (SEC-SFTP-007). | None known. |
 | T-21 | E | **Prompt fatigue.** Repeated macOS "allow access" dialogs after each rebuild or update train users to click "Always Allow". | The recommended backend does not trigger per-binary ACL prompts (SEC-CRED-009). | Trade-off against T-3, accepted by D-008. |
 
 ---
@@ -284,6 +294,18 @@ Priority: MVP · Status: Implemented · Threats: T-17
 - AC1: The import-rule test (`internal/archtest`, ADR-009) finds no import of `os/exec` in any sshelf package, so
   sshelf itself starts no child process that could receive a secret.
 - AC2: A dependency review confirms the keyring library uses `security -i` (stdin) for set operations.
+- **M3 revision** · Priority: M3 · Status: Draft · Source: D-019
+  - *Revised:* The system shall never pass a secret through argv or environment variables, and shall start no child
+    process other than `/usr/bin/security`, invoked by `zalando/go-keyring` on macOS through stdin and stdout (D-008),
+    and the user's editor for edit-locally (FR-SFTP-019), started only by `internal/ui/editor`.
+  - *Acceptance:*
+    - AC1: The import-rule test (`internal/archtest`, ADR-009 as revised by ADR-019) finds `os/exec` imported by
+      `internal/ui/editor` and by no other sshelf package.
+    - AC2: A dependency review confirms the keyring library uses `security -i` (stdin) for set operations.
+    - AC3: A unit test with `SSHELF_TEST_CANARY` in the credential store, after a connect, checks that the editor
+      command's `Args` are exactly the words of `$VISUAL`/`$EDITOR`/`vi` plus the temp file path, its `Env` is
+      the process environment unchanged, and neither contains the canary (sshelf never puts a secret in its own
+      environment, so the editor inherits none).
 
 **SEC-MEM-009: Just-in-time secrets.**
 When connecting, the system shall read the identity's secrets from the store only for that connection attempt,
@@ -426,17 +448,127 @@ Priority: M2 · Status: Implemented · Threats: T-15, T-17 · Source: FR-CONN-00
 - AC4: The reason never holds a secret: `TestSEC_LOG_001_CanaryHarnessM2` (an ended tab, a reconnect and a
   disconnect, with `SSHELF_DEBUG=1`) finds no canary on the screen or in the debug log (SEC-LOG-001).
 
+### 4.9 File transfer (SEC-SFTP), M3
+
+These requirements implement D-019 and D-020 for the SFTP tab (`product/requirements.md` §17). "Remote name" means
+an entry name or a path the SFTP server returns (a listing, `realpath`, `readlink`, a status message); all of them
+cross TB-6 and are untrusted.
+
+**SEC-SFTP-001: Unsafe remote names are rejected.**
+When a remote directory listing contains an entry whose name is empty, `.` or `..`, or contains `/`, NUL or a
+control character (C0, DEL or C1), the system shall leave that entry out of the listing and out of every operation,
+and shall report how many entries it left out.
+Priority: M3 · Status: Draft · Threats: T-22, T-15 · Source: D-020
+- AC1: sshtest's hostile SFTP mode (ARCH-TEST-004) lists `ok.txt`, `../evil`, `a/b`, `x/..`, `.`, `..`, an empty
+  name, `x\x00y`, `bell\x07`, `esc\x1b[31m`, `c1\u009b`, `del\x7f` and `tab\tname`. `github.com/pkg/sftp` drops
+  `.` and `..` and reduces every name to its last path element (`../evil` arrives as `evil`, `a/b` as `b`, `x/..`
+  as `..`, the empty name as `.`), so sshelf applies its check to what the library returns. The pane shows exactly
+  `ok.txt`, `evil` and `b`; the warning says "⚠ 8 entries with unsafe names not shown"; no shown name contains
+  `/`, a control rune, or equals `.` or `..`. The check runs again on every name before it is joined to a local path.
+- AC2: A recursive download of a remote directory containing those entries (the hostile handler serves content for
+  every path it is asked for) creates files only as direct children of the target folder, and only for names the
+  pane showed; a walk of the target folder's parent before and after finds no other change.
+- AC3: Fuzz test of the name check: for every input it accepts, `filepath.Join(dir, name)` stays a direct child of
+  `dir` (`filepath.Dir` of the result is `dir`), and the name contains no rune for which `unicode.IsControl` is true.
+
+**SEC-SFTP-002: Local writes stay in the target folder and never follow symlinks.**
+When the system creates, writes, renames or deletes a local file or directory for a transfer, an edit-locally upload
+fallback (FR-SFTP-019) or a pane operation, it shall resolve the path under the target directory opened as an
+`os.Root`, shall create files with `O_CREATE|O_EXCL` and open existing part files with `O_NOFOLLOW`, and shall never
+write through a symbolic link.
+Priority: M3 · Status: Draft · Threats: T-22, T-23 · Source: D-020
+- AC1: With `notes.txt` in the download folder being a symlink to a file outside it, downloading `notes.txt` and
+  choosing Overwrite replaces the link with a regular file; the link's former target is byte-for-byte unchanged.
+- AC2: With `photos` in the download folder being a symlink to another directory, a recursive download of a remote
+  `photos/` fails that entry with "exists and is not a directory" and writes nothing in the link's target.
+- AC3: With `big.iso.sshelf-part` being a symlink, a download of `big.iso` does not resume through it: it fails
+  with "unsafe part file" and the link's target is unchanged.
+- AC4: A race test swaps a part file for a symlink between the `Lstat` check and the open (test hook): the open fails
+  and nothing is written through the link.
+- AC5: Deleting a local directory that contains a symlink to a directory removes the link and leaves the target's
+  contents untouched (FR-SFTP-011).
+
+**SEC-SFTP-003: Part files and atomic completion.**
+When the system downloads or uploads a file, it shall write the data to `<name>.sshelf-part` in the target directory,
+created with mode 0600, and only after the last byte is written and the size checked shall it set the file's mode
+and modification time and rename it to the final name.
+Priority: M3 · Status: Draft · Threats: T-18, T-23 · Source: D-020
+- AC1: A download interrupted at 50 % leaves the old target (if any) byte-for-byte unchanged and a
+  `<name>.sshelf-part` file of mode 0600; no file with the final name and partial content ever exists (polling test).
+- AC2: A completed transfer whose received size differs from the size the source reported fails with "size
+  changed during transfer" and is not renamed.
+- AC3: Remote renames use `posix-rename@openssh.com` when the server offers it, and otherwise remove the target and
+  rename (the window is documented in ADR-018).
+
+**SEC-SFTP-004: Bounded listings, walks and transfers.**
+The system shall stop reading a remote directory listing after 100,000 entries or 64 MiB of listing data, shall not
+descend more than 64 directory levels in a recursive copy, delete or count, and shall stop a download once it has
+received the size the server reported when the file was opened.
+Priority: M3 · Status: Draft · Threats: T-24
+- Note: when the server allows only one SFTP channel per tab (ADR-018), listing data cannot be told apart from
+  transfer data, so the 64 MiB budget is replaced by a 30 s timeout on each listing; the 100,000-entry cap still
+  applies.
+- AC1: sshtest's hostile mode with 150,000 entries: the pane lists 100,000 and says "⚠ listing stopped at 100,000
+  entries"; the heap stays within NFR-SIZE-004's bound.
+- AC2: A directory chain 70 levels deep is copied to level 64 and the deeper entries are reported as skipped.
+- AC3: A hostile file that keeps returning data past its reported size is cut at that size and fails with "size
+  changed during transfer".
+
+**SEC-SFTP-005: The edit-locally copy is private and always removed.**
+When the system downloads a file for editing, it shall place it in a new directory created with mode 0700 in the
+OS temp directory and create the file with mode 0600, and shall delete the file and the directory when editing
+ends, whatever the outcome, and from the crash handler.
+Priority: M3 · Status: Draft · Threats: T-25 · Source: D-019
+- AC1: While the fake editor runs, `stat` shows the directory 0700 and the file 0600 under `umask 000`.
+- AC2: After each of these endings the directory no longer exists: unchanged, changed and uploaded, editor exit
+  status 1, editor not found, remote changed with each of the three answers, upload failed then discarded,
+  connection lost during upload, and a panic forced in `Update` after the download (`sshelf_faultinject`).
+- AC3: The copy is never in the config directory or the state directory.
+
+**SEC-SFTP-006: The editor runs without a shell, from one package.**
+When the system starts the editor, it shall run the program named by the first word of `$VISUAL`, `$EDITOR` or `vi`
+directly, with the remaining words and the temp file path as separate arguments and no shell, from
+`internal/ui/editor` only.
+Priority: M3 · Status: Draft · Threats: T-26 · Source: D-019
+- AC1: A remote file named `$(touch pwned);x.txt` is edited with a fake editor; no file `pwned` is created anywhere,
+  and the editor receives the name as one argument.
+- AC2: archtest: `os/exec` is imported by `internal/ui/editor` only (SEC-MEM-008 M3 revision AC1).
+
+**SEC-SFTP-007: No file contents or paths in logs.**
+The system shall never write file contents to the debug log, the screen outside the panes, a crash report or test
+output, and shall write file paths and names to the debug log only at debug level.
+Priority: M3 · Status: Draft · Threats: T-27, T-17
+- AC1: The canary harness (SEC-LOG-001) is extended with M3 flows, with `SSHELF_DEBUG=1`: upload and download of a
+  file whose content holds the canary, a transfer cancelled, a resume, edit-locally (changed, remote changed), a
+  dropped connection and a reconnect. The canary content appears in no log record, crash report, stdout or stderr.
+- AC2: With logging off (the default), no record about a transfer is produced at all; with it on, transfer records
+  carry the path, direction, size and outcome only.
+- AC3: The password canary used to connect never appears in the SFTP tab's frames (pane titles, progress line,
+  modals), as for the session tab (FR-TAB-007).
+
+**SEC-SFTP-008: Server-supplied text is sanitised in the SFTP tab.**
+The system shall pass every server-supplied string shown in the SFTP tab or written to the log (status messages,
+`realpath` results, symlink targets) through `domain.Sanitize` (SEC-SESSION-003), fold whitespace to single spaces,
+and cut it to 80 columns with `…`.
+Priority: M3 · Status: Draft · Threats: T-15
+- AC1: sshtest's hostile mode answers a failed `open` with a status message holding an OSC 52 write, an OSC 0
+  title, a CSI, a newline and 200 extra columns; the error line is one line of at most 80 columns of the message
+  with no control rune, and the PTY output scan (SEC-SESSION-005 AC1) finds no `ESC ]`.
+- AC2: A `realpath(".")` reply with control characters is shown sanitised in the pane title; operations use the
+  exact bytes.
+
 ---
 
 ## 5. Requirement count
 
 | Priority | Count |
 |----------|-------|
-| MVP | 31 |
+| MVP | 31 (SEC-MEM-008 carries an M3 revision) |
 | M2 | 2 |
+| M3 | 8 (SEC-SFTP-001 … SEC-SFTP-008) |
 | v1 | 4 |
 | Later | 2 |
-| **Total** | **39** |
+| **Total** | **47** |
 
 ## 6. Resolved decisions
 

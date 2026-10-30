@@ -1,11 +1,11 @@
 # sshelf non-functional requirements
 
-Status: Draft · Owner: orchestrator · Last updated: 2026-10-30 (M2)
+Status: Draft · Owner: orchestrator · Last updated: 2026-10-30 (M3)
 
 This file is the single home of the non-functional requirements (`NFR-*`). It
 replaces the "Proposed NFRs" sections that used to sit in
 `product/requirements.md` §23 and `architecture/design.md` §11. Conventions are
-in [`README.md`](README.md): EARS syntax, a priority of `MVP`, `M2`, `v1` or
+in [`README.md`](README.md): EARS syntax, a priority of `MVP`, `M2`, `M3`, `v1` or
 `Later`, and acceptance checks. [`decisions.md`](decisions.md) wins any conflict.
 
 Every check below can run unattended in CI. Unless stated otherwise, "the CI
@@ -68,6 +68,24 @@ While 10 sessions are open, each receiving output at 100 KB/s, the system shall 
 - **Priority:** M2 · **Status:** Implemented · **Source:** D-010
 - **Check:** `TestNFR_PERF_006_TenSessions` (PTY E2E, Linux) runs the real binary against sshtest, opens 10 sessions to `stream 100K` shells, then: switching with `Ctrl+]` `n` produces the new tab's status bar in the PTY output within 50 ms (median of 10 switches); 200 keystrokes to the focused session have a p99 overhead ≤ 20 ms measured as in NFR-PERF-004; RSS stays within NFR-SIZE-003's bound times 10 plus NFR-SIZE-001's base.
 
+### NFR-PERF-007 · Transfer throughput
+When a 256 MiB file is downloaded or uploaded over loopback, the system shall transfer it at an average of at least 50 MB/s.
+
+- **Priority:** M3 · **Status:** Draft · **Source:** D-018
+- **Check:** `TestNFR_PERF_007_Throughput` (no `-race`, perf job) starts sshtest with its SFTP subsystem over a temp dir (ARCH-TEST-004), opens a real SFTP browser on a connection to it, and times a 256 MiB file of random bytes from enqueue to `done`, once as a download and once as an upload: the median of 3 runs of each is ≥ 50 MB/s (≤ 5.4 s) on the CI runner, and both copies have the source's SHA-256. The measured MB/s are recorded in the PR template's perf section. `BenchmarkNFR_PERF_007_Download` and `BenchmarkNFR_PERF_007_Upload` report MB/s for tracking. The figure is a floor for sshelf's own overhead (buffers, part files, progress); real links are limited by the network and the server.
+
+### NFR-PERF-008 · Responsive UI during transfers
+While two transfers run, the system shall handle every key press and draw its frame within 100 ms, and shall keep the keystroke overhead of a session tab within NFR-PERF-004's bound.
+
+- **Priority:** M3 · **Status:** Draft · **Source:** D-017, D-018
+- **Check:** `TestNFR_PERF_008_FrameGaps` drives the root model directly with a real SFTP browser while a 256 MiB download and a 256 MiB upload run against sshtest: 200 cursor-move keys sent to the SFTP tab, 50 ms apart, each produce a `View()` showing the moved cursor within 100 ms (p100), and no single `Update` or `View` call takes more than 20 ms. A second run sends 1,000 keys to a session tab on the same connection while the transfers run: p99 ≤ 5 ms as in NFR-PERF-004. The progress line is redrawn at most 4 times a second (ARCH-SFTP-003).
+
+### NFR-PERF-009 · Large listings
+When a directory with 10,000 entries is opened, the system shall show its first screen within 200 ms of receiving the listing, and shall apply each filter keystroke within 50 ms.
+
+- **Priority:** M3 · **Status:** Draft · **Source:** D-017
+- **Check:** `TestNFR_PERF_009_TenThousandEntries` feeds a 10,000-entry listing message (mixed directories, files and symlinks, names up to 60 characters) to the root model and measures from `Update` receiving it to the `View()` that shows its first rows (sorting, hidden-file filtering and rendering of the visible rows only): median of 5 ≤ 200 ms on the CI runner. Typing `/` and 5 characters measures each filter step: each ≤ 50 ms. `BenchmarkNFR_PERF_009_SortAndRender` tracks it. A PTY variant lists a 10,000-entry sshtest directory and checks that the first frame with the listing appears within 1 s of pressing `enter` (network included).
+
 ---
 
 ## 2. Size (`NFR-SIZE`)
@@ -83,6 +101,12 @@ While a session at 120×40 has a full scrollback of 100-column lines, the system
 
 - **Priority:** M2 · **Status:** Implemented · **Source:** D-010, ADR-013, open question 1 in `product/requirements.md` §22
 - **Check:** `TestNFR_SIZE_003_SessionHeap` measures `runtime.MemStats.HeapAlloc` (after `runtime.GC()`) before and after one session at 120×40 receives 5,000 lines of 100 columns with SGR colours: the difference is ≤ 48 MiB and `ScrollbackLen()` is 2,000. With x/vt v0.1.0 the measured cost is about 31 MB. Closing the session and running `runtime.GC()` returns the heap to within 2 MiB of the starting value.
+
+### NFR-SIZE-004 · Transfer memory
+While files are transferred, the system shall use an amount of heap memory that does not depend on the files' sizes, at most 16 MiB above the idle SFTP tab for the two transfers that run at once.
+
+- **Priority:** M3 · **Status:** Draft · **Source:** D-018 ("streamed with bounded memory")
+- **Check:** `TestNFR_SIZE_004_TransferHeap` samples `runtime/metrics` `/memory/classes/heap/objects:bytes` every 50 ms (after a `runtime.GC()` baseline with the SFTP tab open) while a download and an upload run at the same time, first with 256 MiB files and then with 1 GiB files (sparse files on the local side; sshtest's in-memory zero file on the remote side): the peak growth is ≤ 16 MiB in both, and the two peaks differ by less than 4 MiB. Closing the tab and running `runtime.GC()` returns the heap to within 2 MiB of the baseline.
 
 ### NFR-SIZE-002 · Binary size
 The system shall produce a release binary of no more than 20 MB for each supported target.
@@ -219,6 +243,7 @@ Provisional IDs were never approved and are not kept.
 | NFR-REL-001 (design: terminal restore) | none | Duplicate of ARCH-SESS-005 and ARCH-SEC-004, which already require the PTY suite. NFR-REL-001 now covers races and goroutine leaks. |
 | NFR-QUAL-001 (req: every MVP requirement), NFR-QUAL-001 (design: every ARCH and FR) | NFR-QUAL-001 | Union of prefixes, limited to MVP. NFR-QUAL-002 and NFR-QUAL-003 are new. |
 | M2 (2026-10-30) | NFR-PERF-004 (reworded), NFR-PERF-005, NFR-PERF-006, NFR-SIZE-003, NFR-UX-001 (revision) | Framed sessions (D-009) replace raw passthrough, so the latency check measures sshelf's own input path. The per-session memory figure dropped earlier comes back, measured against the chosen emulator (ADR-013). The M2 gate (T-043) extends NFR-QUAL-001's tracecheck to `M2`. |
+| M3 (2026-10-30) | NFR-PERF-007, NFR-PERF-008, NFR-PERF-009, NFR-SIZE-004 | New for the SFTP tab (D-017, D-018). The existing checks apply to the SFTP tab without a revision: NFR-UX-001 (every mouse action, drag included, has a key; the SFTP tab is an sshelf screen with cell-motion tracking), NFR-UX-002 and NFR-UX-003 (SFTP goldens at 80×24 and 120×40), NFR-PRIV-001 (no new network use), NFR-REL-001 (`internal/files` calls `goleak.VerifyTestMain`), NFR-QUAL-003 (`internal/files` joins the 80 % packages). The M3 gate (T-059) extends NFR-QUAL-001's tracecheck to `M3`. |
 
 ## 10. Count
 
@@ -226,5 +251,6 @@ Provisional IDs were never approved and are not kept.
 |---|---|
 | MVP | 14 |
 | M2 | 5 (NFR-PERF-004 moved from v1, NFR-PERF-005, NFR-PERF-006, NFR-SIZE-003, NFR-UX-001 revised from MVP by T-043) |
+| M3 | 4 (NFR-PERF-007, NFR-PERF-008, NFR-PERF-009, NFR-SIZE-004) |
 | v1 | 3 |
-| **Total** | **22** |
+| **Total** | **26** |

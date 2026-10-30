@@ -24,7 +24,7 @@ implemented, and code changes reference the requirement IDs they satisfy.
 | `architecture/design.md` | Package layout, data model, UI state machine, SSH session flow (`ARCH-*`) |
 | `nfr.md` | Non-functional requirements (`NFR-*`): performance, portability, UX, quality |
 | `tasks.md` | Milestones and implementation tasks (`T-*`), traceability matrix, manual-only requirements |
-| `acceptance.md` | Manual acceptance checklists (MVP, M2) for macOS and Linux |
+| `acceptance.md` | Manual acceptance checklists (MVP, M2, M3) for macOS and Linux |
 | `glossary.md` | Shared terms |
 | `decisions.md` | Binding product-owner decisions (`D-*`); wins any conflict |
 
@@ -45,8 +45,10 @@ marks it `Deprecated`; a `Draft` requirement is simply deleted.
 **Each requirement has:**
 
 - **Priority** – `MVP` (needed for first usable release), `M2` (milestone M2:
-  framed sessions, tabs and mouse, D-009 to D-012), `v1` (first public
-  release), `Later` (backlog). In order: `MVP` → `M2` → `v1` → `Later`.
+  framed sessions, tabs and mouse, D-009 to D-012), `M3` (milestone M3: the
+  SFTP tab, shared connections, transfers and edit-locally, D-017 to D-020),
+  `v1` (first public release), `Later` (backlog). In order: `MVP` → `M2` →
+  `M3` → `v1` → `Later`.
 - **Acceptance criteria** – concrete, verifiable checks (Given/When/Then or bullets).
 - **Rationale / source** – optional; e.g. "Termius parity", "threat T-3".
 
@@ -67,6 +69,9 @@ milestone's tasks implement the revision; they set the revision's status to
 the requirement (new sentence, new criteria, `Priority: M2`) and removes the
 block. This keeps `scripts/tracecheck` green on `main` while the spec runs
 ahead of the code.
+
+The same rule applies to every later milestone with its own name: M3 uses
+**M3 revision** blocks (`Priority: M3`), folded in by the M3 gate.
 
 ## Scope boundaries
 

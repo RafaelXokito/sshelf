@@ -1,10 +1,10 @@
 # sshelf functional requirements
 
-Status: Draft · Owner: product · Last updated: 2026-10-30 (M2: D-009 to D-012)
+Status: Draft · Owner: product · Last updated: 2026-10-30 (M3: D-017 to D-020)
 
 This file is the catalogue of functional requirements (`FR-*`). It follows the
 conventions in [`../README.md`](../README.md): EARS syntax, one testable
-sentence per requirement, and a priority of `MVP`, `M2`, `v1` or `Later`. The product
+sentence per requirement, and a priority of `MVP`, `M2`, `M3`, `v1` or `Later`. The product
 owner decisions in [`../decisions.md`](../decisions.md) are binding and win any
 conflict with this file. Background is in [`research.md`](research.md). Terms
 are defined in [`../glossary.md`](../glossary.md).
@@ -34,9 +34,11 @@ port-forwarding rules.
   `~/.ssh/known_hosts`.
 - **Simplicity.** sshelf is TUI-only and deliberately small. From milestone M2,
   sessions run inside sshelf's frame as tabs, so several hosts can be open at
-  once and the host list stays one key away (D-009, D-010). Split panes, file
-  transfer and sessions that survive a restart of sshelf are left to tmux and
-  other tools (D-007).
+  once and the host list stays one key away (D-009, D-010). From milestone M3,
+  an SFTP tab copies files between the local machine and a host, on the same
+  connection as a session when wanted (D-017, D-018). Split panes, file
+  synchronisation and sessions that survive a restart of sshelf are left to
+  tmux and other tools (D-007).
 
 ## 2. Target personas
 
@@ -64,7 +66,7 @@ verification.** It has 33 requirements.
 | Import (`FR-IMPORT`) | `~/.ssh/config` with `Include` and wildcard resolution; result report | Jumps and forwards on import, `ssh_config` export, CSV, other clients |
 | Storage and settings (`FR-CFG`) | Config directory, durable writes, safe handling of a broken file | External-change guard, `NO_COLOR`, themes, key bindings, defaults, settings view |
 | Command line (`FR-CLI`) | `--help`/`--version`, otherwise start the TUI | `--config <dir>` |
-| Groups, tags, snippets, forwarding, jump hosts, SFTP, history, tabs | None | v1 / Later |
+| Groups, tags, snippets, forwarding, jump hosts, SFTP, history, tabs | None | M2 (tabs), M3 (SFTP), v1 / Later |
 
 ### 3.1 Milestone M2: framed sessions, tabs and mouse
 
@@ -84,6 +86,35 @@ FR-CONN-001, FR-CONN-004 and FR-CONN-005, which are now `M2` (the M2
 gate, T-043, folded each revision into its requirement). The non-functional and
 architecture changes are in [`../nfr.md`](../nfr.md) and
 [`../architecture/design.md`](../architecture/design.md) (ADR-012 to ADR-015).
+
+### 3.2 Milestone M3: SFTP
+
+M3 follows M2 and comes before v1 (D-017 to D-020). It adds a second kind of
+tab, the **SFTP tab**: two panes, local on the left and remote on the right,
+with a transfer queue and a progress line (§17).
+
+| Area | M3 | Not in M3 |
+|------|----|-----------|
+| Opening (D-017, D-018) | `s` on the host list with the normal connect flow; `Ctrl+]` `s` on a session tab reusing its connection with no second login; the connection stays open while either tab uses it (FR-SFTP-002 … FR-SFTP-004, FR-TAB-005 revision, FR-CONN-014 revision) | SFTP through jump hosts (comes with jump hosts in v1) |
+| Browsing (D-017) | Starting directories, listing with sizes, item counts and times, navigation, hidden files, filter, marks, refresh, 80×24 layout, mouse (FR-SFTP-005 … FR-SFTP-009, FR-SFTP-013, FR-SFTP-021, FR-SFTP-023) | Bookmarks, a file viewer or preview, search across directories, sorting by other columns |
+| File operations (D-018) | Copy files and folders both ways, rename, delete with a counted confirmation, mkdir, errors (FR-SFTP-001, FR-SFTP-010 … FR-SFTP-012, FR-SFTP-024) | Permission or owner editing (chmod, chown), creating symlinks, copying within one side, archive browsing |
+| Transfers (D-018, D-020) | A per-connection queue, 2 at a time, progress line, transfers view with cancel and retry, overwrite / skip / keep both / apply to all, resume within a run, pause on a dropped connection and resume on `r`, drag to copy (FR-SFTP-014 … FR-SFTP-018, FR-SFTP-022, FR-SFTP-025) | Resume across sshelf restarts (a persistent queue), bandwidth limits, a concurrency setting |
+| Edit locally (D-019) | `e` on a remote file: private temp copy, `$VISUAL`/`$EDITOR`/`vi`, upload on change, ask if the remote changed (FR-SFTP-019, FR-SFTP-020) | Editing local files, uploading on every save while the editor runs |
+| Safety (D-020) | Unsafe remote names rejected, downloads never follow local symlinks, `.sshelf-part` then rename, listing limits, no contents in logs (`SEC-SFTP-*`) | |
+
+**Out of scope for M3 (D-007).** FTP, FTPS and SCP; synchronising or
+mirroring directories; remote-to-remote copy (between two hosts, or two
+remote panes); a permission or ownership editor (chmod, chown, ACLs, extended
+attributes; plain permission bits are copied, FR-SFTP-001); bookmarks;
+following symlinks inside recursive copies; preserving owners, hard links or
+directory times; a persistent transfer queue.
+
+M3 has 25 new or promoted functional requirements (FR-SFTP-001 … FR-SFTP-025)
+and revises FR-TAB-003, FR-TAB-005, FR-TAB-009 and FR-CONN-014 with **M3
+revision** blocks that the M3 gate folds in. The security, non-functional and
+architecture changes are in `../security/requirements.md` (`SEC-SFTP-*`, the
+SEC-MEM-008 revision), [`../nfr.md`](../nfr.md) and
+[`../architecture/design.md`](../architecture/design.md) (ADR-016 to ADR-020).
 
 ## 4. Requirement format
 
@@ -484,6 +515,13 @@ While a session tab is focused, when the user presses the prefix key followed by
   - `Ctrl+]` `q` opens "Disconnect web-prod?" defaulting to No. `y` closes the SSH connection and the tab and focuses the tab to its left; `n`, Enter and Esc keep the session.
   - sshtest records the channel close within 1 s.
   - Typing `~.` at the start of a line is sent to the remote like any other text.
+- **M3 revision** · Priority: M3 · Status: Draft · Source: D-018 (the SFTP tab reuses the session's connection)
+  - *Revised:* While a session tab is focused, when the user presses the prefix key followed by `q` and confirms, the system shall close that session and its tab, and shall close its SSH connection unless an SFTP tab still uses it.
+  - *Acceptance:*
+    - With no SFTP tab on the connection: `Ctrl+]` `q` opens "Disconnect web-prod?" defaulting to No; `y` closes the session channel, the SSH connection and the tab, and focuses the tab to its left; `n`, Enter and Esc keep the session.
+    - With an SFTP tab on the same connection: the question is "Close this web-prod session? SFTP tab 3 stays connected."; `y` closes the session channel and the tab only, and the SFTP tab keeps listing and transferring (sshtest records the session channel close and no connection close).
+    - sshtest records the channel close within 1 s.
+    - Typing `~.` at the start of a line is sent to the remote like any other text.
 
 ### FR-CONN-015 · Connection hooks
 Where a host defines an on-connect or on-disconnect local command, the system shall run it when the session starts or ends, with the host label in the environment variable `SSHELF_HOST`.
@@ -971,19 +1009,289 @@ When the user imports a PuTTY `.reg` export, a SecureCRT XML export or a MobaXte
 
 ## 17. File transfer (`FR-SFTP`)
 
-### FR-SFTP-001 · Transfer a single file
-When the user chooses upload or download on a host and enters a local and a remote path, the system shall copy the file over SFTP using the host's saved settings and credentials.
+Milestone M3 (D-017 to D-020). An **SFTP tab** is a tab next to the session
+tabs with two panes, the local file system on the left and the remote host's
+on the right, a one-line progress line and the key-hints footer. The layout
+the product owner approved:
 
-- **Priority:** Later · **Status:** Draft · **Rationale:** system `scp` cannot use secrets stored by sshelf.
+```
+sshelf │ Hosts │ 1 raspberrypi4 │[2 sftp: raspberrypi4]│
+┌ Local: ~/Downloads ────────┐┌ Remote: /home/pi ──────────┐
+│ ..                         ││ ..                         │
+│ ▸ photos/          4 items ││ ▸ scripts/         12 items│
+│   report.pdf        1.2 MB ││ > backup.tar.gz    840 MB │
+│   notes.txt          3 KB  ││   .bashrc            4 KB  │
+└────────────────────────────┘└────────────────────────────┘
+ ↓ backup.tar.gz  412/840 MB  █████░░░░░ 49%  12 MB/s
+ tab switch pane · c copy · r rename · d delete · m mkdir
+```
+
+`>` marks the cursor row of the **focused pane** (the remote pane above);
+`▸` marks a directory. Everything is over SFTP with `github.com/pkg/sftp`
+(ADR-016); there is no FTP and no SCP. Remote names and paths are untrusted
+input (D-020, `SEC-SFTP-*`). Keys in this section apply while an SFTP tab is
+focused, no modal is open and the prefix key is not pending; the prefix key
+works on SFTP tabs as on session tabs (FR-TAB-005 M3 revision).
+
+FR-SFTP-001 and FR-SFTP-002 were `Later` placeholders ("Transfer a single
+file", "SFTP browser"); M3 rewords and promotes them rather than adding
+duplicates.
+
+### FR-SFTP-001 · Copy between the panes
+When the user presses `c` in a pane, the system shall copy the marked entries, or the entry under the cursor if none is marked, into the other pane's current directory, uploading from local to remote and downloading from remote to local, and copying directories recursively.
+
+- **Priority:** M3 · **Status:** Draft · **Source:** D-017, D-018 (was `Later` "Transfer a single file")
 - **Acceptance:**
-  - A 100 MB file has the same SHA-256 checksum on both sides. Progress is shown, and the transfer can be cancelled.
+  - A 100 MiB file uploaded and then downloaded again has the same SHA-256 as the original (sshtest SFTP subsystem, ARCH-TEST-004).
+  - A directory tree with three levels, an empty directory and 200 small files is copied in both directions with the same relative paths and contents. Directories are created before their contents.
+  - Each copied file keeps its modification time (to the second) and its permission bits `rwxrwxrwx` (`mode & 0777`); setuid, setgid and sticky bits are never set on the target. Directory modification times are not preserved.
+  - Every copy goes through the transfer queue (FR-SFTP-014, FR-SFTP-015): `c` returns at once, and the panes stay usable while it runs. When a transfer finishes, the target pane is refreshed if it shows the target directory.
+  - `c` on `..` does nothing. Symbolic links inside a copied directory are skipped and counted ("skipped 3 symlinks"); a marked symlink to a file is copied as the file it points to.
+  - Special files (devices, FIFOs, sockets) are skipped with the same kind of note.
 
-### FR-SFTP-002 · SFTP browser
-When the user opens the file browser for a host, the system shall show a two-pane view of local and remote directories that supports navigating, uploading, downloading, renaming, deleting and creating directories.
+### FR-SFTP-002 · Open an SFTP tab from the host list
+When the user presses `s` on a host in the host list, the system shall connect to that host through the normal connect flow and, once connected, open an SFTP tab for it after the last tab and focus it.
 
-- **Priority:** Later · **Status:** Draft · **Source:** Termius, MobaXterm, Midnight Commander
+- **Priority:** M3 · **Status:** Draft · **Source:** D-017 (was `Later` "SFTP browser")
 - **Acceptance:**
-  - Each listed operation works against the in-process test server, and failures show the remote error.
+  - Dialling, host-key checks (TOFU, changed key), prompts and authentication happen exactly as for `enter` (FR-TAB-002, ARCH-SESS-002); no tab opens if any of them fails or is cancelled.
+  - The connection opens no shell and no PTY: sshtest records one `subsystem sftp` request per SFTP channel and no `pty-req` or `shell`.
+  - If the server refuses the SFTP subsystem, no tab opens, the connection is closed, and the status line says "<label>: the server does not offer SFTP".
+  - The tab is labelled `<n> sftp: <label>` (FR-TAB-003 M3 revision). Pressing `s` twice on the same host opens two SFTP tabs with two connections.
+  - `s` is listed in the host list's help and footer when there is room (FR-NAV-004).
+
+### FR-SFTP-003 · Open SFTP from a session without logging in again
+While a live session tab is focused, when the user presses `Ctrl+]` `s`, the system shall open an SFTP tab on that session's SSH connection, without dialling or authenticating again, or focus the SFTP tab that already uses that connection.
+
+- **Priority:** M3 · **Status:** Draft · **Source:** D-018
+- **Acceptance:**
+  - sshtest records no new TCP connection and no auth attempt; it records a new `subsystem sftp` channel on the session's existing connection. No credential is read from the store (`MemStore` counts zero `Get`).
+  - A second `Ctrl+]` `s` on the same session, or on another session tab of the same connection, focuses the existing SFTP tab instead of opening a second one. A session tab on a different connection to the same host gets its own SFTP tab.
+  - If the server refuses the subsystem, no tab opens, the session keeps running, and the status bar shows "the server does not offer SFTP" for 5 s.
+
+### FR-SFTP-004 · A shared connection outlives either tab
+While a session tab and an SFTP tab share one SSH connection, the system shall keep that connection open until both tabs have ended or been closed.
+
+- **Priority:** M3 · **Status:** Draft · **Source:** D-018
+- **Acceptance:**
+  - `exit` in the shell ends the session tab (`✕`, FR-CONN-005); the SFTP tab keeps listing, and a transfer that was running completes with the right checksum. sshtest records the session channel close and no connection close.
+  - Closing the SFTP tab (FR-SFTP-025) leaves the session tab live and echoing input.
+  - The connection is closed, once, after the last of the two closes (sshtest records exactly one connection close). `goleak` passes.
+  - If the connection itself drops, both tabs end: the session tab shows its ended state and the SFTP tab pauses its transfers (FR-SFTP-018). Reconnecting either tab opens a new connection for that tab only.
+
+### FR-SFTP-005 · Starting directories
+When an SFTP tab opens, the system shall show the directory sshelf was started in on the local pane, or the user's home directory if that directory can no longer be read, and the remote user's home directory as the server reports it on the remote pane, with the remote pane focused.
+
+- **Priority:** M3 · **Status:** Draft · **Source:** D-017
+- **Rationale:** most people start sshelf from a shell, so the working directory is where they were about to put or pick files (as `sftp`, `scp` and Midnight Commander do). `~` jumps to the home directory in one key (FR-SFTP-007).
+- **Acceptance:**
+  - With sshelf started in a temp dir, the local pane shows that dir. After that dir is deleted, a new SFTP tab starts in `$HOME`.
+  - The remote pane starts in the path the server's `realpath(".")` returns (sshtest started with home `/home/pi` shows `Remote: /home/pi`). If that fails, it starts in `/`.
+  - Pane titles abbreviate the local home directory to `~`; a path wider than the title is cut from the left with `…` so the end stays visible. The remote path is shown as reported, sanitised (SEC-SFTP-008).
+
+### FR-SFTP-006 · Listing columns and order
+The system shall list each directory with a `..` row first (except at `/`), then directories, then all other entries, each group sorted by name, showing for every row its name, its size (files) or item count (directories), and, where the pane is at least 50 columns wide, its modification time.
+
+- **Priority:** M3 · **Status:** Draft · **Source:** D-017, the approved layout
+- **Acceptance:**
+  - Names sort case-insensitively, ties by byte order. Directory names end with `/` and carry `▸`; symbolic links end with `@`, sort among the files, and show the size of the link entry.
+  - Sizes use 1000-based units with at most one decimal below 10: `999 B`, `3 KB`, `1.2 MB`, `840 MB`, `12 GB`.
+  - A directory's item count is filled in after the listing appears, for the rows on screen only, one count at a time per pane; it shows `…` until known, `1 item`, `12 items`, or `10k+ items` above 10,000. Leaving the directory cancels pending counts.
+  - Modification times are local time: `Oct 30 14:02` within the last 12 months, `2025-03-01` otherwise.
+  - A name wider than its column is cut with `…`. Names are displayed sanitised (SEC-SFTP-001, SEC-SFTP-008); invalid UTF-8 shows as `�` but operations use the exact bytes.
+  - Goldens of both panes at 80×24 and 120×40 (the mtime column appears at 120 columns only).
+
+### FR-SFTP-007 · Moving around
+While an SFTP tab is focused, the system shall move the cursor with ↑/↓ or `k`/`j`, `pgup`/`pgdn` and `g`/`G`, switch the focused pane with `tab`, open the directory under the cursor with `enter`, go to the parent directory with `backspace` or `h`, and go to the pane's starting home directory with `~`.
+
+- **Priority:** M3 · **Status:** Draft · **Source:** D-017
+- **Acceptance:**
+  - `enter` on a directory, on `..`, or on a symlink whose target is a directory opens it; the new path is the link's path (`/srv/www`, not its target), so `h` returns to where the user came from. `enter` on a file does nothing (the footer suggests `c` and `e`).
+  - After `h`, the cursor is on the directory just left. Each pane keeps its own cursor, scroll position and path when focus moves away and back.
+  - Opening a directory that cannot be read keeps the current listing and shows the error (FR-SFTP-024).
+  - `~` goes to the local home directory in the local pane and to the starting remote directory (FR-SFTP-005) in the remote pane.
+  - Every key has a root-model test; `?` shows these bindings in the help overlay, generated from `ui/keys` (ARCH-UI-004).
+
+### FR-SFTP-008 · Hidden files and filter
+While a pane is focused, when the user presses `.`, the system shall hide or show entries whose names start with `.` in both panes, and when the user presses `/`, the system shall filter the focused pane's current listing by the text typed, case-insensitively, until Esc clears it.
+
+- **Priority:** M3 · **Status:** Draft · **Source:** D-017
+- **Acceptance:**
+  - Hidden entries are shown when a tab opens (the approved layout shows `.bashrc`); `.` toggles, and the pane titles show `(hidden off)` while they are hidden.
+  - The filter is a substring match on the displayed name. While typing, the pane's bottom border shows `/ rep`; `enter` keeps the filter and returns keys to the list; Esc clears it. Changing directory clears it.
+  - Marks on entries the filter hides are kept, and the footer counts them ("3 marked").
+
+### FR-SFTP-009 · Marking several entries
+When the user presses `space` on an entry, the system shall mark or unmark it and move the cursor down one row, and file operations shall then act on every marked entry of the focused pane.
+
+- **Priority:** M3 · **Status:** Draft · **Source:** D-017
+- **Acceptance:**
+  - A marked row shows `*` before its name (not colour alone, NFR-UX-003). `..` cannot be marked.
+  - Marks belong to one pane and one directory: changing directory, or refreshing after the entry is gone, drops them.
+  - `c`, `d` and drag act on the marked entries; `r`, `e` and `enter` act on the cursor row only. After a copy is queued, the marks are cleared.
+
+### FR-SFTP-010 · Rename
+When the user presses `r` on an entry and enters a new name, the system shall rename that entry within its directory.
+
+- **Priority:** M3 · **Status:** Draft · **Source:** D-018
+- **Acceptance:**
+  - The modal "Rename report.pdf to:" opens with the current name filled in. Enter renames; Esc cancels.
+  - A name that is empty, `.` or `..`, or contains `/`, NUL or a control character is refused in the modal with a reason.
+  - If the new name already exists, nothing is renamed and the modal says "already exists". sshelf never overwrites by renaming.
+  - The listing refreshes with the cursor on the renamed entry. A server error is shown (FR-SFTP-024).
+
+### FR-SFTP-011 · Delete with confirmation
+When the user presses `d`, the system shall ask for confirmation, stating how many entries will be deleted including the contents of directories, and delete the marked entries or the entry under the cursor only after `y`.
+
+- **Priority:** M3 · **Status:** Draft · **Source:** D-018
+- **Acceptance:**
+  - One file: "Delete notes.txt?". A directory: sshelf first counts its contents in the background ("Counting photos/… esc cancel"), then asks "Delete photos/ and the 1,234 entries in it? This cannot be undone." Several: "Delete 3 items and the 1,234 entries in them?". Counting stops at 100,000 ("more than 100,000 entries").
+  - The confirmation defaults to No (`n`, Enter and Esc keep everything).
+  - Symbolic links are deleted as links; deleting never follows a link into its target, locally or remotely.
+  - Deleting stops at the first error, shows it with the number already deleted, and refreshes the pane.
+  - `d` on `..` does nothing.
+
+### FR-SFTP-012 · Make a directory
+When the user presses `m` and enters a name, the system shall create a directory with that name in the focused pane's current directory and put the cursor on it.
+
+- **Priority:** M3 · **Status:** Draft · **Source:** D-018
+- **Acceptance:**
+  - The name rules of FR-SFTP-010 apply. An existing name is refused with "already exists".
+  - The new directory has mode 0755 before the umask (local) or the server's default (remote).
+
+### FR-SFTP-013 · Refresh
+When the user presses `R`, the system shall list both panes' current directories again, keeping each cursor on the same name where it still exists.
+
+- **Priority:** M3 · **Status:** Draft · **Source:** D-017
+- **Acceptance:**
+  - A file created by another process appears after `R`. sshelf does not watch directories; it refreshes only on `R` and after its own operations (rename, delete, mkdir, a finished transfer into the shown directory).
+
+### FR-SFTP-014 · Progress line
+While a transfer is running, the system shall show one line under the panes with the direction, name, bytes done and total, a 10-cell bar, the percentage and the current rate of the oldest running transfer, and the number of other running and queued transfers.
+
+- **Priority:** M3 · **Status:** Draft · **Source:** D-017, the approved layout
+- **Acceptance:**
+  - Golden: ` ↓ backup.tar.gz  412/840 MB  █████░░░░░ 49%  12 MB/s  +1 running, 3 queued` (↓ download, ↑ upload). The percentage is always shown as text, so the bar is not the only cue (NFR-UX-003). When the line does not fit, the counts, then the bar, then the rate are dropped, and the name is cut with `…`.
+  - The rate is a moving average over the last 5 s. The line is redrawn at most 4 times a second (ARCH-SFTP-003).
+  - With no transfer running, the line shows the last status message (for example "copied 3 files, skipped 1") or is blank; paused transfers show `⏸ 3 transfers paused: connection lost · r reconnect` (FR-SFTP-018); a transfer waiting for an answer shows `? backup.tar.gz exists · t to answer`.
+
+### FR-SFTP-015 · Transfers view: cancel and retry
+When the user presses `t`, the system shall show the tab's transfers with, for each, its direction, name, state, bytes done and total, rate and estimated time left, and shall let the user cancel a queued, running, waiting or paused transfer and retry a failed or cancelled one.
+
+- **Priority:** M3 · **Status:** Draft · **Source:** D-018
+- **Acceptance:**
+  - States are `queued`, `running`, `waiting` (an existing target needs an answer), `paused` (connection lost), `done`, `failed: <reason>`, `cancelled` and `skipped`, written as text (NFR-UX-003). ETA is `—` while the rate is 0.
+  - Keys: ↑/↓ move, `x` cancels the selected transfer, `r` retries it from the start (or resumes it, FR-SFTP-017), `enter` on a `waiting` transfer reopens its question (FR-SFTP-016), `C` removes finished rows, `t` or Esc returns to the panes.
+  - Cancelling a running download deletes its local `.sshelf-part` file; cancelling a running upload deletes its remote part file (best effort, an error is shown). Cancelling a directory transfer cancels everything still queued under it.
+  - The list holds the 1,000 most recent transfers; older finished rows are dropped first.
+  - Golden of the view at 80×24 and 120×40 with one transfer in each state.
+
+### FR-SFTP-016 · Existing targets
+If a file to be copied already exists in the target directory, then the system shall ask whether to overwrite it, skip it, or copy it under a new name, with an option to apply the same answer to the rest of that copy, and shall act only on the answer.
+
+- **Priority:** M3 · **Status:** Draft · **Source:** D-018
+- **Acceptance:**
+  - The modal shows both sides' size and modification time: "backup.tar.gz already exists (remote 840 MB, Oct 29 10:12; local 812 MB, Oct 28 09:00). [o] Overwrite · [s] Skip · [n] Keep both · [a] apply to all · [esc] Skip". `a` toggles "apply to all" before the choice.
+  - "Keep both" copies to `<stem> (1)<ext>`, then `(2)` and so on, using the first free name (`backup (1).tar.gz`).
+  - "Apply to all" covers the remaining conflicts of the same `c` or drag only.
+  - While the question is open the transfer is `waiting`; the other transfers keep running. Closing the modal with Esc skips.
+  - A directory that already exists is merged without asking; only files ask. An existing entry of a different type (a file where a directory goes, or the reverse) fails that entry with "exists and is not a directory/file".
+  - Overwrite replaces the target only when the new copy is complete (FR-SFTP-017, SEC-SFTP-003): until then the old file is intact.
+
+### FR-SFTP-017 · Resume interrupted transfers
+When an interrupted transfer is started again in the same sshelf run, the system shall continue it from the bytes already transferred where it is safe to do so, and otherwise start it over and say so.
+
+- **Priority:** M3 · **Status:** Draft · **Source:** D-018, D-020
+- **Acceptance:**
+  - **Download.** It continues from the size of `<name>.sshelf-part` when the part is a regular file (not a symlink) no larger than the remote file, and the remote file's size and modification time still match what sshelf recorded when the download started.
+  - **Upload.** Uploads also go to a part file, `<name>.sshelf-part` in the remote directory. Every 8 MiB sshelf records a checkpoint: the bytes the server has acknowledged and the part file's size and modification time as the server reports them. The upload continues from the last checkpoint when the remote part file exists, is a regular file, is no larger than the local file and no smaller than the checkpoint, its modification time matches the checkpoint's (or, if it is larger than the checkpoint because writes were in flight when the connection dropped, is not older), and the local file's size and modification time are unchanged since the upload started. sshelf first truncates the part file to the checkpoint (ARCH-SFTP-005).
+  - Otherwise the transfer starts from 0 and the transfers view and the status line say "restarted: <reason>" (for example "remote file changed").
+  - Interrupt a 64 MiB download and a 64 MiB upload after about 20 MiB (sshtest fault injection, ARCH-TEST-004), retry: each finishes with the right SHA-256, and sshtest records that fewer than 48 MiB were read or written the second time.
+  - Resume works within one sshelf run: the queue is kept in memory only. A `.sshelf-part` file left by an earlier run is never resumed; it is overwritten when that file is copied again.
+
+### FR-SFTP-018 · Connection lost: pause and reconnect
+If an SFTP tab's connection drops, then the system shall pause its running and queued transfers, keep the panes' last listings, and on `r` reconnect through the normal connect flow and resume the paused transfers.
+
+- **Priority:** M3 · **Status:** Draft · **Source:** D-018
+- **Acceptance:**
+  - After sshtest drops the connection mid-transfer: the tab shows `✕`, the progress line shows `⏸ N transfers paused: connection lost · r reconnect`, and operations other than browsing the local pane, `t`, `r` and `x` are refused with "not connected".
+  - `r` opens the Connecting flow (modals over the tab); on success the tab uses the new connection, both panes refresh, and paused transfers resume (FR-SFTP-017) in their original order. A failed or cancelled reconnect leaves the tab disconnected with the error shown.
+  - `x` closes the disconnected tab after confirming when transfers are paused ("Close and drop 3 paused transfers?").
+  - sshelf never reconnects by itself (D-007, design §8.7).
+
+### FR-SFTP-019 · Edit a remote file locally
+When the user presses `e` on a remote file, the system shall download it to a private temporary copy, suspend its own display, run the user's editor on that copy, and when the editor exits, upload the copy back if it changed, then delete the copy.
+
+- **Priority:** M3 · **Status:** Draft · **Source:** D-018, D-019
+- **Acceptance:**
+  - The editor is the first non-empty of `$VISUAL`, `$EDITOR` and `vi`. A value with spaces is split into words (`code -w`); there is no shell. The copy's path is the last argument.
+  - The copy keeps the remote file's name, in a new directory with mode 0700, with mode 0600 (SEC-SFTP-005).
+  - If the file changed (its SHA-256 differs) and the remote has not changed (FR-SFTP-020), the copy is uploaded through a part file and renamed over the remote file, which keeps its permission bits; the status line says "saved notes.txt (3 KB)". If it did not change: "notes.txt: no changes".
+  - If the editor exits with a non-zero status, nothing is uploaded: "editor exited with status 1; nothing uploaded".
+  - If the upload fails, a modal offers `[r] Retry`, `[l] Save to <local pane dir>/<name>.local-edit` and `[x] Discard`; the copy is kept until one is chosen, then deleted.
+  - The temporary copy and its directory are deleted in every case, including an editor that cannot be started ("editor not found: nano"). sshelf's crash handler deletes them too.
+  - Sessions in other tabs keep reading output while the editor runs, and transfers keep running (ARCH-SFTP-006). When the editor exits, every tab is redrawn at the current terminal size.
+  - `e` on a directory, on `..`, on a local entry, or on a file over 64 MiB does nothing but explain why in the status line. `e` on a symlink edits the file it points to (resolved with the server's `realpath`).
+  - PTY E2E with a fake `$EDITOR` script that appends a line: the remote file holds the new line and no temp file remains.
+
+### FR-SFTP-020 · Remote file changed while editing
+If the remote file's size or modification time differs, when the editor exits, from what sshelf recorded at the download, then the system shall ask whether to overwrite the remote file, keep the remote file and discard the edit, or save the edit as `<name>.local-edit` next to the remote file.
+
+- **Priority:** M3 · **Status:** Draft · **Source:** D-019
+- **Acceptance:**
+  - The modal "notes.txt changed on the server while you edited it. [o] Overwrite · [k] Keep remote · [s] Save mine as notes.txt.local-edit" defaults to nothing: Esc is the same as Keep remote, and Enter does nothing.
+  - "Save mine" uploads to `notes.txt.local-edit` (or `notes.txt.local-edit (1)` if that exists) in the same remote directory.
+  - The temporary copy is deleted after any answer.
+  - If the remote file was deleted meanwhile, the question is the same with "was deleted on the server"; Overwrite recreates it.
+
+### FR-SFTP-021 · Mouse in the SFTP tab
+While an SFTP tab is focused and no modal is open, the system shall focus the pane and select the row under a left click, act as `enter` on a double-click, scroll a pane with the wheel, and focus the tab clicked in the tab bar.
+
+- **Priority:** M3 · **Status:** Draft · **Source:** D-011, D-017
+- **Acceptance:**
+  - Mouse tracking is on (cell motion) while an SFTP tab is focused (ARCH-UI-006 M3 revision); the terminal's own text selection is not available there, as on the Hosts tab.
+  - A click on a row focuses its pane and moves the cursor there; a click on a pane's border focuses that pane only. A double-click (ARCH-UI-007) on a directory opens it, and on a file does nothing.
+  - Each wheel notch scrolls the pane under the pointer 3 rows, without changing focus.
+  - A click on a tab in the tab bar focuses that tab, as on the Hosts tab (FR-NAV-017). A click on the progress line opens the transfers view (as `t`); a click on the footer does nothing.
+  - Tests send synthetic `tea.MouseClickMsg` and `tea.MouseWheelMsg` through the root model with coordinates that include the header row.
+
+### FR-SFTP-022 · Drag to copy
+When the user presses the left button on an entry in one pane and releases it over the other pane, the system shall copy the marked entries, or the pressed entry if it is not marked, into the other pane's current directory, as `c` does.
+
+- **Priority:** M3 · **Status:** Draft · **Source:** D-017
+- **Acceptance:**
+  - While the button is held after moving off the pressed row, the progress line shows the hint `drag: copy 3 items to Remote: /home/pi · release over the other pane`, and the pane under the pointer has its border highlighted.
+  - Releasing over the same pane, the header, the progress line or the footer copies nothing and clears the hint. Releasing on a directory row of the other pane still copies into that pane's current directory (no drop into subdirectories).
+  - A press and release on the same row is a click (FR-SFTP-021), not a drag.
+  - Dragging `..` does nothing. Every drag has a key equivalent (`c`), so NFR-UX-001 holds.
+  - Tests drive `tea.MouseClickMsg`, `tea.MouseMotionMsg` and `tea.MouseReleaseMsg` through the root model and check the hint golden and the queued transfers.
+
+### FR-SFTP-023 · Layout at 80×24
+While the terminal is at least 80 columns by 24 rows, the system shall show both panes side by side, each half the width, with at least 18 rows of entries, the progress line and the footer.
+
+- **Priority:** M3 · **Status:** Draft · **Source:** D-017, NFR-UX-002
+- **Rationale:** side by side keeps local on the left and remote on the right (D-017) and keeps dragging horizontal. At 80 columns each pane has 38 columns inside its border, enough for a 24-column name and the size; the mtime column appears from 50 inner columns (a terminal of 104 or more). Stacking the panes would halve the rows for little gain.
+- **Acceptance:**
+  - Goldens of the approved layout at 80×24 and 120×40, checked by the NFR-UX-002 helper (no line wider than the terminal; the last line is the footer).
+  - With an odd width the extra column goes to the remote pane.
+
+### FR-SFTP-024 · Errors and warnings
+If an SFTP operation fails or skips entries, then the system shall say so on the progress line with the entry's name and the server's or the OS's reason, without closing the tab.
+
+- **Priority:** M3 · **Status:** Draft · **Source:** D-018
+- **Acceptance:**
+  - Permission denied, no such file, disk full (local `ENOSPC`) and a server failure status each produce one line such as `✕ cannot open /root: permission denied`, with the `✕` prefix (NFR-UX-003). Server text is sanitised and cut (SEC-SFTP-008).
+  - Entries skipped for unsafe names (SEC-SFTP-001) or listing limits (SEC-SFTP-004) are counted in one warning per listing: `⚠ 2 entries with unsafe names not shown`.
+  - The message stays until the next operation or 10 s, whichever is later.
+
+### FR-SFTP-025 · Close an SFTP tab
+When the user presses `Ctrl+]` `q` on an SFTP tab and confirms, or `x` on a disconnected SFTP tab, the system shall cancel the tab's transfers, close its SFTP channels, release its connection, and close the tab.
+
+- **Priority:** M3 · **Status:** Draft · **Source:** D-018
+- **Acceptance:**
+  - The question is "Close SFTP tab 2?", with "3 transfers will stop." when any are queued, running, waiting or paused; it defaults to No.
+  - Cancelled transfers remove their part files as in FR-SFTP-015.
+  - The connection closes only if no session tab still uses it (FR-SFTP-004). Focus moves to the tab on the left.
 
 ---
 
@@ -1033,6 +1341,13 @@ The system shall show a one-line header that starts with `sshelf`, then the `Hos
   - Labels are sanitised (SEC-SESSION-003) and cut to 20 columns with `…`. A tab shows the host label only; a window title set by the remote (OSC 0 or 2) is never shown (SEC-SESSION-005).
   - If the tabs do not fit, the bar keeps the focused tab visible and replaces the hidden tabs with `‹+N` on the left and `+N›` on the right. At 80 columns, 10 tabs with 12-character labels fit on one line (golden).
   - The header is shown on every screen, the Hosts tab and the Welcome screen included, and replaces the MVP's `sshelf` title line.
+- **M3 revision** · Priority: M3 · Status: Draft · Source: D-017
+  - *Revised:* The system shall show a one-line header that starts with `sshelf`, then the `Hosts` tab, then one entry per session tab (`<number> <host label>`) and per SFTP tab (`<number> sftp: <host label>`) in opening order, separated by `│`, with the focused tab highlighted.
+  - *Acceptance:* the M2 criteria above, unchanged, plus:
+    - Session and SFTP tabs share one numbering, so `Ctrl+]` `1`–`9` address both. Numbers are not reused.
+    - The text after the number (`sftp: raspberrypi4`) is sanitised and cut to 20 columns with `…`, as a session label is.
+    - Golden at 80×24 of the approved layout's header: `sshelf │ Hosts │ 1 raspberrypi4 │[2 sftp: raspberrypi4]│`.
+    - An SFTP tab shows `●` when a transfer finishes or fails while the tab is in the background, and `✕` while its connection is lost (FR-SFTP-018), with the rules of FR-TAB-004.
 
 ### FR-TAB-004 · Activity and end markers
 While a session tab is not focused, when its session receives output, the system shall mark that tab with `●` until it is focused; and when a session ends, the system shall mark its tab with `✕` until it is reconnected or closed.
@@ -1053,6 +1368,12 @@ While any tab is focused and no modal is open, when the user presses `Ctrl+]`, t
   - After `Ctrl+]`, the status bar shows `Ctrl+] …` until the next key. Esc, or any key that is not a command, cancels the prefix and is not sent to the remote. There is no timeout.
   - `Ctrl+]` `?` opens a help overlay listing every prefix command, generated from `ui/keys` (ARCH-UI-004); `?` or Esc closes it.
   - On the Hosts tab the prefix key works on every screen, including while a text field is focused; `q` and `[` do nothing there.
+- **M3 revision** · Priority: M3 · Status: Draft · Source: D-017, D-018
+  - *Revised:* While any tab is focused and no modal is open, when the user presses `Ctrl+]`, the system shall treat the next key as a tab command (`q` disconnect or close, `?` help, `h` or `0` Hosts tab, `1`–`9` tab, `n` next tab, `p` previous tab, `[` scrollback mode, `s` SFTP tab for this host, `Ctrl+]` send a literal `Ctrl+]`) and shall send neither key to the remote.
+  - *Acceptance:* the M2 criteria above, unchanged, plus:
+    - `Ctrl+]` `s` on a live session tab opens or focuses the SFTP tab on that session's connection (FR-SFTP-003); on an ended session tab it opens an SFTP tab for the same host through the normal connect flow (FR-SFTP-002); on the Hosts tab and on an SFTP tab it does nothing.
+    - On an SFTP tab, `Ctrl+]` `q` closes that tab (FR-SFTP-025) and `Ctrl+]` `[` does nothing. Every other prefix command works there as on a session tab.
+    - The help overlay lists `s`.
 
 ### FR-TAB-006 · Keys and paste go to the focused session
 While a live session tab is focused and neither the prefix key, an overlay nor scrollback mode is active, the system shall send every key press and paste to that session's remote, encoded according to the emulator's current modes.
@@ -1089,6 +1410,13 @@ When the user quits sshelf (`q` on the host list or the Welcome screen, or Ctrl+
   - The confirmation defaults to No: `n`, Enter and Esc keep sshelf running with every session intact.
   - Ended tabs do not count. With no live session, `q` quits at once as in the MVP.
   - SIGTERM and SIGHUP close every session without asking, restore the terminal and exit 0.
+- **M3 revision** · Priority: M3 · Status: Draft · Source: D-017, D-018
+  - *Revised:* When the user quits sshelf (`q` on the host list or the Welcome screen, or Ctrl+C on the Hosts tab) while at least one session is live, an SFTP tab is connected, or a transfer is queued, running or paused, the system shall ask "Quit and close N tabs?", followed by "M transfers will stop." when M is not zero, and quit only on `y`.
+  - *Acceptance:*
+    - N counts live session tabs and SFTP tabs that are connected or have paused transfers; M counts queued, running, paused and waiting transfers in every SFTP tab.
+    - The confirmation defaults to No: `n`, Enter and Esc keep sshelf running with every session and transfer intact.
+    - On `y`, every transfer is cancelled as in FR-SFTP-015 (partial files removed), then every connection is closed. With nothing live and no transfer, `q` quits at once.
+    - SIGTERM and SIGHUP do the same without asking, restore the terminal and exit 0.
 
 ### FR-TAB-010 · Scrollback mode
 While a session tab is focused, when the user presses the prefix key followed by `[`, the system shall show the session's scrollback and screen as one view that PgUp, PgDn, the arrow keys, `g` and `G` move, until the user presses Esc.
@@ -1257,3 +1585,29 @@ The M2 questions are answered too (status at the M2 gate, T-043):
 
 No question is open for M2.
 
+
+### M3 questions
+
+Decisions D-017 to D-020 settle the scope. The spec makes these choices,
+which the product owner may still change:
+
+1. **Upload resume point.** D-018's rule "continue from the remote size if
+   its mtime matches what sshelf recorded" cannot hold literally after a
+   dropped connection: every write the server applies changes the part
+   file's mtime, and concurrent writes can leave a gap before the end.
+   FR-SFTP-017 therefore continues from the last 8 MiB **checkpoint** the
+   server acknowledged, after checking size and mtime against that
+   checkpoint, and truncates anything after it. At most about 8 MiB is sent
+   twice.
+2. **Hidden files are shown by default**, because the approved layout shows
+   `.bashrc`; `.` hides them (FR-SFTP-008).
+3. **Where "save mine as `<name>.local-edit`" goes.** Next to the remote
+   file, so the temporary copy can still be deleted as D-019 requires
+   (FR-SFTP-020).
+4. **Edit locally is limited to files up to 64 MiB** (FR-SFTP-019); larger
+   files are copied and edited by hand.
+5. **The local pane starts in sshelf's working directory**, falling back to
+   `$HOME` (FR-SFTP-005).
+6. **One SFTP tab per connection.** `Ctrl+]` `s` focuses the existing SFTP
+   tab of that connection rather than opening a second one, so "the queue
+   per connection" is also "the queue per SFTP tab" (FR-SFTP-003).

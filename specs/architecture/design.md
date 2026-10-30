@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Owner** | Architecture |
-| **Status** | Revision 4: M2 as built (T-031 … T-043; D-009…D-015: framed sessions, tabs, mouse). Revision 3 planned M2; revision 2 aligned with D-001…D-008, D-101…D-109 |
+| **Status** | Revision 5: M3 planned (D-017…D-020: SFTP tab, shared connections, transfers, edit locally; ADR-016 … ADR-020). Revision 4: M2 as built (T-031 … T-043; D-009…D-015: framed sessions, tabs, mouse). Revision 3 planned M2; revision 2 aligned with D-001…D-008, D-101…D-109 |
 | **Requirement prefix** | `ARCH-*` |
 | **Depends on** | `decisions.md` (binding), `security/credential-storage.md` (keychain library, item naming), `product/requirements.md` (`FR-*`) |
 | **Last updated** | 2026-10-30 |
@@ -36,6 +36,9 @@ Linux. Windows comes later.
 The code follows the package layout in §5: a Bubble Tea v2 root model in
 `internal/ui` with the Hosts tab and one tab per session, over `internal/app`,
 `internal/sshclient` and the emulator-backed `internal/session`.
+Milestone M3 adds SFTP tabs over `internal/files` (ADR-016 … ADR-020),
+with connections shared between a session tab and its SFTP tab through a
+reference-counted `sshclient.Conn`.
 
 ### 1.2 Assumed feature scope
 
@@ -44,7 +47,8 @@ The code follows the package layout in §5: a Bubble Tea v2 root model in
 | **MVP** | CRUD for hosts and identities (including credentials entered in the host form); a Welcome screen; a fuzzy-searchable host list; connect with a password or a private key (stored in the keychain or referenced as a file); password auth that also answers keyboard-interactive password prompts; known-hosts verification with a TOFU prompt; import from `~/.ssh/config` |
 | **M2** | Sessions inside sshelf's frame through an embedded terminal emulator (D-009, ADR-012, ADR-013); several sessions as tabs, background sessions, prefix key, scrollback, reconnect from an ended tab (D-010, ADR-015); mouse on sshelf's screens, and in sessions only when the remote app asks (D-011, D-012, ADR-014) |
 | **v1** | groups; ssh-agent auth and agent forwarding (D-005); jump hosts (ProxyJump); local, remote and dynamic port forwarding; snippets; keepalive; themes (the `~.` escape is replaced by the M2 prefix key, and reconnect moved to M2) |
-| **Later** | SFTP browser, Mosh, Windows, an opt-in plaintext secret fallback (D-101), a system `ssh` fallback (D-104). Not planned (D-007): split panes, detaching a session to the shell, sessions that survive an sshelf restart |
+| **M3** | An SFTP tab with local and remote panes, opened from the host list or from a session on the same connection; copy, rename, delete, mkdir; a transfer queue with resume; edit a remote file in the local `$EDITOR` (D-017 … D-020, ADR-016 … ADR-020) |
+| **Later** | Mosh, Windows, an opt-in plaintext secret fallback (D-101), a system `ssh` fallback (D-104). Not planned (D-007): split panes, detaching a session to the shell, sessions that survive an sshelf restart |
 
 ### 1.3 Goals
 
@@ -255,6 +259,10 @@ because sshelf's own code never starts a child process. The only child
 process is `/usr/bin/security`, run by `zalando/go-keyring` on macOS, which
 D-008 accepts. A single Go test is enough; there is no extra linter
 configuration (D-007).
+
+*M3 revision (ADR-019):* `internal/ui/editor` is the one sshelf package
+allowed to import `os/exec`, to run the user's editor for edit-locally
+(D-019). archtest checks that exception by name.
 
 ### ADR-010: `~/.ssh/config` import copies data once and references keys by path
 
@@ -518,7 +526,284 @@ every session through the root model's quit path (`closeAllAndQuit`), and
 `cmd/sshelf` calls `Model.CloseSessions` on the final model whatever ended
 the program, a signal included (ARCH-SESS-010). If a
 future feature needs sessions outside the UI (snippets on a live session,
-tunnels without a tab), a manager can be extracted then.
+tunnels without a tab), a manager can be extracted then. *M3 (ADR-017):*
+a connection shared by a session tab and an SFTP tab is reference-counted in
+`sshclient.Conn`; that is still not a manager.
+
+### ADR-016: SFTP with `github.com/pkg/sftp` v1.13.12
+
+**Status:** proposed for M3 (D-017, D-018).
+
+**Context.** The SFTP tab needs an SFTP v3 client that runs over an existing
+`x/crypto/ssh` connection, and the tests need an SFTP server that runs inside
+sshtest (ARCH-TEST-004). D-007 rules out writing our own protocol code.
+
+**Options.** (a) `github.com/pkg/sftp` v1: the de-facto Go SFTP library,
+client and server, used by rclone and restic. (b) `github.com/pkg/sftp/v2`:
+only `v2.0.0-alpha` and `v2.0.0-alpha2` are tagged; the API is not stable.
+(c) Our own client: thousands of lines for no gain.
+
+**Decision.** (a), pinned to **v1.13.12** (checked with `go list -m -versions`
+on 2026-10-30; tagged 2026-10-23, the previous release v1.13.11 on
+2026-07-12). Its `go.mod` needs Go 1.25 and `x/crypto` v0.54 or later
+(sshelf has 1.26 and v0.58); its only non-test dependency is `kr/fs`. It is
+imported by `internal/files/remote.go` (the only file of the product that
+does) and by `internal/testutil/sshtest`. Client options: the default packet
+size (32 KiB, which every server accepts), concurrent reads on (the default),
+concurrent writes on, and the default 64 requests in flight per file.
+
+**Verified API** (source of v1.13.12): `NewClient(*ssh.Client, ...)` and
+`NewClientPipe(io.Reader, io.WriteCloser, ...)`; `Client.Getwd`, `RealPath`,
+`ReadDirContext`, `Lstat`, `Stat`, `ReadLink`, `Mkdir`, `Remove`,
+`RemoveDirectory`, `Rename`, `PosixRename`, `HasExtension`, `Chmod`,
+`Chtimes`, `Truncate`, `OpenFile`, `Close`; `File.Seek`, `WriteTo`, `WriteAt`,
+`Stat` (fstat), `Truncate`, `Close`. Server side: `NewServer` (serves the
+whole file system; `WithServerWorkingDirectory` is not a chroot) and
+`NewRequestServer(rwc, Handlers)` with the `FileReader`, `FileWriter`,
+`FileCmder` and `FileLister` interfaces, plus `InMemHandler()`.
+
+**Limitations found and how sshelf handles them.**
+
+1. **`ReadDir` has no size limit.** `ReadDirContext` collects the whole
+   directory before returning (cancelling returns what was read so far).
+   sshelf opens the browse channel itself and passes it to `NewClientPipe`
+   behind a counting reader, so a listing that has read more than 64 MiB is
+   cancelled, then cuts the result at 100,000 entries (SEC-SFTP-004,
+   ARCH-SFTP-002). An upstream issue asks for a limit or an iterator.
+2. **Names are rewritten.** `ReadDirContext` drops `.` and `..` and reduces
+   every name with `path.Base`, so `../x` arrives as `x` and `x/..` as `..`;
+   the server's `longname` is discarded. SEC-SFTP-001 checks what the library
+   returns, and again before any join.
+3. **No context on bulk I/O.** `File.WriteTo` and `File.ReadFrom` take no
+   context, and `WriteTo` holds the file's mutex, so `Close` cannot interrupt
+   it. Downloads are cancelled by the local writer returning an error;
+   uploads use sshelf's own loop of 1 MiB `WriteAt` calls and check the
+   context between them; a dropped connection unblocks both (ARCH-SFTP-004).
+4. **Concurrent writes can leave gaps.** With `UseConcurrentWrites`, a failed
+   write may leave data past the failing offset. `WriteAt` returns the
+   earliest failing offset of its buffer, so sshelf's checkpoint is always a
+   contiguous, acknowledged prefix (ADR-018).
+5. **`Rename` is SFTP v3 rename**, which fails when the target exists on
+   OpenSSH. Replacing a file uses `PosixRename` when
+   `HasExtension("posix-rename@openssh.com")`, otherwise `Remove` then
+   `Rename` (a short window without the file; SEC-SFTP-003 AC3).
+6. `RemoveAll` and `Walk` exist, but sshelf walks with `Lstat` itself so it can
+   count, cap the depth and never follow a link (FR-SFTP-011, SEC-SFTP-004).
+7. Times are SFTP v3 attributes: whole seconds. `Client.Close` closes only its
+   subsystem channel, never the `*ssh.Client`, which shared connections need
+   (ADR-017).
+
+**Test server.** sshtest serves `sftp` subsystem requests with
+`NewRequestServer` and a `Handlers` implementation over an `os.Root` opened
+on a temp dir (Go's `os.Root` confines every path, symlinks included, to that
+dir), so tests exercise a real file system without exposing the rest of the
+machine. A hostile handler and fault injection sit beside it
+(ARCH-TEST-004). `NewServer` is not used because it is not confined;
+`InMemHandler` is not used because it has no symlinks or modes.
+
+### ADR-017: Shared connections are reference-counted in `sshclient.Conn`
+
+**Status:** proposed for M3 (D-018). Revises §8.4's "the session owns the
+client".
+
+**Context.** D-018 asks for an SFTP tab on a session's connection with no
+second login, and the user expects ending the shell not to stop a download,
+nor closing the SFTP tab to end the shell. In M2, `session.New` owns the
+`*ssh.Client` and closes it when the session ends.
+
+**Options.** (a) The SFTP tab borrows the session's client: ending the shell
+kills the SFTP tab. (b) A connection manager in `app` (ADR-015 rejected a
+manager). (c) A small reference-counted handle in `sshclient`.
+
+**Decision.** (c):
+
+```go
+// Conn is one authenticated SSH connection shared by the tabs that use it.
+func NewConn(c *ssh.Client) (*Conn, *Lease) // the first lease belongs to the caller
+func (c *Conn) Lease() (*Lease, error)       // ErrConnClosed once the connection ended or was released
+func (c *Conn) ID() uint64                   // process-unique, for the UI to match tabs
+func (c *Conn) Done() <-chan struct{}        // closed when the connection ends for any reason
+func (c *Conn) Err() error                   // after Done: nil after the last Release, or the transport error
+
+// Lease is one holder's reference.
+func (l *Lease) Client() *ssh.Client
+func (l *Lease) Release()                    // idempotent; the last release closes the client
+```
+
+One goroutine per `Conn` (through `term.SafeGo`) waits on `client.Wait()` and
+closes `Done`. Constructors take ownership of a lease: `session.New(lease,
+opts)` and `files.Open(lease, opts)` release it when they end, fail or are
+closed. `app.Connect` creates the `Conn`; `app.OpenSFTPOn(session)` takes a
+second lease from the session's `Conn`. `app.Session` and `app.Browser`
+gain `ConnID() uint64`, so the root model can find the SFTP tab already on a
+session's connection (FR-SFTP-003) without seeing `sshclient`.
+
+**Consequences.** A session's waiter watches its channel, `Conn.Done()` and
+its own close request instead of `client.Wait()`; `Session.Close` closes the
+channel and releases the lease. An `exit` in the shell ends only the session.
+A dropped connection ends every holder. Reconnecting a tab makes a new
+`Conn` for that tab alone. ARCH-CONN-006 and the ARCH-SESS-008 revision state
+the contract; goleak and sshtest's connection-close count test it.
+
+### ADR-018: Transfers: one queue per connection, two at a time, part files and checkpoints
+
+**Status:** proposed for M3 (D-018, D-020).
+
+**Decision.**
+
+- **One browser per SFTP tab, one SFTP tab per connection.**
+  `files.Browser` holds the tab's two SFTP channels, the local side and the
+  queue. `Ctrl+]` `s` focuses the existing SFTP tab of a connection, so the
+  queue is per connection as D-018 asks.
+- **Two SFTP channels.** A *browse* channel (listings, stat, rename, delete,
+  mkdir, item counts) and a *transfer* channel (the queue and edit-locally).
+  OpenSSH runs one `sftp-server` per channel and answers its requests in
+  order, so listings stay fast while a large file is moving, and the browse
+  channel's byte count is the listing's alone (ADR-016 limitation 1). If the
+  server refuses the second channel (`MaxSessions`), the browser uses one
+  channel for both; the listing limit is then the entry cap and a 30 s
+  timeout, and listings wait behind transfer requests. Both channels share
+  the tab's one lease.
+- **Queue.** FIFO. A directory job, when it starts, lists its source
+  (with the SEC-SFTP-004 limits), creates the target directory and inserts
+  its children right after itself, so trees are copied depth-first in name
+  order. Two workers take jobs. A file whose target exists is parked as
+  `waiting` with its question and the worker takes the next job; the answer
+  puts it back at the front. "Apply to all" is stored on the batch (one `c`
+  or drag).
+- **Why two at a time.** One large file already fills the pipe: pkg/sftp
+  keeps 64 requests in flight per file. A second slot lets small files pass
+  a large one instead of waiting behind it, and keeps memory at two
+  transfers' buffers (NFR-SIZE-004). More slots would not speed up one
+  `sftp-server` that answers in order. FileZilla's default is also 2. The
+  number is a constant, not a setting (D-007).
+- **Download.** Open the remote file and `Fstat` it (record size and mtime).
+  Open the target directory as an `os.Root`; create `<name>.sshelf-part`
+  with `O_CREATE|O_EXCL|O_WRONLY`, mode 0600 (or, to resume, `Lstat` it,
+  require a regular file, open it `O_WRONLY|O_NOFOLLOW` and compare
+  `Fstat` with the `Lstat`). `Seek` the remote file to the part's size and
+  `WriteTo` a writer that counts bytes, stops at the recorded size
+  (SEC-SFTP-004) and fails when the job is cancelled. Then check the size,
+  `Sync`, close, `Chmod(mode & 0777)`, `Chtimes`, and `Rename` the part over
+  the final name inside the root (a symlink at the final name is replaced,
+  never followed; SEC-SFTP-002, SEC-SFTP-003).
+- **Upload.** `Lstat` the local file (regular, or the explicitly marked
+  link's target), open it and compare `Fstat`. Open the remote
+  `<name>.sshelf-part` with `O_CREATE|O_TRUNC|O_WRONLY` (or, to resume,
+  without `O_TRUNC`, then `Truncate` to the checkpoint). Loop: read 1 MiB at
+  the offset, `WriteAt`, advance by what was acknowledged. Every 8 MiB, and
+  when the job pauses or is cancelled while the connection is up, `Stat` the
+  open file and record a **checkpoint** {offset, size, mtime}. At the end:
+  `Chmod`, `Chtimes`, then `PosixRename` over the final name (or `Remove` and
+  `Rename`, ADR-016 limitation 5).
+- **Resume (FR-SFTP-017).** Each job remembers in memory what it recorded:
+  the source's size and mtime, and for uploads the last checkpoint. A
+  download resumes from the local part's size; an upload resumes from the
+  checkpoint offset, truncating anything after it, because concurrent writes
+  may have left a gap past it (ADR-016 limitation 4) and the in-flight
+  writes changed the part's mtime. The exact conditions are FR-SFTP-017's;
+  any mismatch restarts from 0 with the reason shown. Nothing is persisted:
+  a new sshelf run never resumes (D-007).
+- **Pause.** When `Conn.Done()` closes, running and queued jobs move to
+  `paused`, keeping their records and part files. `app.Service.ReconnectSFTP`
+  makes a new `Conn` through the normal connect flow and `Browser.Attach`
+  reopens both channels and requeues the paused jobs in their old order.
+- **Cancel.** Stops the job, deletes its part file (local; remote best
+  effort) and, for a directory job, removes its queued children.
+- **Progress.** Workers update counters under the browser's mutex and send a
+  coalesced notification (capacity-1 channel, as ARCH-SESS-015) only on state
+  changes. Byte counts and rates are read by the UI on a 250 ms tick while a
+  job runs, so progress costs at most 4 redraws a second.
+- **Memory.** A download keeps at most 64 × 32 KiB in flight; an upload a
+  1 MiB buffer plus pkg/sftp's packet copies. Two transfers stay well under
+  NFR-SIZE-004's 16 MiB whatever the file size.
+
+**Consequences.** Big trees are not walked up front, so the total of a
+directory copy is known only as it proceeds; the progress line shows the
+current file. Remote permission bits are copied as `mode & 0777`; owners,
+ACLs and hard links are not (out of scope, `product/requirements.md` §3.2).
+
+### ADR-019: Edit locally suspends the UI with `tea.ExecProcess`, from one package (revises ADR-009 and ADR-012)
+
+**Status:** proposed for M3 (D-019).
+
+**Context.** D-019 makes editing a remote file in the user's `$EDITOR` the
+one place sshelf runs a local program. ADR-009 banned `os/exec` from every
+sshelf package and ADR-012 removed `tea.Exec` with the MVP handover.
+
+**Options.** (a) `tea.ExecProcess`: Bubble Tea releases the terminal, runs
+the command on it, and restores the terminal. (b) Run the editor in a local
+PTY rendered in a tab, like a session: needs `creack/pty` in the product and
+a second emulator path. (c) No editor: the user downloads, edits, uploads by
+hand. (a) is the least code (D-007).
+
+**Decision.**
+
+- `internal/ui/editor` is the only sshelf package that imports `os/exec`
+  (archtest names it). It has three functions: `Words(getenv)` returns the
+  words of the first non-empty of `$VISUAL`, `$EDITOR` and `vi`
+  (`strings.Fields`, no shell, no quoting); `Command(words, path)` returns
+  `exec.Command(words[0], words[1:]..., path)` with `Env` left nil, so the
+  editor inherits sshelf's environment, which never holds a secret
+  (SEC-MEM-008); `Run(path, done)` returns `tea.ExecProcess(Command(...),
+  done)`. It imports Bubble Tea, `os/exec` and the standard
+  library, and no `internal/` package.
+- The temp copy, its comparison and the upload belong to `internal/files`
+  (`EditCopy`: `Fetch`, `Changed`, `RemoteChanged`, `Upload`, `SaveAs`,
+  `Remove`), behind `app.Browser`. Active edit directories are kept in a
+  registry that `cmd/sshelf`'s crash handler empties (SEC-SFTP-005).
+- **What happens during the suspend** (checked in Bubble Tea v2.1.1
+  `exec.go` and `tea.go`). The program's event loop handles the exec message
+  itself and blocks in `cmd.Run()`; `ReleaseTerminal` stops the renderer and
+  the input reader and restores the terminal (alt screen off, mouse modes
+  off, bracketed paste off); `Program.Send` blocks until the loop runs
+  again, because its channel is unbuffered. So no `Update` or `View` runs
+  while the editor is open. Sessions do not depend on the loop: their output,
+  reply, writer and waiter goroutines keep reading the channel into the
+  emulator (ARCH-SESS-010, ARCH-SESS-014), and their `Updates()` hold one
+  coalesced notification; the listener command simply waits to deliver it.
+  Transfers keep running the same way (ADR-018). No sshelf goroutine calls
+  `Program.Send` except the connect prompter, and `e` is refused while a
+  connection attempt is in progress, so nothing can deadlock.
+- **On return**, Bubble Tea restores the terminal and delivers the callback
+  message; the root model returns `tea.RequestWindowSize` with the next step
+  of the edit, resizes every session if the terminal changed while the editor
+  ran, sets activity markers for tabs that received output, and redraws.
+
+**Consequences.** One child process besides `/usr/bin/security`, documented in
+SEC-MEM-008's M3 revision and ARCH-SESS-001's. While the editor runs the user
+sees only the editor; sshelf's tabs are not visible until it exits.
+
+### ADR-020: The SFTP tab lives in the root model; its view is `ui/sftpview` (extends ADR-014 and ADR-015)
+
+**Status:** proposed for M3 (D-017).
+
+**Decision.**
+
+- The root model's tab list holds session tabs and SFTP tabs in one opening
+  order with one numbering (FR-TAB-003 M3 revision). An SFTP tab entry holds
+  its number, host ID and label, the `app.Browser`, its `sftpview.Model`, and
+  its connection state.
+- `internal/ui/sftpview` is the SFTP tab's view: the two panes, the progress
+  line, the footer, the transfers view, the filter field and the drag state.
+  It is a plain model with `Update` and `View`; all I/O happens in commands
+  that call `app.Browser` (ARCH-UI-002). One pure function,
+  `sftpview.Layout(width, height)`, gives the regions (pane boxes, rows,
+  progress line, footer) used by both `View` and hit-testing (ARCH-UI-007).
+- **Side by side at every size** (FR-SFTP-023): each pane gets half the width
+  (the remote pane the odd column); the mtime column appears from 50 inner
+  columns. Below 80×24 the frame's general too-small rule applies (FR-NAV-007,
+  v1).
+- **Mouse.** The SFTP tab is an sshelf screen: mouse mode is cell motion
+  (ARCH-UI-006 M3 revision). Unlike the other sshelf screens it also uses
+  motion with the left button held and the release, for dragging
+  (ARCH-UI-007 M3 revision). Tab-bar clicks work on it as on the Hosts tab.
+- **Keys.** The routing order of §9.4 holds, with the SFTP tab in step 4:
+  the filter field takes text while it is focused, then the transfers view's
+  keys while it is shown, then the panes' keys (§9.6).
+
+**Consequences.** No new lifecycle owner; quitting closes SFTP tabs through
+the same path as sessions (`CloseSessions` becomes `CloseTabs`).
 
 ---
 
@@ -534,6 +819,9 @@ removed in revision 2.
 **ARCH-SESS-001**: The system shall open SSH sessions in process with `golang.org/x/crypto/ssh` and shall start no child process other than the `/usr/bin/security` calls made by `zalando/go-keyring` on macOS (D-008).
 - Priority: MVP · Status: Implemented
 - Acceptance: `archtest` finds no import of `os/exec` in any sshelf package. A connect test against the in-process server passes on a machine without OpenSSH installed.
+- **M3 revision** · Priority: M3 · Status: Draft · Source: D-019, ADR-019
+  - *Revised:* The system shall open SSH sessions and SFTP channels in process with `golang.org/x/crypto/ssh` and `github.com/pkg/sftp`, and shall start no child process other than the `/usr/bin/security` calls made by `zalando/go-keyring` on macOS (D-008) and the user's editor, started by `internal/ui/editor` for edit-locally (D-019).
+  - *Acceptance:* `archtest` finds `os/exec` imported by `internal/ui/editor` and by no other sshelf package (a fixture module with `os/exec` in another package fails). A connect test and an SFTP listing against the in-process server pass on a machine without OpenSSH installed.
 
 **ARCH-SESS-002**: When the user connects to a host, the system shall finish dialling, host-key verification and authentication before it opens the session's tab.
 - Priority: M2 · Status: Implemented · Source: D-009, D-010 (the MVP finished them before releasing the terminal)
@@ -562,6 +850,9 @@ removed in revision 2.
 **ARCH-SESS-008**: When a session ends, the system shall report the cause to the UI exactly once, as `nil` (exit 0), `*ExitError`, `*DisconnectError` or `ErrInternal`, after its connection is closed.
 - Priority: M2 · Status: Implemented · Source: FR-CONN-005 revision, FR-CONN-010 (replaces the v1 "Disconnected" modal: the ended tab shows the cause and offers `r`)
 - Acceptance: Table test over sshtest's `exit 0`, `exit 3`, signal, dropped connection and a forced panic: `Err()` returns the right type, `Updates()` is closed exactly once after `Done()`, and sshtest has seen the connection close. Pressing `r` on the ended tab produces a `ConnectRequestMsg` with the same host ID and the tab's number.
+- **M3 revision** · Priority: M3 · Status: Draft · Source: D-018, ADR-017
+  - *Revised:* When a session ends, the system shall report the cause to the UI exactly once, as `nil` (exit 0), `*ExitError`, `*DisconnectError` or `ErrInternal`, after its channel is closed and its connection lease is released.
+  - *Acceptance:* The M2 table test, with "sshtest has seen the connection close" replaced by: sshtest has seen the session channel close, and the connection close too when the session held the only lease. With a second lease held by an SFTP browser, `exit 0` ends the session with `nil` and sshtest records no connection close; a dropped connection ends it with `*DisconnectError`. Pressing `r` on the ended tab produces a `ConnectRequestMsg` with the same host ID and the tab's number.
 
 **ARCH-SESS-009**: Where agent forwarding is enabled for a host, the system shall forward the local ssh-agent (`SSH_AUTH_SOCK`) to the server, and shall never forward an agent by default.
 - Priority: v1
@@ -622,6 +913,10 @@ removed in revision 2.
 - Priority: MVP · Status: Implemented
 - Acceptance: Cancelling during dial and during auth returns to the host list within 200 ms. `goleak` passes.
 
+**ARCH-CONN-006**: The system shall share an authenticated connection between the tabs that use it through `sshclient.Conn` leases, and shall close the `*ssh.Client` exactly once, when the last lease is released or the connection fails.
+- Priority: M3 · Status: Draft · Source: D-018, ADR-017
+- Acceptance: Unit tests over sshtest: two leases, release in either order, the client closes after the second only (sshtest counts one connection close); `Release` twice on one lease is a no-op; `Lease()` after the last release or after a drop returns `ErrConnClosed`; `Done()` closes once on a drop and after the last release, and `Err()` tells them apart. A session and a browser on one `Conn`: closing either leaves the other working. `goleak` passes, including the `Conn` waiter goroutine.
+
 ### 4.3 Secrets and safety (`ARCH-SEC`)
 
 **ARCH-SEC-001**: The system shall not write any secret to the config file, known_hosts, logs, crash reports, environment variables or temporary files.
@@ -672,6 +967,9 @@ removed in revision 2.
 - Priority: M2 · Status: Implemented · Source: D-009, D-010, ADR-015
 - Acceptance: An M2 walk-through (start, list, connect with a stub session, tab opens, `Ctrl+]` `h`, connect a second host, `Ctrl+]` `1`, remote `exit 3`, ended tab, `x`, list with the host selected) matches its golden files. The MVP walk-through (start, list, edit, save, connect, TOFU, stub session, back) still passes with the header line in place of the title. Both drive the root model directly, the way `tea.Program` does, without `teatest` (see the golden convention in `tasks.md`).
 - Note: a modal that answers a running connection attempt (auth prompt, TOFU) is popped in the `Update` that delivers the answer, not when its `DoneMsg` arrives, so a late `DoneMsg` can never close the next prompt.
+- **M3 revision** · Priority: M3 · Status: Draft · Source: D-017, ADR-020
+  - *Revised:* The system shall run one root Bubble Tea model that holds the Hosts tab (one active screen and a stack of modal overlays, as in the MVP), the session tabs and the SFTP tabs, routes every message to the focused tab, the modal stack, the sessions or the SFTP browsers as defined in §9, and draws the frame around them.
+  - *Acceptance:* The M2 walk-through still passes. An M3 walk-through (host list, `s` on a host, TOFU, SFTP tab opens, `tab`, `enter` into a directory, `c`, progress line, `t`, Esc, `Ctrl+]` `h`, `enter` on another host, `Ctrl+]` `s`, the existing SFTP tab is not reused because the connection differs, `Ctrl+]` `q` on the SFTP tab, confirm) matches its golden files, driven through the root model with a fake `app.Browser`.
 
 **ARCH-UI-002**: The system shall perform all I/O (config, keychain, SSH, filesystem) in `tea.Cmd` values or goroutines that report back with messages, never inside `Update`.
 - Priority: MVP · Status: Implemented
@@ -688,14 +986,23 @@ removed in revision 2.
 **ARCH-UI-005**: The system shall draw every frame as one header row with the tab bar, then either the Hosts tab's MVP layout (blank row, screen and modals, status line, footer) or a session tab's area of `height − 2` rows, then the session's status bar, with no line wider than the terminal.
 - Priority: M2 · Status: Implemented · Source: D-009, FR-TAB-003, FR-TAB-007, NFR-UX-002
 - Acceptance: Goldens at 80×24 and 120×40 of: the host list with no sessions, the host list with 3 tabs, a live session (replayed `htop`), a session with a modal open, an ended session, scrollback mode, the prefix help overlay, and 10 tabs with overflow markers. The NFR-UX-002 helper checks widths; for session tabs it checks that the last line is the status bar. The cursor reported in `tea.View.Cursor` is the remote cursor shifted down one row, or nil when the remote hides it or a modal is open.
+- **M3 revision** · Priority: M3 · Status: Draft · Source: D-017, FR-SFTP-023
+  - *Revised:* The system shall draw every frame as one header row with the tab bar, then either the Hosts tab's MVP layout (blank row, screen and modals, status line, footer), a session tab's area of `height − 2` rows and its status bar, or an SFTP tab's two panes side by side, its progress line and its footer, with no line wider than the terminal.
+  - *Acceptance:* The M2 goldens, plus at 80×24 and 120×40: the approved SFTP layout, the SFTP tab with a modal (rename, delete confirmation, conflict), the transfers view, the drag hint and a disconnected SFTP tab. The NFR-UX-002 helper checks widths and that the last line is the footer. `tea.View.Cursor` is nil on an SFTP tab except while the filter or a text modal is focused.
 
 **ARCH-UI-006**: The system shall compute `tea.View.MouseMode` in one function of (focused tab, modal open, scrollback mode, session ended, the focused session's requested mouse mode), following ADR-014.
 - Priority: M2 · Status: Implemented · Source: D-011, D-012, NFR-UX-001 revision
 - Acceptance: A table test covers every combination. A root-model test switches between the Hosts tab, a plain shell tab and a tab whose remote sent `?1003h`, and checks the mode of each next `View()`.
+- **M3 revision** · Priority: M3 · Status: Draft · Source: D-011, ADR-020
+  - *Revised:* The system shall compute `tea.View.MouseMode` in one function of (focused tab kind, modal open, scrollback mode, session ended, the focused session's requested mouse mode), with cell motion on the Hosts tab and on SFTP tabs, following ADR-014.
+  - *Acceptance:* The table test gains the SFTP rows (live, disconnected, transfers view, modal open: all cell motion). A root-model test switches from a plain shell tab to an SFTP tab and back and checks the mode of each next `View()`.
 
 **ARCH-UI-007**: The system shall route each mouse press and wheel event to the single component under it, in that component's own coordinates computed from the same layout function as its `View`, and shall recognise a double-click as two left presses on the same row within 400 ms.
 - Priority: M2 · Status: Implemented · Source: D-011, ADR-014, FR-NAV-012, FR-NAV-014 … FR-NAV-017
 - Acceptance: Unit tests for each layout function compare the region reported for a target with the position of its text in `View()` (for example the column of `[ Save ]`). Double-click tests with an injected clock: 399 ms on the same row is a double-click, 401 ms is not, a different row is not, and a third press after a double-click starts over. Mouse releases and motion on sshelf screens are ignored.
+- **M3 revision** · Priority: M3 · Status: Draft · Source: D-017, FR-SFTP-021, FR-SFTP-022
+  - *Revised:* The system shall route each mouse press and wheel event to the single component under it, in that component's own coordinates computed from the same layout function as its `View`, shall recognise a double-click as two left presses on the same row within 400 ms, and, on an SFTP tab only, shall route motion with the left button held and the release to the SFTP view for dragging.
+  - *Acceptance:* The M2 tests, plus: `sftpview.Layout` regions match the text positions in `View()` at 80×24, 120×40 and an odd width; a press on a local row, motion over the remote pane and a release there queue one copy; motion and release on every other sshelf screen are still ignored (table test).
 
 
 ### 4.6 Testing (`ARCH-TEST`)
@@ -711,6 +1018,40 @@ removed in revision 2.
 **ARCH-TEST-003**: The system's test SSH server shall support the M2 scripted commands `flood <size>`, `stream <rate>`, `replay <fixture>`, `modes <DECSET list>`, `query`, `hostile` and `echo-hex`, and shall record channel closes and every byte it receives.
 - Priority: M2 · Status: Implemented · Source: NFR-PERF-005, NFR-PERF-006, FR-TAB-011, SEC-SESSION-005
 - Acceptance: One test per command. `flood 10M` sends exactly 10 MiB; `stream 100K` paces output at 100 KB/s ± 10 %; `modes 1000,1006` enables those modes; `query` sends `ESC[c`, `ESC[6n` and an OSC 11 colour query and records the replies; `hostile` sends the corpus of ARCH-SESS-011; `echo-hex` echoes each received byte as hex so tests can assert the exact encoding of keys, pastes and mouse events.
+
+**ARCH-TEST-004**: The system's test SSH server shall serve the `sftp` subsystem from a temp directory through `sftp.NewRequestServer` with handlers confined by `os.Root`, and shall offer a hostile mode and fault injection for SFTP.
+- Priority: M3 · Status: Draft · Source: ADR-016, FR-SFTP-017, SEC-SFTP-001, SEC-SFTP-004
+- Acceptance: One test per option. `WithSFTP(dir)` serves `dir` with a home of `/home/pi` mapped inside it, records each `subsystem` request and counts bytes read and written per file; a client cannot `Lstat` or open anything outside `dir`, through `..` or a symlink. `WithSFTPHostile(...)` lists the SEC-SFTP-001 names, a 150,000-entry directory, a 70-level chain, a file that returns data past its size, and status messages with escapes. `WithSFTPFault(after N bytes: drop the connection | fail the request)` fires once per configured file. `WithoutSFTP()` refuses the subsystem, and `WithMaxSessions(n)` refuses channels past `n`. `WithSFTPZeroFile(name, size)` serves a virtual file of zeros for memory tests. `sshtestd` gains `-sftp DIR`.
+
+### 4.7 SFTP and transfers (`ARCH-SFTP`)
+
+**ARCH-SFTP-001**: The system shall use `github.com/pkg/sftp` v1.13.12 only in `internal/files/remote.go` (and in the test server), and shall open for each SFTP tab one browse channel through `NewClientPipe` behind a byte-counting reader and one transfer channel, both on the tab's connection lease.
+- Priority: M3 · Status: Draft · Source: ADR-016, ADR-018
+- Acceptance: archtest: no other sshelf package imports `github.com/pkg/sftp`. sshtest records two `subsystem sftp` requests per SFTP tab. With `WithMaxSessions` allowing only one more channel, the tab still opens and transfers and listings work over one channel. Closing the browser closes both channels (sshtest records their closes) and releases the lease once.
+
+**ARCH-SFTP-002**: The system shall list, stat and change remote and local directories only in commands off the UI goroutine, applying the name check of SEC-SFTP-001 and the limits of SEC-SFTP-004 inside `internal/files`, so that the UI receives only safe, capped listings.
+- Priority: M3 · Status: Draft · Source: ARCH-UI-002, SEC-SFTP-001, SEC-SFTP-004
+- Acceptance: In UI tests the fake `app.Browser` panics when called from `Update` (the ARCH-UI-002 goroutine marker). `files` unit tests: a listing returns `Entries`, `Skipped` (unsafe names) and `Truncated`; the 64 MiB browse-channel budget cancels a listing (sshtest serving long names); the result never holds an unsafe name.
+
+**ARCH-SFTP-003**: The system shall run each SFTP tab's transfers in its own goroutines, at most 2 at a time, report state changes through a capacity-1 channel written without blocking, and let the UI read progress through a snapshot, so that no transfer ever blocks the UI goroutine or waits for it.
+- Priority: M3 · Status: Draft · Source: ADR-018, NFR-PERF-008
+- Acceptance: With 10 queued files, never more than 2 are `running` (sshtest counts concurrent open write handles). 10,000 state changes leave at most one pending notification. A stalled sshtest (not answering) blocks no call made from `Update` for more than 1 ms. Workers start through `term.SafeGo`; a panic forced in one (`sshelf_faultinject`) fails that job with `internal error` and leaves the tab and other sessions running. No worker calls `Program.Send`. `goleak` passes after the tab closes.
+
+**ARCH-SFTP-004**: The system shall stream every transfer through fixed-size buffers, writing downloads to a local `<name>.sshelf-part` through `File.WriteTo` with a cancelling, size-limiting writer and uploads to a remote part file through 1 MiB `WriteAt` calls, and shall cancel a transfer within 1 s.
+- Priority: M3 · Status: Draft · Source: ADR-016 limitation 3, ADR-018, NFR-SIZE-004
+- Acceptance: A 64 MiB transfer in each direction is cancelled at about 50 %: the job is `cancelled` within 1 s and its part file is gone. The download writer stops at the size from `Fstat` (SEC-SFTP-004 AC3). The heap check of NFR-SIZE-004 passes.
+
+**ARCH-SFTP-005**: The system shall record, for each transfer, the source's size and modification time when it starts and, for uploads, a checkpoint {acknowledged offset, part size, part mtime} every 8 MiB and on every clean pause or cancel, and shall resume only under the conditions of FR-SFTP-017.
+- Priority: M3 · Status: Draft · Source: ADR-018, FR-SFTP-017
+- Acceptance: Table test over the resume decision: each condition of FR-SFTP-017 false in turn gives "restart" with its reason, all true gives "resume at N". Fault-injection tests (ARCH-TEST-004) drop the connection after 20 MiB of a 64 MiB upload and of a download; after reconnecting, the upload truncates the remote part to its last checkpoint, both finish with the right SHA-256, and sshtest's byte counts show less than 48 MiB sent the second time.
+
+**ARCH-SFTP-006**: The system shall start the editor only through `tea.ExecProcess` in `internal/ui/editor`, shall keep sessions and transfers running while the editor holds the terminal, and when the editor exits, shall request the window size, resize every session if it changed, and redraw.
+- Priority: M3 · Status: Draft · Source: D-019, ADR-019
+- Acceptance: Unit tests of `editor.Words` (`VISUAL` before `EDITOR` before `vi`; spaces split; empty values skipped) and `editor.Command` (args are the words plus the path; `Env` nil). PTY E2E with a fake `$EDITOR` script that sleeps 1 s while sshtest streams 100 KB/s into a session in another tab and a 64 MiB download runs: after the editor exits, the session's emulator holds all streamed output, the download finished or kept progressing, and the terminal size change made during the edit (PTY resize) reached the session as one `window-change`. `e` while a Connecting modal is open does nothing.
+
+**ARCH-SFTP-007**: The system shall keep SFTP tabs in the root model's tab list with session tabs, draw and hit-test them from `sftpview.Layout`, and close every SFTP browser when sshelf exits.
+- Priority: M3 · Status: Draft · Source: ADR-020, ARCH-SESS-010
+- Acceptance: Root-model tests with a fake browser: numbering shared with session tabs, `ConnID` matching for `Ctrl+]` `s`, focus moves left on close. Quitting with two SFTP tabs and a session closes every channel and connection (sshtest), removes every local part file of running downloads, and `goleak` passes.
 
 ---
 
@@ -737,12 +1078,20 @@ internal/
                             Exposes the UI-facing Service interface.
   sshclient/                Dial, jump chain (v1), host-key callback (knownhosts), auth methods,
                             keyboard-interactive bridge, keepalive, agent (v1), forwarding (v1).
+                            M3: Conn and Lease, the reference-counted shared connection (ADR-017).
   session/                  Session (a channel with a PTY, ADR-012, ADR-013): owns an x/vt emulator behind
                             sshelf's own mutex (emulator.go, with the wide-character, scrollback and mouse
                             workarounds); output, reply, writer and resize goroutines; the key-encoding shim
                             (keys.go); snapshots and scrollback for rendering; end reasons (ExitError,
                             DisconnectError, ErrInternal; SEC-SESSION-006). Imports x/vt and ultraviolet,
                             never Bubble Tea or golang.org/x/term. Only emulator.go imports x/vt.
+  files/                    M3 (ADR-016, ADR-018): the SFTP tab's back end. remote.go (the only file that
+                            imports github.com/pkg/sftp: browse and transfer channels, listings with the
+                            name check and limits), local.go (local listings and os.Root-confined writes),
+                            names.go (SEC-SFTP-001), queue.go and transfer.go (the queue, part files,
+                            checkpoints, resume, pause), edit.go (EditCopy: temp dir, change and conflict
+                            checks, the crash-cleanup registry). Imports sshclient, domain and term; never
+                            Bubble Tea, ui, app, secrets, store or os/exec.
   sshconfig/                Parse ~/.ssh/config (Include, tokens) into an import plan. Own parser,
                             stdlib only (ADR-010).
   search/                   Fuzzy matching and ranking (sahilm/fuzzy).
@@ -754,12 +1103,18 @@ internal/
     keys/  theme/  components/        components holds TextInput, Form (with its M2 buttons), the secret
                                       field (ADR-011), ClickMsg/WheelMsg and the double-click tracker (M2).
                                       keys holds the M2 prefix keymap and its state machine.
+    sftpview/               M3: the SFTP tab's panes, progress line, footer, transfers view, filter and drag
+                            state, and Layout, shared by View and hit-testing (ADR-020).
+    editor/                 M3: the only package that imports os/exec: $VISUAL/$EDITOR/vi words, the
+                            command, tea.ExecProcess (ADR-019).
     tabs/                   M2: header and tab bar layout (`Layout`, shared by View and `TabAt`
                             hit-testing), the live and ended status bars, and `Area`, which fits
                             session lines to the session area.
     screens/welcome|hostlist|hostedit|identities|identityedit|loaderror|groups(v1)|settings|import/
-    modals/connecting|tofu|prompt|keychanged|confirm|help/
-  testutil/sshtest/         In-process SSH server for tests.
+    modals/connecting|tofu|prompt|keychanged|confirm|help/   M3 adds input (rename, mkdir), conflict and
+                            editconflict.
+  testutil/sshtest/         In-process SSH server for tests. M3: the sftp subsystem over os.Root, hostile
+                            mode and fault injection (ARCH-TEST-004).
   archtest/                 Import rule test (ADR-009).
 ```
 
@@ -785,6 +1140,7 @@ flowchart TD
     main --> secrets
     main --> paths
     main --> term
+    main --> files
     ui --> app
     ui --> domain
     ui --> search
@@ -797,6 +1153,10 @@ flowchart TD
     app --> domain
     app --> paths
     app --> term
+    app --> files
+    files --> sshclient
+    files --> domain
+    files --> term
     store --> domain
     secrets --> term
     sshclient --> domain
@@ -814,11 +1174,13 @@ flowchart TD
 | `secrets` | `domain`, `term` | `ui`, `app`, `sshclient`, `session` |
 | `sshclient` | `domain` | `secrets`, `store`, `ui`, `app`, Bubble Tea |
 | `session` | `sshclient`, `term`, `domain` (`Sanitize` for end reasons, SEC-SESSION-006) | `secrets`, `store`, `ui`, `app`, Bubble Tea, `golang.org/x/term`. It imports `github.com/charmbracelet/x/vt` (in `emulator.go` only) and `github.com/charmbracelet/ultraviolet` (key and mouse event types), and has no raw-mode code (ARCH-SESS-003). |
-| `ui/...` | `app` (interfaces), `domain`, `search`, `session` (the handle type only), `ui/*` | `secrets`, `store`, `sshclient`, `x/crypto/ssh` |
+| `files` (M3) | `sshclient`, `domain`, `term` | `secrets`, `store`, `ui`, `app`, `session`, Bubble Tea, `os/exec`. Only `remote.go` imports `github.com/pkg/sftp`. |
+| `ui/...` | `app` (interfaces), `domain`, `search`, `session` (the handle type only), `ui/*` | `secrets`, `store`, `sshclient`, `files`, `x/crypto/ssh`, `github.com/pkg/sftp` |
+| `ui/editor` (M3) | none (stdlib, Bubble Tea) | every `internal/` package |
 | `app` | everything except `ui` | `ui` |
 | `sshconfig`, `search` | `domain` | (no extra rule; not checked by `archtest`) |
 | `paths`, `term` | none | (no extra rule; not checked by `archtest`) |
-| any sshelf package | | `os/exec` (D-008's `/usr/bin/security` call happens inside `zalando/go-keyring`), any clipboard package (SEC-CLIP-005) |
+| any sshelf package | | `os/exec` (D-008's `/usr/bin/security` call happens inside `zalando/go-keyring`), except `internal/ui/editor` (M3, ADR-019); any clipboard package (SEC-CLIP-005); `github.com/pkg/sftp` outside `internal/files` and `internal/testutil` |
 
 Implemented with `secrets` allowed to import `term`, because the OS store
 runs each keyring call in a goroutine bounded by a timeout, and every goroutine
@@ -827,7 +1189,10 @@ other `internal/` package, so the edge cannot create a cycle. `main` wires
 `store` through `app`, so it no longer imports `store` directly. `ui` may
 import `session` but currently does not: it receives the session handle as
 an `app` type. The rows above match the `rules` table in
-`internal/archtest/archtest_test.go`.
+`internal/archtest/archtest_test.go`. M3 adds the `files` and `ui/editor`
+rows, the `os/exec` exception for `ui/editor` and the `pkg/sftp` rule
+(T-046, T-055); `cmd/sshelf` imports `files` only for the crash handler's
+edit-copy cleanup (SEC-SFTP-005).
 
 ---
 
@@ -1279,6 +1644,135 @@ ended tab, M2, FR-CONN-010), because an interactive shell cannot be resumed
 after a disconnect. sshelf does not auto-reconnect (D-007). Mosh (Later) is
 the answer to roaming.
 
+### 8.8 Shared connections (M3)
+
+ADR-017 in sequence form:
+
+```
+host list `enter`:  app.Connect → sshclient.Connect → NewConn(client) → (conn, lease1) → session.New(lease1)
+host list `s`:      app.OpenSFTP → sshclient.Connect → NewConn(client) → (conn, lease1) → files.Open(lease1)
+ctrl+] s:           app.OpenSFTPOn(session) → session.Conn().Lease() → lease2 → files.Open(lease2)
+shell exits:        session releases lease1 → conn stays (lease2 held) → SFTP tab keeps working
+SFTP tab closed:    browser closes its channels, releases lease2 → last lease → client.Close()
+connection drops:   conn.Done() closes → session ends (*DisconnectError), browser pauses its transfers
+```
+
+The UI never sees `sshclient`: `app.Session.ConnID()` and
+`app.Browser.ConnID()` let the root model find the SFTP tab of a session's
+connection.
+
+### 8.9 SFTP browsing and transfers (M3)
+
+`app.Browser` is the UI-facing handle of one SFTP tab, implemented by
+`*files.Browser`; UI tests use `apptest.FakeBrowser`. Every method may block
+on I/O and is called from commands only (ARCH-UI-002).
+
+```go
+type Side int // Local, Remote
+
+type Entry struct {
+	Name    string      // checked by SEC-SFTP-001; the exact bytes used for operations
+	Display string      // sanitised for the screen; invalid UTF-8 as U+FFFD
+	Kind    Kind        // Dir, File, Symlink, Other
+	Size    int64
+	Mode    fs.FileMode // permission bits
+	ModTime time.Time
+}
+
+type Listing struct {
+	Side      Side
+	Dir       string  // as used for operations
+	Title     string  // sanitised, ~ for the local home
+	Entries   []Entry // unsorted; the view sorts
+	Skipped   int     // unsafe names left out (FR-SFTP-024)
+	Truncated bool    // stopped at 100,000 entries or 64 MiB (SEC-SFTP-004)
+}
+
+type Browser interface {
+	ConnID() uint64
+	Start(side Side) string                                   // FR-SFTP-005
+	List(ctx context.Context, side Side, dir string) (Listing, error)
+	Count(ctx context.Context, side Side, dir string) (int, error) // stops at 10,001 for the view, 100,001 for delete
+	Stat(ctx context.Context, side Side, path string) (Entry, error) // follows a link (enter, e)
+	Rename(ctx context.Context, side Side, dir, from, to string) error
+	Mkdir(ctx context.Context, side Side, dir, name string) error
+	Delete(ctx context.Context, side Side, dir string, names []string) (deleted int, err error)
+
+	Copy(from Side, srcDir string, names []string, dstDir string) BatchID // queues; returns at once
+	Transfers() []Transfer                 // snapshot: id, batch, direction, name, state, done, total, rate, ETA, reason, question
+	Answer(id TransferID, a Answer, all bool)
+	Cancel(id TransferID)
+	Retry(id TransferID)
+	Updates() <-chan struct{}               // state changes, coalesced (ARCH-SFTP-003)
+
+	EditFetch(ctx context.Context, dir, name string) (*EditCopy, error)
+	EditFinish(ctx context.Context, c *EditCopy) (EditResult, error) // Unchanged, Uploaded, RemoteChanged, RemoteGone
+	EditResolve(ctx context.Context, c *EditCopy, choice EditChoice, localDir string) error // and removes the copy
+
+	State() ConnState // Connected, Disconnected
+	Done() <-chan struct{} // the connection dropped
+	Close() error          // cancels every transfer, closes both channels, releases the lease
+}
+```
+
+`app.Service` gains `OpenSFTP(ctx, hostID) (Browser, error)`,
+`OpenSFTPOn(s Session) (Browser, error)` and `ReconnectSFTP(ctx, b
+Browser) error`; all three report `ErrNoSFTP` when the server refuses the
+subsystem. Connect progress and prompts reuse the M2 messages.
+
+**Listing.** `List` on the remote side runs `ReadDirContext` on the browse
+channel with a 30 s timeout; the counting reader cancels it past 64 MiB of
+replies; the result is cut at 100,000 entries, unsafe names are counted and
+dropped, and each entry gets its `Display`. Local listings use
+`os.ReadDir` and `Lstat` and apply the same cap. Item counts for visible
+directories (FR-SFTP-006) are `Count` calls the view issues one at a time per
+pane and cancels on a directory change.
+
+**Transfers** follow ADR-018. The job states and transitions:
+
+```
+queued → running → done
+running → waiting (target exists) → queued (answered) | skipped (skip / esc)
+running → failed (error) → queued (r retry)
+queued | running | waiting → cancelled (x) → queued (r retry)
+queued | running → paused (Conn.Done) → queued (Attach after r reconnect)
+directory job running → its children inserted after it → done when listed
+```
+
+**Local writes** (SEC-SFTP-002) all go through `os.Root` opened on the target
+directory: `OpenFile` with `O_CREATE|O_EXCL|O_WRONLY` (`O_NOFOLLOW` to reopen
+a part), `Mkdir`, `Rename`, `Remove`, `Chmod` and `Chtimes` on paths that are
+single checked names. `os.Root` refuses `..` and symlinks that leave the
+root; `O_EXCL` and `O_NOFOLLOW` refuse a symlink in the last element; a
+final-name symlink is replaced by `Rename`, never written through. A
+recursive download opens a new `os.Root` for each directory it creates,
+from its parent root, so a directory swapped for a link fails the open.
+
+**Sizes and times** are whole seconds (SFTP v3). Downloads set the local
+mtime with `Chtimes`; uploads set the remote one with `Client.Chtimes` before
+the rename.
+
+### 8.10 Edit locally (M3)
+
+```
+e on a remote file  → Cmd: Browser.EditFetch     → MkdirTemp("", "sshelf-edit-") 0700, file 0600 with the
+                                                    checked name, download via the transfer channel (outside
+                                                    the queue), record remote size and mtime, SHA-256 of the copy
+EditFetchedMsg      → editor.Run(copy.Path, done) → tea.ExecProcess: UI suspended (ADR-019)
+editorDoneMsg{err}  → tea.RequestWindowSize + Cmd: exit status ≠ 0 → EditResolve(Discard)
+                                                    else Browser.EditFinish
+EditResult          → Unchanged: remove, "no changes"
+                      Uploaded: part + rename, keep the remote mode, remove, "saved"
+                      RemoteChanged / RemoteGone: editconflict modal → EditResolve(Overwrite | KeepRemote | SaveAs)
+upload error        → modal: r retry · l save to <local dir>/<name>.local-edit · x discard → EditResolve
+```
+
+`EditCopy.Remove` deletes the file and the directory and drops them from the
+crash-cleanup registry; every path above ends in it (SEC-SFTP-005). A
+symlink is resolved with the server's `realpath` first, so the upload
+replaces the link's target, not the link. Files over 64 MiB are refused
+before any download.
+
 ---
 
 ## 9. UI state machine
@@ -1371,6 +1865,11 @@ defined in `ui/keys`. FR-NAV-003 is authoritative for the host list.
 | Ended session tab (M2) | `r` reconnect · `x` close tab |
 | Scrollback mode (M2) | `↑`/`↓` line · `pgup`/`pgdown` page · `g`/`G` top/bottom · `esc` back |
 | Forms (M2 addition) | `tab` also reaches `[ Save ]` and `[ Cancel ]`; `enter`/`space` press the focused button |
+| Host list (M3 addition) | `s` open an SFTP tab for the selected host (FR-SFTP-002) |
+| Any tab (M3 addition) | `ctrl+]` `s` SFTP tab on this session's connection (FR-SFTP-003); on an SFTP tab `ctrl+]` `q` closes it |
+| SFTP tab (M3) | `↑`/`↓` or `k`/`j` · `pgup`/`pgdown` · `g`/`G` · `tab` switch pane · `enter` open · `backspace`/`h` parent · `~` home · `space` mark · `c` copy · `r` rename · `d` delete · `m` mkdir · `e` edit locally · `t` transfers · `R` refresh · `.` hidden files · `/` filter · `?` help. Disconnected: `r` reconnect · `x` close (§9.6) |
+| Transfers view (M3) | `↑`/`↓` · `x` cancel · `r` retry · `enter` answer a waiting question · `C` clear finished · `t`/`esc` back |
+| Conflict modal (M3) | `o` overwrite · `s` skip · `n` keep both · `a` apply to all · `esc` skip |
 
 ---
 
@@ -1494,7 +1993,7 @@ from):
 
 | State | Mode |
 |---|---|
-| Hosts tab, or any modal open | cell motion |
+| Hosts tab, an SFTP tab (M3), or any modal open | cell motion |
 | Session tab in scrollback mode, or ended | none |
 | Live session tab, remote asked for nothing | none (the terminal's own selection works, D-012) |
 | Remote asked for `?9`, `?1000` or `?1002` | cell motion (Bubble Tea has no press-only mode; the session drops motion the remote did not ask for) |
@@ -1524,6 +2023,91 @@ coordinates; releases and motion are ignored on sshelf's screens.
 | Session area, remote requested mouse | forwarded (row − 1) | forwarded as two presses | forwarded | forwarded as the remote's mode allows |
 | Session area, no request; scrollback mode; ended tab | tracking off: the terminal selects text | – | – | – |
 | Header or status bar while a session is focused | ignored | ignored | ignored | ignored |
+| SFTP tab rows (M3) | focus the pane, move the cursor | `enter` on a directory | scroll the pane under the pointer 3 rows | left-button motion and release: drag to copy (§9.6) |
+| SFTP tab: tab bar, progress line, footer (M3) | tab bar: focus the tab; progress line: transfers view; footer: nothing | same as press | ignored | release ends a drag without copying |
+
+### 9.6 SFTP tab (M3)
+
+```mermaid
+stateDiagram-v2
+    [*] --> Connecting : s on a host (normal connect flow, modals over the Hosts tab)
+    [*] --> Panes : ctrl+] s on a live session (no connect)
+    Connecting --> Panes : ConnectedSFTPMsg (new tab, focused)
+    Panes --> Filter : /
+    Filter --> Panes : enter (keep) / esc (clear)
+    Panes --> Transfers : t / click on the progress line
+    Transfers --> Panes : t / esc
+    Panes --> Modal : r rename / m mkdir / d delete / conflict / edit conflict
+    Modal --> Panes : answer / esc
+    Panes --> Editor : e (after EditFetchedMsg; UI suspended)
+    Editor --> Panes : editor exits (upload, ask, or nothing)
+    Panes --> Disconnected : Browser.Done (transfers paused, ✕)
+    Disconnected --> Reconnecting : r
+    Reconnecting --> Panes : ConnectedSFTPMsg (same tab; resume paused)
+    Reconnecting --> Disconnected : failure / esc
+    Panes --> ConfirmClose : ctrl+] q
+    Disconnected --> ConfirmClose : x (when transfers are paused)
+    ConfirmClose --> Panes : n / enter / esc
+    ConfirmClose --> [*] : y (cancel transfers, close, release)
+```
+
+**Model** (added to §9.4's root model):
+
+```go
+type sftpTab struct {
+	num      int
+	hostID   domain.ID
+	label    string
+	browser  app.Browser
+	view     sftpview.Model // panes, cursor and marks per pane, filter, transfers view, drag
+	disconnected bool
+	failure  string         // a failed reconnect
+	seenDone int            // finished transfers when last focused; activity = more since
+}
+```
+
+The root model's `tabs` holds `*sessionTab` and `*sftpTab` entries in one
+slice with one numbering (ADR-020).
+
+**Messages.**
+
+| Message | From | Effect |
+|---|---|---|
+| `ConnectedSFTPMsg{browser}` | `OpenSFTP` / `ReconnectSFTP` cmd | open and focus an SFTP tab, or reattach the disconnected one; list both start directories |
+| `ListedMsg{tab, side, listing, err}` | `List` cmd | replace that pane's listing; keep the cursor on the same name; show `Skipped` / `Truncated` warnings |
+| `CountedMsg{tab, side, dir, name, n}` | `Count` cmd | fill an item count if that directory is still shown |
+| `TransfersMsg{tab}` | listener on `Updates()` | re-arm; refresh the transfers snapshot; refresh a pane whose directory received a finished file; activity if unfocused |
+| `progressTickMsg` | `tea.Tick(250ms)` while any transfer runs in the focused tab | redraw the progress line and transfers view |
+| `SFTPDoneMsg{tab}` | listener on `Browser.Done()` | disconnected state, `✕` |
+| `EditFetchedMsg`, `editorDoneMsg`, `EditResultMsg` | edit commands (§8.10) | next step of edit-locally |
+| `tea.MouseMotionMsg`, `tea.MouseReleaseMsg` | Bubble Tea | drag, on an SFTP tab only (ARCH-UI-007 M3 revision) |
+
+**Layout** (`sftpview.Layout(width, height)`). Row 0 is the header. Rows 1 to
+`height − 3` hold the two pane boxes side by side: the left box is
+`width / 2` columns, the right box the rest. Each box's top border carries
+`Local: <path>` or `Remote: <path>` (cut from the left with `…`) and
+`(hidden off)` when hidden files are hidden; the bottom border carries the
+filter (`/ text`) and the mark count. Inside, each row is: cursor column
+(`>` on the focused pane's cursor row), mark column (`*` marked, `▸`
+directory, space), the name (cut with `…`), the size or item count
+right-aligned in 9 columns, and from 50 inner columns the mtime in 12. Row
+`height − 2` is the progress line (FR-SFTP-014); row `height − 1` is the
+footer, generated from `ui/keys`, dropping hints from the right to fit. The
+transfers view replaces the two boxes with one full-width box. At 80×24 each
+box shows 18 entry rows.
+
+**Key routing on an SFTP tab** (step 4 of §9.4's order): the filter field
+while it is focused (text, `enter`, `esc`); otherwise the transfers view's
+keys while it is shown; otherwise the panes' keys of §9.3. A disconnected
+tab accepts `r`, `x`, `t`, the local pane's movement keys and the prefix.
+
+**Drag** (FR-SFTP-022). A left press on a row records `{pane, row, entry}`;
+the first motion event with the button held that leaves that row starts a
+drag: the view shows the hint on the progress line and highlights the pane
+under the pointer. A release over the other pane's box queues the copy
+exactly as `c` with the dragged set (the marks if the pressed entry is
+marked, otherwise that entry); any other release cancels. A press and
+release on the same row without leaving it is a click.
 
 ## 10. Testing strategy
 
@@ -1537,6 +2121,9 @@ coordinates; releases and motion are ignored on sshelf's screens.
 | Emulator replay (M2) | `internal/session/testdata/replay`, ARCH-TEST-002 | recorded `vim`, `htop`, `less`, `tmux` and wide-character output replayed in several chunk sizes and compared with screen goldens |
 | Tabs, prefix and mouse (M2) | root model driven directly, a fake `app.Session` that records what it is sent and serves canned snapshots, an injected clock for double-clicks and durations | the prefix state machine, tab switching, activity and end markers, key and paste encoding, every mouse interaction with synthetic `tea.MouseClickMsg`/`tea.MouseWheelMsg`, the mouse-mode policy, goldens of the frame at 80×24 and 120×40 |
 | Multi-session E2E (M2) | `creack/pty` with the real binary and sshtest | 3 to 10 sessions: background output, switching, resize to all, ended tab, reconnect, quit confirmation, mouse-tracking output scan (NFR-UX-001), the hostile-output scan (SEC-SESSION-005), the M2 canary flows (SEC-LOG-001), NFR-PERF-006 |
+| SFTP back end (M3) | `internal/files` against sshtest's SFTP subsystem (ARCH-TEST-004) and temp dirs | listings, the name check (fuzz), limits, the queue, part files, checkpoints and the resume decision table, pause and attach, cancel, conflicts, `EditCopy`, the shared `Conn`; a hostile-server suite (unsafe names, symlink tricks in the local target, huge and deep listings, oversize files, escape sequences in status messages) |
+| SFTP tab UI (M3) | root model with a fake `app.Browser` (`apptest.FakeBrowser`: canned listings, a scripted queue) and the injected clock | goldens at 80×24 and 120×40 (approved layout, modals, transfers view, drag hint, disconnected), every key, mouse clicks, wheel and drag with synthetic `tea.MouseClickMsg`/`MouseMotionMsg`/`MouseReleaseMsg`, NFR-PERF-008/009 |
+| SFTP E2E (M3) | `creack/pty` with the real binary and sshtest | open from the host list and with `Ctrl+]` `s`, upload and download with checksums, a dropped connection and `r`, edit-locally with a fake `$EDITOR` script that appends a line (and one that exits 1), the M3 canary flows (SEC-SFTP-007), the hostile status-message scan (SEC-SFTP-008), NFR-PERF-007 and NFR-SIZE-004 in the perf job |
 | Keychain | build tag `integration_keyring` | the real `secrets.NewOSStore` Set/Get/Delete round-trip on throwaway keychains, as specified in `security/credential-storage.md` §8. Never touches the user's login keychain. |
 | Architecture and hygiene | `archtest`, `-race`, `goleak`, `govulncheck`, `golangci-lint` | on every PR |
 
@@ -1564,6 +2151,18 @@ coordinates; releases and motion are ignored on sshelf's screens.
 | 11 | Scrollback size, wide characters at the margin, remote titles | **Decided** as orchestrator defaults the product owner may still change: 2,000 lines (D-013); worked around in the wrapper, so it is not a known limitation (D-015, ADR-013 limitation 2); OSC 0/2 ignored, a tab always shows the host label (D-014). |
 | 12 | Tab-bar clicks while a session is focused? | **Dropped.** Every mouse event on a focused session tab belongs to the session; header and status-bar events are ignored, and tabs are switched with the prefix key (D-012, §9.5). |
 | 13 | Server text in the end reason | Sanitised, folded to one line and cut to 80 columns in `session` before it is shown or logged (SEC-SESSION-006). |
+
+**M3 (revision 5):**
+
+| # | Question | Resolution |
+|---|---|---|
+| 14 | Which SFTP library? | **`github.com/pkg/sftp` v1.13.12** (ADR-016); v2 is alpha. Seven limitations are handled in sshelf. |
+| 15 | Who owns a connection shared by a session and an SFTP tab? | **Nobody alone:** `sshclient.Conn` counts leases and closes on the last release (ADR-017). |
+| 16 | How many transfers at once, and how is memory bounded? | **Two**, streamed through fixed buffers; one queue per connection (ADR-018). |
+| 17 | How is an upload resumed safely after a drop? | From the last 8 MiB checkpoint, after size and mtime checks, truncating anything after it (ADR-018, FR-SFTP-017; product question 1 in `product/requirements.md` §22). |
+| 18 | How does the editor run without breaking sessions? | `tea.ExecProcess` from `ui/editor`; sessions and transfers do not depend on the event loop (ADR-019). |
+| 19 | Panes at 80×24: stacked or side by side? | **Side by side** at every size (ADR-020, FR-SFTP-023). |
+| 20 | Local pane start: working directory or `$HOME`? | **Working directory**, falling back to `$HOME` (FR-SFTP-005). |
 
 **Formerly remaining, now decided:**
 - Keychain re-prompts after unsigned updates: avoided by `zalando/go-keyring`,
