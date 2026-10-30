@@ -1,0 +1,27 @@
+
+    0[||||||||51.4%]   3[||||    30.0%]   5[||||     19.7%]  8[|         2.0%]
+    1[||||||||52.0%]   4[||||    20.5%]   6[|||||    26.0%]  9[|         0.7%]
+    2[||||||||53.0%]                      7[|         4.7%]
+  Mem[|||||||||||||||||||||12.5G/16.0G] Tasks: 674, 2627 thr, 0 kthr; 2 runnin
+  Swp[|||||||||||||||||||||2.53G/4.00G] Load average: 5.31 6.09 5.64
+                                        Uptime: 22 days, 18:34:27
+
+  [Main]
+     PID USER       PRI  NI  VIRT   RES S  CPU%▽MEM%   TIME+  Command
+       1 root        17   0     0     0 ?   0.0  0.0  0:00.00 launchd
+
+
+
+
+
+
+
+
+
+
+
+
+F1Help  F2Setup F3SearchF4FilterF5Tree  F6SortByF7Nice -F8Nice +F9Kill  F10Quit
+cursor: hidden
+alt: true
+mouse: 1

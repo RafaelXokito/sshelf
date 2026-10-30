@@ -1,0 +1,24 @@
+\e[38;5;130m  1 package\e[m main                                                                
+\e[38;5;130m  2 \e[m                                                                            
+\e[38;5;130m  3 import\e[m \e[31m"fmt"\e[m                                                                
+\e[38;5;130m  4 \e[m                                                                            
+\e[38;5;130m  5 func\e[m main() {                                                               
+\e[38;5;130m  6 \e[m        fmt.Printf(\e[31m"hello, sshelf"\e[m)                                         
+\e[38;5;130m  7 \e[m        fmt.Println(\e[31m"日本語 ok"\e[m)                                            
+\e[38;5;130m  8 \e[m}                                                                           
+\e[94m~                                                                               \e[m
+\e[94m~                                                                               \e[m
+\e[94m~                                                                               \e[m
+\e[94m~                                                                               \e[m
+\e[94m~                                                                               \e[m
+\e[94m~                                                                               \e[m
+\e[94m~                                                                               \e[m
+\e[94m~                                                                               \e[m
+\e[94m~                                                                               \e[m
+\e[94m~                                                                               \e[m
+\e[94m~                                                                               \e[m
+\e[94m~                                                                               \e[m
+\e[94m~                                                                               \e[m
+\e[94m~                                                                               \e[m
+\e[94m~                                                                               \e[m
+:set number                                                                     

@@ -1,0 +1,27 @@
+echo left pane                          │$ echo right pane
+$ echo left pane                        │right pane
+left pane                               │$
+$                                       │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        ├───────────────────────────────────────
+                                        │$ printf "\033[1;32mgreen\033[0m\\n"
+                                        │green
+                                        │$
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+[0] 0:bash*
+cursor: 43,14
+alt: true
+mouse: 2

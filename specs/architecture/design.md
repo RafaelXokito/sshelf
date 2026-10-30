@@ -419,7 +419,15 @@ a future Bubble Tea upgrade can move `ultraviolet` under `vt`.
    wrapping (measured with `12345678日x` and `日本語ab👍x` at width 10).
    *Mitigation:* a failing replay golden (`utf8-wide`) and an upstream fix in
    T-031; open question 2 in `product/requirements.md` §22 if no release fixes
-   it by the gate.
+   it by the gate. *Outcome (T-031, D-015):* worked around in `emulator.go`:
+   a second `x/ansi` parser finds where each printed character starts, the
+   emulator is fed up to there, and `\r\n` is inserted before a wide
+   character that would not fit and before the character after one that
+   filled the last two columns. The `utf8-wide` golden passes and is not
+   skipped. Related, not worked around: `vt` ends a grapheme cluster at the
+   end of every `Write`, so a combining mark, ZWJ sequence or flag split
+   across two reads is drawn as separate cells; sshelf splits its own
+   writes only after control characters.
 3. **Throughput is 2 to 5 MB/s.** 10 MiB of 100-column lines took 2.1–2.4 s
    at 120×40 and 4.0–4.8 s at 200×50, with or without SGR colours; a native
    terminal does well over 50 MB/s. *Mitigation:* NFR-PERF-005 sets a CI floor
@@ -594,7 +602,7 @@ removed in revision 2.
 - Acceptance: sshtest's `query` script sends `ESC[c`, `ESC[6n` and `ESC]11;?ESC\` and receives the emulator's answers on the channel, including the cursor position within the session area. With a `tea.BackgroundColorMsg` of `#fdf6e3`, the OSC 11 answer is `rgb:fdfd/f6f6/e3e3`. Nothing is written to the local terminal in reply to a remote query (PTY output scan).
 
 **ARCH-SESS-017**: The system shall encode keys for the remote with the emulator's `SendKey`, except for the modified special keys the emulator drops, which sshelf encodes in xterm's `CSI 1;<mod> <final>` and `CSI <n>;<mod> ~` forms.
-- Priority: M2 · Status: Draft · Source: FR-TAB-006, ADR-013 limitation 1
+- Priority: M2 · Status: Implemented · Source: FR-TAB-006, ADR-013 limitation 1
 - Acceptance: A table test covers every row of the key table in §9.4 against `echo-hex`, in normal and application cursor mode. Ctrl+Up sends `ESC[1;5A`, Shift+Left `ESC[1;2D`, Ctrl+F5 `ESC[15;5~`, Ctrl+Delete `ESC[3;5~`, Alt+Shift+Right `ESC[1;4C`. No key that has an xterm encoding produces zero bytes.
 
 
@@ -706,7 +714,7 @@ removed in revision 2.
 - Acceptance: CI runs the integration suite with `-race` on Linux and macOS, using loopback only and no real keychain.
 
 **ARCH-TEST-002**: The system shall have emulator golden tests that replay recorded output of `vim`, `htop` and `less` into a session's emulator and compare the resulting screen with a golden file.
-- Priority: M2 · Status: Draft · Source: D-009, FR-CONN-001 revision
+- Priority: M2 · Status: Implemented · Source: D-009, FR-CONN-001 revision
 - Acceptance: `internal/session/testdata/replay/` holds at least `vim-edit`, `htop`, `less-search`, `tmux-split` and `utf8-wide` recordings (`.bin` raw output with the `TERM=xterm-256color` and size they were recorded at, `.golden` the expected screen as text plus a cursor line, and `.sgr.golden` the styled lines). `TestARCH_TEST_002_Replay` feeds each recording in 1-byte, 7-byte and 4 KiB chunks and every chunking matches the golden. `go test ./internal/session -update` rewrites them; the recording procedure (`script -q` on a real host, then trimming) is documented in `testdata/replay/README`.
 
 **ARCH-TEST-003**: The system's test SSH server shall support the M2 scripted commands `flood <size>`, `stream <rate>`, `replay <fixture>`, `modes <DECSET list>`, `query`, `hostile` and `echo-hex`, and shall record channel closes and every byte it receives.

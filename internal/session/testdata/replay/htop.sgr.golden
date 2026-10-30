@@ -1,0 +1,24 @@
+                                                                                
+  \e[36m  0\e[39;1m[\e[32;22m|||\e[31m|||||\e[90;1m51.4%\e[39m]\e[m \e[36m  3\e[39;1m[\e[32;22m|||\e[31m|\e[90;1m    30.0%\e[39m]\e[m \e[36m  5\e[39;1m[\e[32;22m|||\e[31m|\e[90;1m     19.7%\e[39m]\e[36;22m  8\e[39;1m[\e[32;22m|\e[90;1m         2.0%\e[39m]\e[m  
+  \e[36m  1\e[39;1m[\e[32;22m|||\e[31m|||||\e[90;1m52.0%\e[39m]\e[m \e[36m  4\e[39;1m[\e[32;22m|||\e[31m|\e[90;1m    20.5%\e[39m]\e[m \e[36m  6\e[39;1m[\e[32;22m||||\e[31m|\e[90;1m    26.0%\e[39m]\e[36;22m  9\e[39;1m[\e[32;22m|\e[90;1m         0.7%\e[39m]\e[m  
+  \e[36m  2\e[39;1m[\e[32;22m||||||\e[31m||\e[90;1m53.0%\e[39m]\e[m                    \e[36m  7\e[39;1m[\e[32;22m|\e[90;1m         4.7%\e[39m]\e[m                     
+  \e[36mMem\e[39;1m[\e[32;22m|||||||\e[35m|\e[90;1m||||||||||\e[34m|\e[33;22m||12.5G/16\e[36m.0G\e[39;1m]\e[m \e[36mTasks: \e[1m674\e[22m, \e[32;1m2627\e[36;22m thr\e[90;1m, 0 kthr\e[36;22m; \e[32;1m2\e[36;22m runnin\e[m  
+  \e[36mSwp\e[39;1m[\e[31;22m|||||||||||||||||||||\e[90;1m2.53G/4.00G\e[39m]\e[m \e[36mLoad average: \e[39;1m5.31 \e[36m6.09 \e[22m5.64 \e[m           
+                                        \e[36mUptime: \e[1m22 days, 18:34:27\e[m               
+                                                                                
+  \e[32;42m[\e[30mMain\e[32m]\e[m                                                                        
+\e[42m    \e[30m PID USER       PRI  NI  VIRT   RES S \e[46m CPU%▽\e[42mMEM%   TIME+  Command\e[39m           \e[m
+\e[46m      \e[30m 1 root        17   0     0     0 ?   0.0  0.0  0:00.00 launchd\e[39m           \e[m
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+F1\e[30;46mHelp  \e[mF2\e[30;46mSetup \e[mF3\e[30;46mSearch\e[mF4\e[30;46mFilter\e[mF5\e[30;46mTree  \e[mF6\e[30;46mSortBy\e[mF7\e[30;46mNice -\e[mF8\e[30;46mNice +\e[mF9\e[30;46mKill  \e[mF10\e[30;46mQuit\e[39m \e[m

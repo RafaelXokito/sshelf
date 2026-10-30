@@ -1,0 +1,54 @@
+Replay fixtures for TestARCH_TEST_002_Replay (ARCH-TEST-002)
+==============================================================
+
+Each <name>.bin is the raw output of a program, recorded in an 80x24
+terminal with TERM=xterm-256color and LANG=en_US.UTF-8. <name>.golden is
+the screen the emulator shows after the whole recording (text without
+styles or trailing spaces, then the cursor, alternate screen and mouse
+mode), and <name>.sgr.golden the same lines with their SGR styles (ESC
+written as \e). The test feeds every recording in 1-byte, 7-byte and
+4 KiB chunks, and each chunking must give the goldens.
+
+  vim-edit     vim -u NONE -i NONE -N main.go: search, change a word, open
+               a line with CJK text, :syntax on, :set number
+  htop         htop -p 1 (only launchd/init, so no user processes)
+  less-search  less words.txt, /needle, n
+  tmux-split   tmux -f tmux.conf (status-right "", default-command
+               /bin/sh): a vertical and a horizontal split, a coloured
+               printf
+  utf8-wide    sh utf8-wide.sh: double-width characters at and next to the
+               right margin (D-015)
+
+Recording
+---------
+
+On a real host, from a terminal resized to 80x24:
+
+    ssh -t host 'stty cols 80 rows 24; TERM=xterm-256color script -q /tmp/vim-edit.bin vim -u NONE -i NONE -N main.go'
+
+then use the program as listed above and quit it. Copy the .bin back and
+trim it: cut everything after the last frame you want in the golden (for
+example the exit sequence of vim), so the recording ends with the program
+still on screen. Recordings must not show user names, host names, paths
+or anything else private: use -p 1 for htop, an empty status-right for
+tmux and files in a scratch directory.
+
+The fixtures in this directory were made the same way, without sshd in
+between (which passes the bytes through unchanged): each program ran
+under a small creack/pty recorder that opens an 80x24 PTY, sets TERM,
+LANG and an empty HOME, types the keys with short pauses and saves
+everything the program wrote, stopping the program before it exits.
+
+After changing a fixture or the renderer, rewrite the goldens and review
+the diff:
+
+    go test ./internal/session -run Replay -update
+
+Known limitation
+----------------
+
+x/vt v0.1.0 finishes a grapheme cluster at the end of every write, so a
+combining mark, a ZWJ sequence or a flag split across two network reads
+is drawn as separate cells. The fixtures therefore hold no such clusters;
+sshelf splits large reads only after control characters, which end every
+cluster.
