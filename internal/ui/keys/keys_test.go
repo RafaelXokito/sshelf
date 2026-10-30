@@ -52,4 +52,28 @@ func TestNFR_UX_001_EveryActionBound(t *testing.T) {
 			t.Errorf("host list has no binding for %q", want)
 		}
 	}
+	// Every mouse action (M2 revision, D-011) has a key binding that does
+	// the same, and that binding is in a view's keymap.
+	inMaps := func(b key.Binding) bool {
+		for _, m := range maps {
+			if slices.ContainsFunc(m.Bindings, func(o key.Binding) bool { return slices.Equal(o.Keys(), b.Keys()) }) {
+				return true
+			}
+		}
+		return false
+	}
+	actions := MouseActions()
+	if len(actions) == 0 {
+		t.Fatal("no mouse actions")
+	}
+	for _, a := range actions {
+		if len(a.Keys) == 0 {
+			t.Errorf("mouse action %q has no key", a.Name)
+		}
+		for _, b := range a.Keys {
+			if len(b.Keys()) == 0 || !b.Enabled() || !inMaps(b) {
+				t.Errorf("mouse action %q: binding %q is in no keymap", a.Name, b.Help().Desc)
+			}
+		}
+	}
 }

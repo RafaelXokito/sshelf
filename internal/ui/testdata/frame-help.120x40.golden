@@ -22,8 +22,6 @@ screen of B
 
 
 
-
-
 ╭──────────────────────╮
 │ Press Ctrl+], then:  │
 │                      │
@@ -36,5 +34,7 @@ screen of B
 │ [       scrollback   │
 │ Ctrl+]  send Ctrl+]  │
 │ esc     cancel       │
+│                      │
+│ [esc] Close          │
 ╰──────────────────────╯
 ?/esc close

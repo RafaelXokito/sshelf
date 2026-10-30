@@ -36,17 +36,36 @@ func New(label string, err *app.HostKeyMismatchError) Model { return Model{label
 
 // Update implements components.Modal. The only action is closing it.
 func (m Model) Update(msg tea.Msg) (components.Modal, tea.Cmd) {
-	if k, ok := msg.(tea.KeyPressMsg); ok && key.Matches(k, keys.CloseBlock) {
-		return m, func() tea.Msg { return CloseMsg{} }
+	closeCmd := func() tea.Msg { return CloseMsg{} }
+	switch msg := msg.(type) {
+	case tea.KeyPressMsg:
+		if key.Matches(msg, keys.CloseBlock) {
+			return m, closeCmd
+		}
+	case components.ClickMsg:
+		if _, b := m.render(); b.At(msg.X, msg.Y) == 0 {
+			return m, closeCmd
+		}
 	}
 	return m, nil
 }
 
+// CloseButton is the block screen's only button (FR-NAV-016).
+const CloseButton = "[esc] Close"
+
 // View implements components.Modal.
 func (m Model) View() string {
+	v, _ := m.render()
+	return v
+}
+
+// render builds the View and the place of its button together.
+func (m Model) render() (string, components.ModalButtons) {
 	e := m.err
 	var b strings.Builder
 	b.WriteString(titleStyle.Render("WARNING: HOST KEY HAS CHANGED"))
+	// The button shares the title's line: the box already fills 80×24.
+	btns := components.AddButtons(&b, CloseButton)
 	b.WriteString("\n\n")
 	fmt.Fprintf(&b, "%s (%s) presented a different key from the one you\n", m.label, e.Name)
 	b.WriteString("trust. Someone could be intercepting the connection\n")
@@ -75,7 +94,7 @@ func (m Model) View() string {
 			files[s.File] = false
 		}
 	}
-	return boxStyle.Render(strings.TrimSuffix(b.String(), "\n"))
+	return boxStyle.Render(strings.TrimSuffix(b.String(), "\n")), btns
 }
 
 // quote quotes s for a POSIX shell when it needs it.

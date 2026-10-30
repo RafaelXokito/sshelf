@@ -474,14 +474,22 @@ func TestARCH_SESS_014_InputFull(t *testing.T) {
 		t.Fatalf("queue peaked at %d bytes, want just under %d", p, InputLimit)
 	}
 	// Top it up in small pieces, so less room is left than a key needs.
-	for range InputLimit {
-		if err := s.SendBytes([]byte("z")); err != nil {
-			break
+	// Until the channel window is used up the writer may still take a
+	// little from the queue between the top-up and the key; top up again
+	// then.
+	var err error
+	for range 100 {
+		for range InputLimit {
+			if s.SendBytes([]byte("z")) != nil {
+				break
+			}
 		}
+		if err = s.SendKey(uv.KeyPressEvent{Code: uv.KeyEnter}); errors.Is(err, ErrInputFull) {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
-	if err := s.SendKey(uv.KeyPressEvent{Code: uv.KeyEnter}); !errors.Is(err, ErrInputFull) {
-		t.Fatalf("SendKey on a full queue = %v", err)
-	}
+	t.Fatalf("SendKey on a full queue = %v", err)
 }
 
 func TestARCH_SESS_015_UpdatesCoalesce(t *testing.T) {

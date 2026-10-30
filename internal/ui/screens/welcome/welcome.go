@@ -38,29 +38,64 @@ func (Model) Hints() []key.Binding {
 
 // Update implements components.Screen.
 func (m Model) Update(msg tea.Msg) (components.Screen, tea.Cmd) {
-	k, ok := msg.(tea.KeyPressMsg)
-	if !ok {
-		return m, nil
-	}
-	switch {
-	case key.Matches(k, keys.WelcomeImport):
-		return m, func() tea.Msg { return ImportMsg{} }
-	case key.Matches(k, keys.WelcomeAdd):
-		return m, func() tea.Msg { return AddHostMsg{} }
-	case key.Matches(k, keys.Quit):
-		return m, tea.Quit
+	switch msg := msg.(type) {
+	case tea.KeyPressMsg:
+		switch {
+		case key.Matches(msg, keys.WelcomeImport):
+			return m, choose(choiceImport)
+		case key.Matches(msg, keys.WelcomeAdd):
+			return m, choose(choiceAdd)
+		case key.Matches(msg, keys.Quit):
+			return m, tea.Quit
+		}
+	case components.ClickMsg:
+		// A click anywhere on a choice's line acts as its key
+		// (FR-NAV-014).
+		_, rows := render()
+		for c, y := range rows {
+			if y == msg.Y {
+				return m, choose(c)
+			}
+		}
 	}
 	return m, nil
 }
 
+// choice is one of the Welcome screen's choices.
+type choice int
+
+const (
+	choiceImport choice = iota
+	choiceAdd
+)
+
+// choose returns the command that runs choice c.
+func choose(c choice) tea.Cmd {
+	if c == choiceImport {
+		return func() tea.Msg { return ImportMsg{} }
+	}
+	return func() tea.Msg { return AddHostMsg{} }
+}
+
 // View implements components.Screen.
 func (Model) View() string {
-	var b strings.Builder
-	b.WriteString(headStyle.Render("Welcome to sshelf") + "\n\n")
-	b.WriteString("You have no saved hosts yet.\n\n")
-	b.WriteString("  " + keyStyle.Render("[I]") + " Import from ~/.ssh/config\n")
-	b.WriteString("  " + keyStyle.Render("[a]") + " Add host\n\n")
-	b.WriteString(dimStyle.Render("Import copies your hosts once and references key files by path.") + "\n")
-	b.WriteString(dimStyle.Render("sshelf never changes ~/.ssh/config.") + "\n")
-	return b.String()
+	v, _ := render()
+	return v
+}
+
+// render builds the View and the line of each choice in it, so that
+// clicks and the View agree (ARCH-UI-007).
+func render() (string, map[choice]int) {
+	lines := []string{
+		headStyle.Render("Welcome to sshelf"), "",
+		"You have no saved hosts yet.", "",
+	}
+	rows := map[choice]int{}
+	rows[choiceImport] = len(lines)
+	lines = append(lines, "  "+keyStyle.Render("[I]")+" Import from ~/.ssh/config")
+	rows[choiceAdd] = len(lines)
+	lines = append(lines, "  "+keyStyle.Render("[a]")+" Add host", "",
+		dimStyle.Render("Import copies your hosts once and references key files by path."),
+		dimStyle.Render("sshelf never changes ~/.ssh/config."))
+	return strings.Join(lines, "\n") + "\n", rows
 }

@@ -4,11 +4,11 @@ sshelf │[Hosts]│
   web-prod             ubuntu@10.0.0.10
   zeta                 10.0.0.30
 
-╭─────────────────────────────────────────────╮
-│ Connecting to web-prod…                     │
-│                                             │
-│ ✓ dialling → ✓ verifying → › authenticating │
-╰─────────────────────────────────────────────╯
+╭─────────────────────────────────────────────────────────────╮
+│ Connecting to web-prod…                                     │
+│                                                             │
+│ ✓ dialling → ✓ verifying → › authenticating    [esc] Cancel │
+╰─────────────────────────────────────────────────────────────╯
 
 
 

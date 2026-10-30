@@ -16,9 +16,9 @@ Edit host web-prod
 
 ╭──────────────────────────╮
 │ Discard unsaved changes? │
+│                          │
+│ [y] Yes    [n] No        │
 ╰──────────────────────────╯
-
-
 
 
 y yes • n/enter/esc no

@@ -65,7 +65,10 @@ func sshelfBinary(t *testing.T) string {
 	buildOnce.Do(func() {
 		binPath = filepath.Join(binDir, "sshelf")
 		ldflags := "-X main.version=" + e2eVersion + " -X main.commit=" + e2eCommit + " -X main.date=" + e2eDate
-		out, err := exec.Command("go", "build", "-ldflags", ldflags, "-o", binPath, ".").CombinedOutput() //nolint:gosec // test builds into its own temp dir
+		// sshelf_faultinject swaps in an in-memory credential store
+		// (store_fault.go): E2E runs never touch the OS keychain and behave
+		// the same on hosts with and without one.
+		out, err := exec.Command("go", "build", "-tags", "sshelf_faultinject", "-ldflags", ldflags, "-o", binPath, ".").CombinedOutput() //nolint:gosec // test builds into its own temp dir
 		if err != nil {
 			buildErr = fmt.Errorf("go build: %v\n%s", err, out)
 		}

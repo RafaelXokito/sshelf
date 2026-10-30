@@ -174,49 +174,100 @@ func TestNFR_PERF_001_Startup1k(t *testing.T) {
 	t.Logf("startup with 1,000 hosts: median %v of %v", median, times)
 }
 
-// mouseTracking are the sequences that turn on terminal mouse reporting.
-var mouseTracking = []string{"\x1b[?1000h", "\x1b[?1002h", "\x1b[?1003h", "\x1b[?1006h"}
+// Mouse tracking: the sequences that turn terminal mouse reporting on
+// (cell motion is ?1002h) and off.
+var (
+	mouseTrackingOn  = []string{"\x1b[?1000h", "\x1b[?1002h", "\x1b[?1003h"}
+	mouseTrackingOff = []string{"\x1b[?1000l", "\x1b[?1002l", "\x1b[?1003l"}
+)
 
-func checkNoMouseTracking(t *testing.T, out []byte) {
-	t.Helper()
-	for _, seq := range mouseTracking {
-		if bytes.Contains(out, []byte(seq)) {
-			t.Errorf("output enables mouse tracking with %q", seq)
+// lastIndex is the last position of any of seqs in out, or -1.
+func lastIndex(out []byte, seqs []string) int {
+	at := -1
+	for _, s := range seqs {
+		at = max(at, bytes.LastIndex(out, []byte(s)))
+	}
+	return at
+}
+
+// trackingOn reports whether mouse tracking is on after out was written:
+// a sequence that turns it on comes after the last one that turns it off.
+func trackingOn(out []byte) bool {
+	return lastIndex(out, mouseTrackingOn) > lastIndex(out, mouseTrackingOff)
+}
+
+// waitTracking waits until mouse tracking is on (want) or off after
+// everything sshelf wrote so far; the renderer may switch it a frame
+// after the text appeared.
+func (s *slice) waitTracking(want bool, where string) {
+	s.t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for trackingOn(s.out.From(0)) != want {
+		if time.Now().After(deadline) {
+			s.t.Errorf("mouse tracking on = %v %s, want %v; output:\n%q", !want, where, want, s.out.From(0))
+			return
 		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 
-// TestNFR_UX_001_NoMouseTracking runs the whole slice (start, list,
-// connect, session, back, quit) and scans every byte sshelf wrote for a
-// sequence that enables mouse tracking.
-func TestNFR_UX_001_NoMouseTracking(t *testing.T) {
+// runChecked runs the slice (Enter on web-prod, `exit 3` in its tab,
+// x back to the list) and checks mouse tracking at each step (NFR-UX-001
+// revision, D-012): on while the host list is shown, off while the plain
+// remote shell's tab is focused, live or ended, and on again on the list.
+func (s *slice) runChecked() {
+	s.t.Helper()
+	s.waitText(0, "web-prod demo@127.0.0.1")
+	s.waitTracking(true, "on the host list")
+	off := s.openSession(s.srv, 1)
+	s.waitTracking(false, "while the session tab is focused")
+	s.typeKeys("exit 3\r")
+	off = s.waitText(off, "exited (3) · r reconnect · x close")
+	s.waitTracking(false, "on the ended tab")
+	s.typeKeys("x")
+	s.waitText(off, "enter connect")
+	s.waitTracking(true, "on the host list after the session")
+}
+
+// TestNFR_UX_001_NoMouseTrackingInPlainSession runs the whole slice
+// (start, list, connect, session, back, quit) and follows the mouse
+// tracking sequences in every byte sshelf wrote (NFR-UX-001 M2 revision):
+// cell motion on the host list, none while the remote shell has the
+// terminal, so its native selection works (D-012), and none after
+// quitting.
+func TestNFR_UX_001_NoMouseTrackingInPlainSession(t *testing.T) {
 	s := startSlice(t)
-	s.run()
+	s.runChecked()
 	s.quit()
 	out := s.out.From(0)
-	if len(out) == 0 {
-		t.Fatal("no output captured")
+	if !bytes.Contains(out, []byte("\x1b[?1002h\x1b[?1006h")) {
+		t.Errorf("cell-motion tracking with SGR encoding was never enabled; output:\n%q", out)
 	}
-	checkNoMouseTracking(t, out)
+	if trackingOn(out) {
+		t.Error("mouse tracking is still on after quitting")
+	}
 }
 
 // TestNFR_PORT_002_TermMatrix starts sshelf under each supported TERM,
 // connects to the test server, exits the remote shell inside the frame,
 // closes the ended tab and checks that the host list is redrawn, the
 // remote PTY is xterm-256color (the emulator's terminal, whatever the
-// local TERM), no mouse tracking was enabled and stty -a is unchanged
+// local TERM), mouse tracking was off during the session and after
+// quitting, and stty -a is unchanged
 // after quitting.
 func TestNFR_PORT_002_TermMatrix(t *testing.T) {
 	for _, term := range []string{"xterm", "xterm-256color", "screen-256color", "tmux-256color", "xterm-kitty", "linux"} {
 		t.Run(term, func(t *testing.T) {
 			s := startSlice(t, "TERM="+term)
-			s.run() // ends on the redrawn host list
+			s.runChecked() // ends on the redrawn host list
 			s.quit()
 			s.checkStty()
 			if reqs := s.srv.RequestsOfType("pty-req"); len(reqs) != 1 || reqs[0].Term != "xterm-256color" {
 				t.Fatalf("pty-req = %+v, want TERM xterm-256color", reqs)
 			}
-			checkNoMouseTracking(t, s.out.From(0))
+			if trackingOn(s.out.From(0)) {
+				t.Error("mouse tracking is still on after quitting")
+			}
 		})
 	}
 }

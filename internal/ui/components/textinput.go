@@ -141,6 +141,9 @@ func (t *TextInput) Home() { t.pos = 0 }
 // End moves the cursor past the last rune.
 func (t *TextInput) End() { t.pos = len(t.value) }
 
+// click puts the cursor at the end of the value (FR-NAV-015).
+func (t *TextInput) click(int, bool) { t.End() }
+
 func (t *TextInput) limit() int {
 	if t.CharLimit > 0 {
 		return t.CharLimit
