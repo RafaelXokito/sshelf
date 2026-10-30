@@ -79,8 +79,9 @@ inside sshelf's frame by an embedded terminal emulator.
 | Mouse on sshelf screens (D-011) | Host list, Welcome screen, forms with `[ Save ]` and `[ Cancel ]` buttons, modal buttons, tab bar (FR-NAV-012, FR-NAV-014 … FR-NAV-017) | Drag, right-click menus, hover effects |
 | Mouse in sessions (D-012) | Forwarded only while the remote app asks for it (FR-TAB-011) | sshelf's own selection or copy |
 
-M2 has 18 new or promoted functional requirements, plus revisions of
-FR-CONN-001, FR-CONN-004 and FR-CONN-005. The non-functional and
+M2 has 18 new or promoted functional requirements, and revised
+FR-CONN-001, FR-CONN-004 and FR-CONN-005, which are now `M2` (the M2
+gate, T-043, folded each revision into its requirement). The non-functional and
 architecture changes are in [`../nfr.md`](../nfr.md) and
 [`../architecture/design.md`](../architecture/design.md) (ADR-012 to ADR-015).
 
@@ -364,20 +365,15 @@ system `ssh` binary (D-104). sshelf never closes open sessions for security
 reasons (D-006).
 
 ### FR-CONN-001 · Open an interactive session
-When the user presses Enter on a host, the system shall open an interactive SSH shell session to that host in the current terminal, with the full screen given to the session until it ends.
+When the user presses Enter on a host, the system shall open an interactive SSH shell session to that host in a new tab and render the remote screen inside sshelf's frame through its terminal emulator.
 
-- **Priority:** MVP · **Status:** Implemented
+- **Priority:** M2 · **Status:** Implemented · **Source:** D-009, D-010, ADR-012 (the MVP gave the whole terminal to the session until it ended)
 - **Acceptance:**
-  - `vim`, `htop` and `tmux` render and accept input correctly.
-  - The remote PTY uses the local `TERM` value and the current window size.
-- **Note:** the first criterion needs a person at a real terminal and a real `sshd` (the test server has only a scripted shell). It is a manual step in [`specs/acceptance.md`](../acceptance.md) and the release checklist. The PTY request, `TERM`, size and full-screen handover are automated (`TestFR_CONN_001_*`, `TestNFR_PORT_002_TermMatrix`).
-- **M2 revision** · Priority: M2 · Status: Implemented · Source: D-009, D-010, ADR-012
-  - *Revised:* When the user presses Enter on a host, the system shall open an interactive SSH shell session to that host in a new tab and render the remote screen inside sshelf's frame through its terminal emulator.
-  - *Acceptance:*
-    - Replaying the recorded output of `vim`, `htop` and `less` (ARCH-TEST-002) into a session produces the expected screen golden, including colours, the alternate screen and the cursor position.
-    - The remote PTY's `TERM` is `xterm-256color`, the terminal sshelf's emulator implements, whatever the local `TERM` is; a host's own `Term` option still wins. Its size is the session area: the terminal width by the terminal height minus 2 rows.
-    - `vim`, `htop`, `less` and `tmux` against a real `sshd` render and accept input correctly inside the frame (manual, M2 section of [`acceptance.md`](../acceptance.md)).
-    - No byte of remote output is written to the local terminal except through sshelf's renderer (SEC-SESSION-005).
+  - Replaying the recorded output of `vim`, `htop` and `less` (ARCH-TEST-002) into a session produces the expected screen golden, including colours, the alternate screen and the cursor position.
+  - The remote PTY's `TERM` is `xterm-256color`, the terminal sshelf's emulator implements, whatever the local `TERM` is; a host's own `Term` option still wins. Its size is the session area: the terminal width by the terminal height minus 2 rows.
+  - `vim`, `htop`, `less` and `tmux` against a real `sshd` render and accept input correctly inside the frame (manual, M2 section of [`acceptance.md`](../acceptance.md)).
+  - No byte of remote output is written to the local terminal except through sshelf's renderer (SEC-SESSION-005).
+- **Note:** the real-`sshd` criterion needs a person at a real terminal (the test server has only a scripted shell); it is a manual step in [`acceptance.md`](../acceptance.md) and the release checklist. The replay goldens, `TERM`, PTY size and tab are automated (`TestFR_CONN_001_*`, `TestARCH_TEST_002_*`).
 
 ### FR-CONN-002 · Authenticate with stored credentials
 Where the effective identity has a private key or a password, the system shall authenticate with it without prompting, trying the key (stored or file) first and then password or keyboard-interactive (FR-CONN-008).
@@ -397,33 +393,24 @@ If the server requests a password, or a key passphrase is needed, and none is st
   - Esc cancels and returns to the list. 3 failed attempts end with "authentication failed".
 
 ### FR-CONN-004 · Window resize
-While an interactive session is active, when the local terminal is resized, the system shall send the new size to the remote PTY.
+When the local terminal is resized, the system shall resize every open session's emulator to the new session area and send each session's remote PTY the new size.
 
-- **Priority:** MVP · **Status:** Implemented
+- **Priority:** M2 · **Status:** Implemented · **Source:** D-009, D-010
 - **Acceptance:**
-  - After a resize, `tput cols; tput lines` on the remote host prints the new size.
-- **M2 revision** · Priority: M2 · Status: Implemented · Source: D-009, D-010
-  - *Revised:* When the local terminal is resized, the system shall resize every open session's emulator to the new session area and send each session's remote PTY the new size.
-  - *Acceptance:*
-    - With 3 sessions open (one focused, two in the background), resizing from 120×40 to 100×30 makes `size` on each sshtest shell print `100 28`.
-    - A burst of resizes within 50 ms sends each session at most 2 `window-change` requests (ARCH-SESS-004).
-    - After a resize, `tput cols; tput lines` on a real host prints the session area, not the full terminal size (manual).
+  - With 3 sessions open (one focused, two in the background), resizing from 120×40 to 100×30 makes `size` on each sshtest shell print `100 28`.
+  - A burst of resizes within 50 ms sends each session at most 2 `window-change` requests (ARCH-SESS-004).
+  - After a resize, `tput cols; tput lines` on a real host prints the session area, not the full terminal size (manual).
 
 ### FR-CONN-005 · Return to the list on exit
-When an interactive session ends, the system shall restore the host list with the same host selected and show either the remote exit status or the disconnect reason in the status bar.
+When a session ends, the system shall keep its tab open with the last remote screen, show the remote exit status or the disconnect reason in that tab's status bar together with `r` reconnect and `x` close, and, when the user presses `x`, close the tab.
 
-- **Priority:** MVP · **Status:** Implemented
+- **Priority:** M2 · **Status:** Implemented · **Source:** D-010 (the MVP returned to the host list)
 - **Acceptance:**
-  - `exit 3` shows "web-prod: exited (3)". A server shutdown shows "web-prod: connection lost: <reason>".
-  - The terminal is fully restored, with no raw mode and no remote screen remnants.
-- **M2 revision** · Priority: M2 · Status: Implemented · Source: D-010
-  - *Revised:* When a session ends, the system shall keep its tab open with the last remote screen, show the remote exit status or the disconnect reason in that tab's status bar together with `r` reconnect and `x` close, and, when the user presses `x`, close the tab.
-  - *Acceptance:*
-    - `exit 3` shows `✕ exited (3) · r reconnect · x close` in that tab's status bar; a server shutdown shows `✕ connection lost: <reason> · r reconnect · x close`. The last remote screen stays visible above it.
-    - A session that ends in a background tab marks that tab `✕` (FR-TAB-004) and does not take the focus.
-    - `x` closes the tab and focuses the tab to its left; when that is the Hosts tab, the session's host is selected in the host list.
-    - While the tab shows an ended session, keys other than `r`, `x` and the prefix key (FR-TAB-005) are ignored. Scrollback mode still works.
-    - Nothing is written to the local terminal when a session ends: the frame is simply redrawn (ARCH-SESS-005 revision).
+  - `exit 3` shows `✕ exited (3) · r reconnect · x close` in that tab's status bar; a server shutdown shows `✕ connection lost: <reason> · r reconnect · x close`. The last remote screen stays visible above it. The reason is sanitised, on one line and at most 80 columns (SEC-SESSION-006).
+  - A session that ends in a background tab marks that tab `✕` (FR-TAB-004) and does not take the focus.
+  - `x` closes the tab and focuses the tab to its left; when that is the Hosts tab, the session's host is selected in the host list.
+  - While the tab shows an ended session, keys other than `r`, `x` and the prefix key (FR-TAB-005) are ignored. Scrollback mode still works.
+  - Nothing is written to the local terminal when a session ends: the frame is simply redrawn (ARCH-SESS-005).
 
 ### FR-CONN-006 · Connection failure reporting
 If a connection cannot be established within the connect timeout, then the system shall abort it and report one of: name resolution failed, connection refused, timed out, host key rejected, or authentication failed.

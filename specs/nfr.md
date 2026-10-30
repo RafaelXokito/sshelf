@@ -132,18 +132,15 @@ The system shall connect with password, keyboard-interactive and public-key auth
 
 ## 5. User experience (`NFR-UX`)
 
-### NFR-UX-001 · Keyboard only
-The system shall make every action reachable from the keyboard and shall never enable terminal mouse tracking.
+### NFR-UX-001 · Keyboard first, mouse only where asked
+The system shall make every action reachable from the keyboard, and shall enable cell-motion mouse tracking only while an sshelf screen is focused or the focused session's remote app has requested mouse reporting.
 
-- **Priority:** MVP · **Status:** Implemented · **Source:** FR-NAV-012 (mouse is `Later` and off by default)
-- **Check:** `TestNFR_UX_001_EveryActionBound` asserts that every action of every screen in `ui/keys` has at least one key binding. `TestNFR_UX_001_NoMouseTracking` (PTY E2E) scans all output for `ESC[?1000h`, `ESC[?1002h`, `ESC[?1003h` and `ESC[?1006h` and finds none.
-- **M2 revision** · Priority: M2 · Status: Implemented · Source: D-011, D-012
-  - *Revised:* The system shall make every action reachable from the keyboard, and shall enable cell-motion mouse tracking only while an sshelf screen is focused or the focused session's remote app has requested mouse reporting.
-  - *Acceptance:*
-    - `TestNFR_UX_001_EveryActionBound` still passes: every mouse action (FR-NAV-012, FR-NAV-014 … FR-NAV-017) has a key binding that does the same, including the form buttons (FR-NAV-015).
-    - `TestNFR_UX_001_MouseModePolicy` (unit, root model): `View().MouseMode` is `MouseModeCellMotion` on the Hosts tab and on every sshelf screen and modal; `MouseModeNone` on a focused session whose remote has not requested mouse reporting, in scrollback mode and on an ended session; and the mode the remote asked for (cell motion for `?1000`/`?1002`, all motion for `?1003`) otherwise.
-    - `TestNFR_UX_001_NoMouseTrackingInPlainSession` (PTY E2E): from the frame after a session tab is focused until the remote enables mouse reporting, the output contains no `ESC[?1000h`, `ESC[?1002h` or `ESC[?1003h`, and it contains `ESC[?1002l` (or `?1000l`) when the session is focused after the Hosts tab.
-    - On exit, every mouse mode is turned off (Bubble Tea's restore, design §8.6).
+- **Priority:** M2 · **Status:** Implemented · **Source:** D-011, D-012 (the MVP never enabled mouse tracking)
+- **Check:**
+  - `TestNFR_UX_001_EveryActionBound`: every action of every screen in `ui/keys` has at least one key binding, and every mouse action (FR-NAV-012, FR-NAV-014 … FR-NAV-017) has a key binding that does the same, including the form buttons (FR-NAV-015).
+  - `TestNFR_UX_001_MouseModePolicy` (unit, root model): `View().MouseMode` is `MouseModeCellMotion` on the Hosts tab and on every sshelf screen and modal; `MouseModeNone` on a focused session whose remote has not requested mouse reporting, in scrollback mode and on an ended session; and the mode the remote asked for (cell motion for `?1000`/`?1002`, all motion for `?1003`) otherwise.
+  - `TestNFR_UX_001_NoMouseTrackingInPlainSession` (PTY E2E): from the frame after a session tab is focused until the remote enables mouse reporting, the output contains no `ESC[?1000h`, `ESC[?1002h` or `ESC[?1003h`, and it contains `ESC[?1002l` (or `?1000l`) when the session is focused after the Hosts tab.
+  - On exit, every mouse mode is turned off (Bubble Tea's restore, design §8.6).
 
 ### NFR-UX-002 · Layout at the minimum size
 While the terminal is at least 80 columns by 24 rows, the system shall render every screen and modal with no line wider than the terminal and with the key-hints footer visible.
@@ -182,10 +179,10 @@ The system shall have no data races and no leaked goroutines in its test suite.
 ## 8. Quality (`NFR-QUAL`)
 
 ### NFR-QUAL-001 · Tests traced to requirements
-The system shall have, for every `MVP` requirement (`FR-*`, `SEC-*`, `ARCH-*`, `NFR-*`), status `Implemented` and at least one automated test that references the requirement ID (usually in its name, with `-` replaced by `_`), unless `tasks.md` lists the requirement as manual-only.
+The system shall have, for every `MVP` and `M2` requirement (`FR-*`, `SEC-*`, `ARCH-*`, `NFR-*`), status `Implemented` and at least one automated test that references the requirement ID (usually in its name, with `-` replaced by `_`), unless `tasks.md` lists the requirement as manual-only.
 
-- **Priority:** MVP · **Status:** Implemented
-- **Check:** `go run ./scripts/tracecheck` (a CI step, wrapped by `TestNFR_QUAL_001_EveryMVPIDTraced`) reads the MVP IDs and their status from the spec files and searches every `*_test.go` file (outside `testdata`) for `FR-X-NNN` or `FR_X_NNN`. It fails on an MVP ID that is not `Implemented`, is missing from the traceability matrix, or is referenced by no test and not listed under "Manual-only requirements" in `tasks.md`. Manual-only steps are in `specs/acceptance.md`.
+- **Priority:** MVP · **Status:** Implemented · **Source:** extended to `M2` by the M2 gate (T-043)
+- **Check:** `go run ./scripts/tracecheck` (a CI step, wrapped by `TestNFR_QUAL_001_EveryMVPAndM2IDTraced`) reads the MVP and M2 IDs and their status from the spec files and searches every `*_test.go` file (outside `testdata`) for `FR-X-NNN` or `FR_X_NNN`. It fails on an MVP or M2 ID that is not `Implemented`, is missing from its milestone's traceability matrix ("Traceability matrix" or "M2 traceability matrix"), or is referenced by no test and not listed in its milestone's manual-only table ("Manual-only requirements" or "M2 manual-only requirements") in `tasks.md`. It also fails on a matrix or manual-only row that is not a requirement of that milestone, and on any `M2 revision` block left in a spec file. Manual-only steps are in `specs/acceptance.md`.
 
 ### NFR-QUAL-002 · Static analysis
 The system shall pass `gofmt`, `go vet`, `golangci-lint` (with at least `staticcheck`, `errcheck`, `gosec` and `govet` enabled) and `govulncheck` on every pull request.
@@ -227,7 +224,7 @@ Provisional IDs were never approved and are not kept.
 
 | Priority | Count |
 |---|---|
-| MVP | 15 (NFR-UX-001 has an M2 revision) |
-| M2 | 4 (NFR-PERF-004 moved from v1, NFR-PERF-005, NFR-PERF-006, NFR-SIZE-003) |
+| MVP | 14 |
+| M2 | 5 (NFR-PERF-004 moved from v1, NFR-PERF-005, NFR-PERF-006, NFR-SIZE-003, NFR-UX-001 revised from MVP by T-043) |
 | v1 | 3 |
 | **Total** | **22** |

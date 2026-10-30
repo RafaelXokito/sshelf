@@ -24,7 +24,7 @@ jobs:
         run: |
           go vet ./...
           go vet -tags integration_keyring ./...
-      - name: Traceability gate (NFR-QUAL-001)
+      - name: Traceability gate, MVP and M2 (NFR-QUAL-001)
         run: go run ./scripts/tracecheck
       - name: golangci-lint (NFR-QUAL-002)
         uses: golangci/golangci-lint-action@v9
