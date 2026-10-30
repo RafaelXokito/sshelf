@@ -39,3 +39,16 @@ func TestFR_SFTP_014_DropsCountsThenBar(t *testing.T) {
 		t.Errorf("BytesPair = %q", got)
 	}
 }
+
+// TestFR_SFTP_001_SummaryCountsFiles: a copied tree's directory rows are
+// not counted as copied files.
+func TestFR_SFTP_001_SummaryCountsFiles(t *testing.T) {
+	got := batchSummary([]app.Transfer{
+		{Name: "photos", State: app.Done, Dir: true},
+		{Name: "photos/a.jpg", State: app.Done},
+		{Name: "photos/link", State: app.Skipped, Reason: "symbolic link"},
+	})
+	if got != "copied 1 file, skipped 1" {
+		t.Fatalf("summary = %q", got)
+	}
+}

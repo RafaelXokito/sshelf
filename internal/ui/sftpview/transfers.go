@@ -132,14 +132,15 @@ func allFinished(ts []app.Transfer) bool {
 func batchSummary(ts []app.Transfer) string {
 	var done, skipped, failed, cancelled int
 	for _, t := range ts {
-		switch t.State {
-		case app.Done:
+		switch {
+		case t.Dir && t.State != app.Failed: // directories are counted by their files
+		case t.State == app.Done:
 			done++
-		case app.Skipped:
+		case t.State == app.Skipped:
 			skipped++
-		case app.Failed:
+		case t.State == app.Failed:
 			failed++
-		case app.Cancelled:
+		case t.State == app.Cancelled:
 			cancelled++
 		}
 	}

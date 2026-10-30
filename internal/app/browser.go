@@ -148,6 +148,9 @@ type Transfer struct {
 	// refresh a pane showing it when the transfer is done.
 	DstDir   string
 	Conflict *Conflict // set while Waiting
+	// Dir marks a directory: it is done once its target exists and its
+	// contents are queued as rows of their own, so it is not a copied file.
+	Dir bool
 }
 
 // Answer is the reply to a waiting transfer's question (FR-SFTP-016).

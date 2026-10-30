@@ -249,6 +249,9 @@ func TestFR_SFTP_001_TreeBothWays(t *testing.T) {
 	if len(ts) != 1+5+200 { // tree, its 5 directories below, 200 files
 		t.Fatalf("%d rows:\n%s", len(ts), dump(ts))
 	}
+	if dirs := slices.IndexFunc(ts, func(x Transfer) bool { return x.Dir != (x.Total == 0 && !strings.HasSuffix(x.Name, ".txt")) }); dirs >= 0 {
+		t.Fatalf("Dir wrong on %q", ts[dirs].Name)
+	}
 	mu.Lock()
 	for i, rel := range order { // every directory starts before its contents
 		if dir := path.Dir(rel); dir != "." && !slices.Contains(order[:i], dir) {

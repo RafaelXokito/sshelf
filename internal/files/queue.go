@@ -86,6 +86,9 @@ type Transfer struct {
 	// refresh a pane showing it when the transfer is done.
 	DstDir   string
 	Conflict *Conflict // set while Waiting
+	// Dir marks a directory: it is done once its target exists and its
+	// contents are queued as rows of their own, so it is not a copied file.
+	Dir bool
 }
 
 // Answer is the reply to a waiting transfer's question (FR-SFTP-016).
@@ -268,7 +271,9 @@ func (b *Browser) addChildren(j *job, children []child, unsafe int, truncated bo
 	var rows, run []*job
 	for _, c := range children {
 		k := b.newJob(j.batch, j, j.from, srcDir, c.name, path.Join(j.rel, c.name), j.dstTop, dstRel, j.depth+1, c.kind)
-		k.total = c.size
+		if c.kind == File {
+			k.total = c.size // a directory's total is unknown: 0
+		}
 		switch {
 		case c.kind == Symlink:
 			k.state, k.reason, k.total = Skipped, "symbolic link", 0
@@ -516,6 +521,7 @@ func (b *Browser) Transfers() []Transfer {
 		t := Transfer{
 			ID: j.id, Batch: j.batch.id, From: j.from, Name: Display(j.rel),
 			State: j.state, Done: j.done, Total: j.total, Reason: j.reason, DstDir: j.dstDir(),
+			Dir: j.kind == Dir,
 		}
 		if j.conflict != nil {
 			c := *j.conflict
