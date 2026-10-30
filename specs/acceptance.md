@@ -248,32 +248,37 @@ fields, `←`/`→` change the Identity choice, `ctrl+s` saves, `esc` cancels.
 
 - [ ] **5.2 Trust and save.** `enter` on `acc-keyfile` again, press `y`.
 
-  Expected: a `$ ` prompt from the stub shell. `grep 2201 "$CFG/known_hosts"`
-  in another terminal shows one line. — Pass [ ] Fail [ ]
+  Expected: tab `1 acc-keyfile` opens with a `$ ` prompt from the stub
+  shell inside the frame. `grep 2201 "$CFG/known_hosts"` in another
+  terminal shows one line. — Pass [ ] Fail [ ]
 
-- [ ] **5.3 Exit back to the list.** In the session type `exit 3`.
+- [ ] **5.3 Exit back to the list.** In the session type `exit 3`, then
+  press `x`.
 
-  Expected: the host list comes back at once, `acc-keyfile` still selected,
-  status `acc-keyfile: exited (3)`. The first key you press afterwards
-  (e.g. `j`) is handled by the list. — Pass [ ] Fail [ ]
+  Expected: after `exit 3` the last screen stays and the status bar reads
+  `✕ exited (3) · r reconnect · x close`; `x` closes the tab and the host
+  list comes back with `acc-keyfile` still selected. The first key you
+  press afterwards (e.g. `j`) is handled by the list. — Pass [ ] Fail [ ]
 
-- [ ] **5.4 No second prompt.** `enter` on `acc-keyfile`, then `exit`.
+- [ ] **5.4 No second prompt.** `enter` on `acc-keyfile`, then `exit` and
+  `x`.
 
-  Expected: no host-key prompt this time; `acc-keyfile: exited (0)`.
-  — Pass [ ] Fail [ ]
+  Expected: no host-key prompt this time; the ended tab shows
+  `✕ exited (0)`. — Pass [ ] Fail [ ]
 
 - [ ] **5.5 Password, stored key and pasted key connect.** Connect to
-  `acc-password`, `acc-stored` and `acc-pasted` in turn (each `exit`).
+  `acc-password`, `acc-stored` and `acc-pasted` in turn (each `exit`, then
+  `x`).
 
-  Expected: each opens the stub shell without asking for anything (the
-  host key of port 2201 is already trusted) and returns with `exited (0)`.
-  — Pass [ ] Fail [ ]
+  Expected: each opens the stub shell in a tab without asking for anything
+  (the host key of port 2201 is already trusted) and ends with
+  `✕ exited (0)`. — Pass [ ] Fail [ ]
 
 - [ ] **5.6 Fuzzy search.** Press `/` and type `akf`.
 
   Expected: the list filters to `acc-keyfile` (matched as you type, no
-  noticeable lag); `enter` connects to it (`exit` again); `esc` clears the
-  search and shows every host. — Pass [ ] Fail [ ]
+  noticeable lag); `enter` connects to it (`exit` and `x` again); `esc`
+  clears the search and shows every host. — Pass [ ] Fail [ ]
 
 - [ ] **5.7 Changed host key is blocked.** Stop target A with `ctrl+c` in
   terminal A and start it with a **different** host key on the same port:
@@ -292,8 +297,8 @@ fields, `←`/`→` change the Identity choice, `ctrl+s` saves, `esc` cancels.
   — Pass [ ] Fail [ ]
 
 - [ ] **5.8 Restore target A.** `ctrl+c` in terminal A, then run the 2.1
-  command again (same `-dir`, original key). Connect to `acc-password` and
-  `exit`.
+  command again (same `-dir`, original key). Connect to `acc-password`,
+  `exit` and `x`.
 
   Expected: connects without a prompt. — Pass [ ] Fail [ ]
 
@@ -312,8 +317,9 @@ fields, `←`/`→` change the Identity choice, `ctrl+s` saves, `esc` cancels.
   echo "$TERM"; tput cols; tput lines
   ```
 
-  Expected: your local `$TERM` and the current window size.
-  — Pass [ ] Fail [ ]
+  Expected: `xterm-256color` (the terminal sshelf's emulator implements,
+  whatever your local `$TERM`), your window's width, and its height minus
+  2 (the header and the status bar). — Pass [ ] Fail [ ]
 
 - [ ] **6.3 vim.** `vim /tmp/sshelf-acc.txt`, type `ihello`, `esc`, move with
   `h j k l` and arrow keys, `:wq`.
@@ -345,10 +351,10 @@ fields, `←`/`→` change the Identity choice, `ctrl+s` saves, `esc` cancels.
   Expected: only the remote `sleep` is interrupted; the session and sshelf
   keep running. — Pass [ ] Fail [ ]
 
-- [ ] **6.8 Back to the list.** `exit`.
+- [ ] **6.8 Back to the list.** `exit`, then `x`.
 
-  Expected: the host list is redrawn cleanly, `acc-real` selected,
-  `acc-real: exited (0)`. — Pass [ ] Fail [ ]
+  Expected: the ended tab shows `✕ exited (0)`; `x` redraws the host list
+  cleanly with `acc-real` selected. — Pass [ ] Fail [ ]
 
 ## 7. Keyboard-interactive, one-time code and Esc
 
@@ -462,25 +468,30 @@ fields, `←`/`→` change the Identity choice, `ctrl+s` saves, `esc` cancels.
   auth methods, and the count is `0`. Without `SSHELF_DEBUG` no log is
   written. Delete what you added in this step. — Pass [ ] Fail [ ]
 
-## 10. T-000 devcheck: raw mode and `stty` round trip (ADR-007)
+## 10. Raw bytes and `stty` round trip (ADR-007)
 
-- [ ] **10.1 Raw handover.**
+Since M2 (T-037) sessions run inside sshelf's frame and the terminal is
+never handed over, so the T-000 `devcheck` program is gone; this section
+checks the same things with sshelf itself.
+
+- [ ] **10.1 Keys reach the remote.**
 
   ```sh
   stty -a > "$SSHELF_ACC/stty-dev-before"
-  go run -tags devcheck ./internal/session/devcheck
+  "$SSHELF_ACC/sshelf"
   ```
 
-  The TUI opens in the alternate screen. Press `e`; the stub prints the
-  received bytes in hex. Press `ctrl+c`, type a few keys, then `q`.
+  Connect to `acc-keyfile` and type `echo-hex` and `enter`. Press
+  `ctrl+c`, `↑`, `q`.
 
-  Expected: `ctrl+c` prints `03` and does not quit; the alternate screen
-  comes back and the TUI shows `stub runs: 1`. — Pass [ ] Fail [ ]
+  Expected: the stub prints `03 1b 5b 41 71` inside the frame; neither
+  `ctrl+c` nor `q` quits sshelf. — Pass [ ] Fail [ ]
 
-- [ ] **10.2 First keystroke after return.** Press `x` once.
+- [ ] **10.2 First keystroke after the session.** `ctrl+]` `q`, `y`, then
+  press `j` once.
 
-  Expected: "last key since return" shows `x` on that first keystroke.
-  — Pass [ ] Fail [ ]
+  Expected: the tab closes and the host list moves on that first
+  keystroke. — Pass [ ] Fail [ ]
 
 - [ ] **10.3 `stty` round trip.** Press `q`, then:
 

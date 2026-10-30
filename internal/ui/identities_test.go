@@ -131,7 +131,6 @@ func identityService() *fakeService {
 			{Meta: domain.Meta{ID: "i4"}, Label: "synced", HasPassword: true},
 		},
 		fakeIdentities: fakeIdentities{idMissing: map[domain.ID]bool{"i4": true}},
-		session:        &stubSession{},
 	}
 }
 

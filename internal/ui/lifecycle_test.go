@@ -56,7 +56,7 @@ func TestFR_CONN_005_M2_BackgroundEndKeepsFocus(t *testing.T) {
 		t.Fatalf("header = %q", h)
 	}
 	d.focus(0)
-	endTab(d, 2, d.root().tabs[1].sess.(framedStub).FakeSession, nil)
+	endTab(d, 2, d.root().tabs[1].sess.(*apptest.FakeSession), nil)
 	if d.root().focus != 0 {
 		t.Fatalf("focus = %d: the Hosts tab lost the focus", d.root().focus)
 	}
@@ -133,7 +133,7 @@ func TestFR_CONN_010_ReconnectSameTab(t *testing.T) {
 	if len(r.tabs) != 2 || r.tabs[0].num != 1 || r.focus != 1 {
 		t.Fatalf("tabs = %d, first = %d, focus = %d", len(r.tabs), r.tabs[0].num, r.focus)
 	}
-	if r.tabs[0].sess.(framedStub).FakeSession != fresh || old.Closes() != 1 {
+	if r.tabs[0].sess.(*apptest.FakeSession) != fresh || old.Closes() != 1 {
 		t.Fatal("the tab does not run the new session, or the old one is open")
 	}
 	v := plain(d.view())

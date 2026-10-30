@@ -539,21 +539,21 @@ removed in revision 2.
 **ARCH-SESS-003**: While a session is attached, the system shall put the terminal into raw mode and relay input and output unchanged, except for the escape sequences in ARCH-SESS-006 (v1).
 - Priority: MVP · Status: Implemented
 - Acceptance: In an integration test, 256 random bytes (excluding the escape character at line start) arrive at the server unchanged, and binary output from the server reaches the writer unchanged.
-- **M2 revision** · Priority: M2 · Status: Draft · Source: D-009, ADR-012
+- **M2 revision** · Priority: M2 · Status: Implemented · Source: D-009, ADR-012
   - *Revised:* While a session is open, the system shall write to its SSH channel only the encoding of the user's input and the emulator's replies, and shall feed every byte the channel delivers to that session's emulator, without changing the local terminal's mode.
   - *Acceptance:* 256 random bytes sent with `SendBytes` arrive at sshtest unchanged and in order. Binary output from sshtest reaches the emulator unchanged (a recording emulator double in `session` tests). The `session` package no longer imports `golang.org/x/term` and has no raw-mode code; archtest checks it.
 
 **ARCH-SESS-004**: When the local terminal is resized while a session is attached, the system shall send an SSH `window-change` request with the new size within 100 ms.
 - Priority: MVP · Status: Implemented
 - Acceptance: A fake `Terminal` emits a resize event, and the test server records the matching `window-change`. A burst of resize events within 50 ms produces at most 2 requests.
-- **M2 revision** · Priority: M2 · Status: Draft · Source: FR-CONN-004 revision
+- **M2 revision** · Priority: M2 · Status: Implemented · Source: FR-CONN-004 revision
   - *Revised:* When the root model receives a new terminal size, the system shall resize every open session's emulator at once and send each session's server one `window-change` with the new session area within 100 ms.
   - *Acceptance:* With 3 sessions, a `tea.WindowSizeMsg` of 100×30 makes sshtest record `window-change 100×28` on each channel within 100 ms. A burst of 10 size messages within 50 ms produces at most 2 requests per session. An unchanged size sends nothing.
 
 **ARCH-SESS-005**: When an attached session ends for any reason (remote exit, network error, `~.`, or a panic in a session goroutine), the system shall restore the saved terminal state, write the reset sequence in §8.6, and return control to the TUI.
 - Priority: MVP · Status: Implemented
 - Acceptance: A PTY test (creack/pty) runs each case. Afterwards `stty -a` matches its value before the session, the host list redraws, and the next keystroke reaches the TUI.
-- **M2 revision** · Priority: M2 · Status: Draft · Source: D-009, D-010
+- **M2 revision** · Priority: M2 · Status: Implemented · Source: D-009, D-010
   - *Revised:* When a session ends for any reason (remote exit, network error, disconnect, or a panic in one of its goroutines), the system shall stop every goroutine of that session and keep sshelf and every other session running, without writing anything to the local terminal.
   - *Acceptance:* Unit tests end a session each way and pass `goleak`. With two sessions open, a panic forced in one session's output goroutine (build tag `sshelf_faultinject`) ends that session with `ErrInternal` while the other still echoes input (PTY test). sshelf's own terminal restore happens only when it exits; that path is still checked by `stty -a` before and after (PTY test).
 
@@ -574,7 +574,7 @@ removed in revision 2.
 - Acceptance: In an integration test, with forwarding off no `auth-agent@openssh.com` channel opens. With it on, the server can list the local agent's keys.
 
 **ARCH-SESS-010**: The system shall run each session's reading, writing and emulation inside its own `session.Session`, independently of which tab is focused or rendered, and shall close every session when sshelf exits.
-- Priority: M2 · Status: Draft · Source: FR-TAB-008, FR-TAB-009, ADR-015 (no `session.Manager` and no detach, D-007)
+- Priority: M2 · Status: Implemented · Source: FR-TAB-008, FR-TAB-009, ADR-015 (no `session.Manager` and no detach, D-007)
 - Acceptance: Open 3 sessions and focus only the first: sshtest output sent to the other two lands in their emulators. Input sent through each tab reaches the right server. Quitting closes all three connections (sshtest records each close), and `goleak` passes.
 
 **ARCH-SESS-011**: The system shall feed remote output only into the session's emulator and shall write to the local terminal only what sshelf's renderer draws from emulator state.
@@ -598,7 +598,7 @@ removed in revision 2.
 - Acceptance: 10,000 output chunks produce at most one pending notification at any time (unit test reading `Updates()` slowly). The channel is closed exactly once, after the session's end is recorded. Each `SessionUpdateMsg` re-arms one listening command; `goleak` finds no listener left after a tab closes.
 
 **ARCH-SESS-016**: The system shall let the emulator answer the remote's terminal queries (device attributes, cursor position reports, mode reports, colour queries) and shall set the emulator's default foreground and background colours from the user's terminal when Bubble Tea reports them.
-- Priority: M2 · Status: Draft · Source: ADR-012, ADR-013 limitation 9
+- Priority: M2 · Status: Implemented · Source: ADR-012, ADR-013 limitation 9
 - Acceptance: sshtest's `query` script sends `ESC[c`, `ESC[6n` and `ESC]11;?ESC\` and receives the emulator's answers on the channel, including the cursor position within the session area. With a `tea.BackgroundColorMsg` of `#fdf6e3`, the OSC 11 answer is `rgb:fdfd/f6f6/e3e3`. Nothing is written to the local terminal in reply to a remote query (PTY output scan).
 
 **ARCH-SESS-017**: The system shall encode keys for the remote with the emulator's `SendKey`, except for the modified special keys the emulator drops, which sshelf encodes in xterm's `CSI 1;<mod> <final>` and `CSI <n>;<mod> ~` forms.
@@ -678,7 +678,7 @@ removed in revision 2.
 - Priority: MVP · Status: Implemented
 - Acceptance: A walk-through (start, list, edit, save, connect, TOFU, stub session, back) matches its golden files. It drives the root model directly, the way `tea.Program` does, without `teatest` (see the golden convention in `tasks.md`).
 - Note: a modal that answers a running connection attempt (auth prompt, TOFU) is popped in the `Update` that delivers the answer, not when its `DoneMsg` arrives, so a late `DoneMsg` can never close the next prompt.
-- **M2 revision** · Priority: M2 · Status: Draft · Source: D-009, D-010, ADR-015
+- **M2 revision** · Priority: M2 · Status: Implemented · Source: D-009, D-010, ADR-015
   - *Revised:* The system shall run one root Bubble Tea model that holds the Hosts tab (one active screen, as in the MVP) and the session tabs, routes every message to the focused tab, the modal stack or the sessions as defined in §9, and draws the frame around them.
   - *Acceptance:* An M2 walk-through (start, list, connect with a stub session, tab opens, `Ctrl+]` `h`, connect a second host, `Ctrl+]` `1`, remote `exit 3`, ended tab, `x`, list with the host selected) matches its golden files, driven without `teatest`. The MVP walk-through still passes with the header line in place of the title.
 

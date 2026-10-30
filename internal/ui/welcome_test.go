@@ -39,7 +39,7 @@ func TestFR_NAV_013_Keys(t *testing.T) {
 	}
 
 	// a opens the host form; esc goes back to Welcome.
-	svc := &fakeService{session: &stubSession{}}
+	svc := &fakeService{}
 	d := newDriver(t, svc)
 	d.press('a', "a")
 	if !d.inForm() {

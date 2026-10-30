@@ -82,7 +82,7 @@ type cancelService struct {
 	ended   chan error
 }
 
-func (b *cancelService) Connect(ctx context.Context, _ domain.ID) (app.Session, error) {
+func (b *cancelService) Connect(ctx context.Context, _ domain.ID, _ app.Size) (app.Session, error) {
 	close(b.started)
 	<-ctx.Done()
 	b.ended <- ctx.Err()

@@ -34,8 +34,8 @@ func TestFR_NAV_012_E2EDoubleClickConnects(t *testing.T) {
 	if !s.srv.WaitFor(10*time.Second, func() bool { return len(s.srv.RequestsOfType("shell")) == 1 }) {
 		t.Fatalf("the double-click did not connect; output:\n%q", s.out.From(0))
 	}
-	off = s.waitText(off, "$")
-	s.typeKeys("exit 3\r")
-	s.waitText(off, "web-prod: exited (3)")
+	s.tabs = 1
+	off = s.waitText(off, "[1 web-prod]") // the session's tab
+	s.endSession(off, "exit 3", "exited (3)")
 	s.quit()
 }

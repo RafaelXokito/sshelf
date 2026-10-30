@@ -30,35 +30,3 @@ func SaveState(f *os.File) (restore func() error, err error) {
 	}
 	return func() error { return xterm.Restore(fd, st) }, nil
 }
-
-// TTY is the real terminal behind a file descriptor.
-type TTY struct {
-	f *os.File
-}
-
-// NewTTY returns the terminal behind f, usually os.Stdin.
-func NewTTY(f *os.File) *TTY { return &TTY{f: f} }
-
-func (t *TTY) fd() int { return int(t.f.Fd()) } //nolint:gosec // a file descriptor fits in an int
-
-// MakeRaw puts the terminal into raw mode and returns a function that
-// restores the previous state.
-func (t *TTY) MakeRaw() (restore func() error, err error) {
-	fd := t.fd()
-	st, err := xterm.MakeRaw(fd)
-	if err != nil {
-		return nil, err
-	}
-	return func() error { return xterm.Restore(fd, st) }, nil
-}
-
-// Size returns the terminal's columns and rows.
-func (t *TTY) Size() (cols, rows int, err error) {
-	return xterm.GetSize(t.fd())
-}
-
-// Resizes delivers an event whenever the terminal is resized (SIGWINCH).
-// stop ends the notifications.
-func (t *TTY) Resizes() (events <-chan struct{}, stop func()) {
-	return resizeEvents()
-}

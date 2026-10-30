@@ -18,7 +18,7 @@ import (
 func emptyApp(t *testing.T) (*App, string) {
 	t.Helper()
 	dir := filepath.Join(t.TempDir(), "sshelf")
-	a := New(Config{Dir: dir, Terminal: stillTerm{}})
+	a := New(Config{Dir: dir})
 	if _, err := a.Load(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +42,7 @@ func TestFR_HOST_001_SurvivesRestart(t *testing.T) {
 		t.Fatalf("config.json mode %v", fi.Mode().Perm())
 	}
 
-	restarted := New(Config{Dir: dir, Terminal: stillTerm{}})
+	restarted := New(Config{Dir: dir})
 	l, err := restarted.Load(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -164,13 +164,13 @@ func TestFR_HOST_001_PortChangeUsedOnConnect(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	s, err := a.Connect(context.Background(), "h2")
+	s, err := a.Connect(context.Background(), "h2", Size{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	_ = s.Close()
 
-	restarted := New(Config{Dir: a.cfg.Dir, Terminal: stillTerm{}})
+	restarted := New(Config{Dir: a.cfg.Dir})
 	l, err := restarted.Load(context.Background())
 	if err != nil {
 		t.Fatal(err)

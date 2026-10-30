@@ -1,5 +1,5 @@
 // Package apptest holds test doubles of app types. FakeSession is the
-// "fake session" of the M2 tasks (tasks.md): an app.FramedSession that
+// "fake session" of the M2 tasks (tasks.md): an app.Session that
 // records what it is sent and serves canned snapshots.
 package apptest
 
@@ -13,7 +13,7 @@ import (
 	"github.com/RafaelXokito/sshelf/internal/app"
 )
 
-// FakeSession is a recording app.FramedSession. Its zero value is not
+// FakeSession is a recording app.Session. Its zero value is not
 // usable; call NewFakeSession. It is safe for concurrent use.
 type FakeSession struct {
 	mu         sync.Mutex
@@ -135,7 +135,7 @@ func (f *FakeSession) Closes() int {
 	return f.closes
 }
 
-// SendKey implements app.FramedSession.
+// SendKey implements app.Session.
 func (f *FakeSession) SendKey(k uv.KeyPressEvent) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -143,7 +143,7 @@ func (f *FakeSession) SendKey(k uv.KeyPressEvent) error {
 	return nil
 }
 
-// SendMouse implements app.FramedSession.
+// SendMouse implements app.Session.
 func (f *FakeSession) SendMouse(m uv.MouseEvent) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -151,7 +151,7 @@ func (f *FakeSession) SendMouse(m uv.MouseEvent) error {
 	return nil
 }
 
-// Paste implements app.FramedSession.
+// Paste implements app.Session.
 func (f *FakeSession) Paste(text string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -159,7 +159,7 @@ func (f *FakeSession) Paste(text string) error {
 	return nil
 }
 
-// SendBytes implements app.FramedSession.
+// SendBytes implements app.Session.
 func (f *FakeSession) SendBytes(b []byte) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -167,21 +167,28 @@ func (f *FakeSession) SendBytes(b []byte) error {
 	return nil
 }
 
-// Resize implements app.FramedSession.
+// Resize implements app.Session.
 func (f *FakeSession) Resize(sz app.Size) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.sizes = append(f.sizes, sz)
 }
 
-// SetDefaultColors implements app.FramedSession.
+// SetDefaultColors implements app.Session.
 func (f *FakeSession) SetDefaultColors(fg, bg color.Color) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.fg, f.bg = fg, bg
 }
 
-// Snapshot implements app.FramedSession.
+// Colors returns the default colours last set with SetDefaultColors.
+func (f *FakeSession) Colors() (fg, bg color.Color) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.fg, f.bg
+}
+
+// Snapshot implements app.Session.
 func (f *FakeSession) Snapshot() app.Snapshot {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -194,7 +201,7 @@ func (f *FakeSession) Snapshot() app.Snapshot {
 	return s
 }
 
-// Scrollback implements app.FramedSession: the scrollback lines, then
+// Scrollback implements app.Session: the scrollback lines, then
 // the screen.
 func (f *FakeSession) Scrollback(top, rows int) ([]string, int) {
 	f.mu.Lock()
@@ -215,27 +222,27 @@ func (f *FakeSession) DropLines(n int) {
 	f.dropped += n
 }
 
-// Dropped implements app.FramedSession.
+// Dropped implements app.Session.
 func (f *FakeSession) Dropped() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.dropped
 }
 
-// Updates implements app.FramedSession.
+// Updates implements app.Session.
 func (f *FakeSession) Updates() <-chan struct{} { return f.updates }
 
-// Done implements app.FramedSession.
+// Done implements app.Session.
 func (f *FakeSession) Done() <-chan struct{} { return f.done }
 
-// Err implements app.FramedSession.
+// Err implements app.Session.
 func (f *FakeSession) Err() error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.err
 }
 
-// Close implements app.FramedSession. It is idempotent; the first call
+// Close implements app.Session. It is idempotent; the first call
 // ends a live session with a nil error.
 func (f *FakeSession) Close() error {
 	f.mu.Lock()
@@ -245,4 +252,4 @@ func (f *FakeSession) Close() error {
 	return nil
 }
 
-var _ app.FramedSession = (*FakeSession)(nil)
+var _ app.Session = (*FakeSession)(nil)

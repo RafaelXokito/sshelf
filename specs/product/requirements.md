@@ -371,7 +371,7 @@ When the user presses Enter on a host, the system shall open an interactive SSH 
   - `vim`, `htop` and `tmux` render and accept input correctly.
   - The remote PTY uses the local `TERM` value and the current window size.
 - **Note:** the first criterion needs a person at a real terminal and a real `sshd` (the test server has only a scripted shell). It is a manual step in [`specs/acceptance.md`](../acceptance.md) and the release checklist. The PTY request, `TERM`, size and full-screen handover are automated (`TestFR_CONN_001_*`, `TestNFR_PORT_002_TermMatrix`).
-- **M2 revision** · Priority: M2 · Status: Draft · Source: D-009, D-010, ADR-012
+- **M2 revision** · Priority: M2 · Status: Implemented · Source: D-009, D-010, ADR-012
   - *Revised:* When the user presses Enter on a host, the system shall open an interactive SSH shell session to that host in a new tab and render the remote screen inside sshelf's frame through its terminal emulator.
   - *Acceptance:*
     - Replaying the recorded output of `vim`, `htop` and `less` (ARCH-TEST-002) into a session produces the expected screen golden, including colours, the alternate screen and the cursor position.
@@ -402,7 +402,7 @@ While an interactive session is active, when the local terminal is resized, the 
 - **Priority:** MVP · **Status:** Implemented
 - **Acceptance:**
   - After a resize, `tput cols; tput lines` on the remote host prints the new size.
-- **M2 revision** · Priority: M2 · Status: Draft · Source: D-009, D-010
+- **M2 revision** · Priority: M2 · Status: Implemented · Source: D-009, D-010
   - *Revised:* When the local terminal is resized, the system shall resize every open session's emulator to the new session area and send each session's remote PTY the new size.
   - *Acceptance:*
     - With 3 sessions open (one focused, two in the background), resizing from 120×40 to 100×30 makes `size` on each sshtest shell print `100 28`.
@@ -492,7 +492,7 @@ When the user enters `[user@]host[:port]` in the quick-connect prompt, the syste
 ### FR-CONN-014 · Disconnect with the prefix key
 While a session tab is focused, when the user presses the prefix key followed by `q` and confirms, the system shall close that session and its tab.
 
-- **Priority:** M2 · **Status:** Draft · **Source:** D-009 (replaces the v1 `~.` escape; one way to do it, D-007)
+- **Priority:** M2 · **Status:** Implemented · **Source:** D-009 (replaces the v1 `~.` escape; one way to do it, D-007)
 - **Acceptance:**
   - `Ctrl+]` `q` opens "Disconnect web-prod?" defaulting to No. `y` closes the SSH connection and the tab and focuses the tab to its left; `n`, Enter and Esc keep the session.
   - sshtest records the channel close within 1 s.
@@ -1018,7 +1018,7 @@ While several tabs are open, when the user presses the prefix key followed by a 
 ### FR-TAB-002 · Open a session in a new tab
 When a connection started from the host list succeeds, the system shall open a new session tab after the last tab, give it the next unused number, and focus it.
 
-- **Priority:** M2 · **Status:** Draft · **Source:** D-010
+- **Priority:** M2 · **Status:** Implemented · **Source:** D-010
 - **Acceptance:**
   - Dialling, host-key checks, prompts and authentication still happen over the Hosts tab (Connecting, TOFU and prompt modals); the tab opens only when the session is established (ARCH-SESS-002 revision). A failed or cancelled connection opens no tab.
   - Connecting to `web-prod` twice opens two tabs, `1 web-prod` and `2 web-prod`, each with its own SSH connection.
@@ -1058,7 +1058,7 @@ While any tab is focused and no modal is open, when the user presses `Ctrl+]`, t
 ### FR-TAB-006 · Keys and paste go to the focused session
 While a live session tab is focused and neither the prefix key, an overlay nor scrollback mode is active, the system shall send every key press and paste to that session's remote, encoded according to the emulator's current modes.
 
-- **Priority:** M2 · **Status:** Draft · **Source:** D-009
+- **Priority:** M2 · **Status:** Implemented · **Source:** D-009
 - **Acceptance:**
   - Arrow keys send `ESC [ A` in normal cursor mode and `ESC O A` after the remote enables application cursor keys (`ESC [ ? 1 h`).
   - Ctrl+C sends `0x03`, Ctrl+Z `0x1a`, Esc `0x1b`, Alt+x `ESC x`, Ctrl+Left `ESC [ 1 ; 5 D`, Shift+Up `ESC [ 1 ; 2 A` and F5 `ESC [ 1 5 ~`. Every row of the key table in design §9.4 has a test.
@@ -1077,7 +1077,7 @@ While a session tab is focused, the system shall show a one-line status bar with
 ### FR-TAB-008 · Background sessions keep running
 While a session tab is not focused, the system shall keep reading that session's output into its emulator and keep its connection open.
 
-- **Priority:** M2 · **Status:** Draft · **Source:** D-010
+- **Priority:** M2 · **Status:** Implemented · **Source:** D-010
 - **Acceptance:**
   - A remote command that prints 10,000 lines while its tab is in the background completes (sshtest records its exit), and focusing the tab shows the end of the output.
   - The remote is slowed down only when the emulator cannot keep up, never because its tab is in the background (ARCH-SESS-014).

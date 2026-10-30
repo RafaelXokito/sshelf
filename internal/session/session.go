@@ -79,16 +79,15 @@ func (e *DisconnectError) Unwrap() error { return e.Err }
 
 // Options configure a new session.
 type Options struct {
-	// Term is the remote TERM. "" means xterm-256color for New (the
-	// terminal the emulator implements, ADR-012) and $TERM, then
-	// xterm-256color, for NewAttached.
+	// Term is the remote TERM. "" means xterm-256color, the terminal the
+	// emulator implements (ADR-012).
 	Term    string
 	Env     map[string]string // sent as env requests; rejections are ignored
 	Command string            // "" = login shell
-	// Size is the PTY and emulator size, the session area (New only).
-	// Zero means 80×24.
+	// Size is the PTY and emulator size, the session area. Zero means
+	// 80×24.
 	Size Size
-	// Scrollback is the number of lines kept (New only); 0 means
+	// Scrollback is the number of lines kept; 0 means
 	// DefaultScrollback (NFR-SIZE-003).
 	Scrollback int
 }

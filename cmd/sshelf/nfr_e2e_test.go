@@ -196,29 +196,37 @@ func trackingOn(out []byte) bool {
 	return lastIndex(out, mouseTrackingOn) > lastIndex(out, mouseTrackingOff)
 }
 
-// runChecked runs the slice (Enter on web-prod, `exit 3`, back to the
-// list) and checks mouse tracking at each step (NFR-UX-001 revision,
-// D-012): on while the host list is shown, off from before the remote
-// shell's first output until the list is back, and on again after.
+// waitTracking waits until mouse tracking is on (want) or off after
+// everything sshelf wrote so far; the renderer may switch it a frame
+// after the text appeared.
+func (s *slice) waitTracking(want bool, where string) {
+	s.t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for trackingOn(s.out.From(0)) != want {
+		if time.Now().After(deadline) {
+			s.t.Errorf("mouse tracking on = %v %s, want %v; output:\n%q", !want, where, want, s.out.From(0))
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// runChecked runs the slice (Enter on web-prod, `exit 3` in its tab,
+// x back to the list) and checks mouse tracking at each step (NFR-UX-001
+// revision, D-012): on while the host list is shown, off while the plain
+// remote shell's tab is focused, live or ended, and on again on the list.
 func (s *slice) runChecked() {
 	s.t.Helper()
-	off := s.waitText(0, "web-prod demo@127.0.0.1")
-	if !trackingOn(s.out.From(0)) {
-		s.t.Errorf("mouse tracking is off on the host list; output:\n%q", s.out.From(0))
-	}
-	s.typeKeys("\r")
-	if !s.srv.WaitFor(10*time.Second, func() bool { return len(s.srv.RequestsOfType("shell")) == 1 }) {
-		s.t.Fatalf("no shell was started; output:\n%q", s.out.From(0))
-	}
-	off = s.waitText(off, "$")
-	if trackingOn(s.out.From(0)) {
-		s.t.Errorf("mouse tracking is on while the session has the terminal; output since Enter:\n%q", s.out.From(off))
-	}
+	s.waitText(0, "web-prod demo@127.0.0.1")
+	s.waitTracking(true, "on the host list")
+	off := s.openSession(s.srv, 1)
+	s.waitTracking(false, "while the session tab is focused")
 	s.typeKeys("exit 3\r")
-	s.waitText(off, "web-prod: exited (3)")
-	if !trackingOn(s.out.From(0)) {
-		s.t.Error("mouse tracking is off on the host list after the session")
-	}
+	off = s.waitText(off, "exited (3) · r reconnect · x close")
+	s.waitTracking(false, "on the ended tab")
+	s.typeKeys("x")
+	s.waitText(off, "enter connect")
+	s.waitTracking(true, "on the host list after the session")
 }
 
 // TestNFR_UX_001_NoMouseTrackingInPlainSession runs the whole slice
@@ -241,23 +249,21 @@ func TestNFR_UX_001_NoMouseTrackingInPlainSession(t *testing.T) {
 }
 
 // TestNFR_PORT_002_TermMatrix starts sshelf under each supported TERM,
-// connects to the test server, exits the remote shell and checks that the
-// host list is redrawn, the session got the same TERM, mouse tracking was
-// off during the session and after quitting, and stty -a is unchanged
+// connects to the test server, exits the remote shell inside the frame,
+// closes the ended tab and checks that the host list is redrawn, the
+// remote PTY is xterm-256color (the emulator's terminal, whatever the
+// local TERM), mouse tracking was off during the session and after
+// quitting, and stty -a is unchanged
 // after quitting.
 func TestNFR_PORT_002_TermMatrix(t *testing.T) {
 	for _, term := range []string{"xterm", "xterm-256color", "screen-256color", "tmux-256color", "xterm-kitty", "linux"} {
 		t.Run(term, func(t *testing.T) {
 			s := startSlice(t, "TERM="+term)
-			s.runChecked()
-			// The host list is drawn again after the session.
-			s.waitText(0, "web-prod demo@127.0.0.1")
+			s.runChecked() // ends on the redrawn host list
 			s.quit()
-			if after := stty(t, s.tty); after != s.before {
-				t.Fatalf("stty -a changed:\nbefore:\n%s\nafter:\n%s", s.before, after)
-			}
-			if reqs := s.srv.RequestsOfType("pty-req"); len(reqs) != 1 || reqs[0].Term != term {
-				t.Fatalf("pty-req = %+v, want TERM %q", reqs, term)
+			s.checkStty()
+			if reqs := s.srv.RequestsOfType("pty-req"); len(reqs) != 1 || reqs[0].Term != "xterm-256color" {
+				t.Fatalf("pty-req = %+v, want TERM xterm-256color", reqs)
 			}
 			if trackingOn(s.out.From(0)) {
 				t.Error("mouse tracking is still on after quitting")

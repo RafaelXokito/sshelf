@@ -25,7 +25,7 @@ func permOf(t *testing.T, path string) fs.FileMode {
 
 func TestFR_CFG_001_FirstLaunchCreatesDir(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "xdg", "sshelf")
-	a := New(Config{Dir: dir, Terminal: stillTerm{}})
+	a := New(Config{Dir: dir})
 	l, err := a.Load(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -44,7 +44,7 @@ func TestFR_CFG_001_FirstLaunchCreatesDir(t *testing.T) {
 
 func TestARCH_PKG_002_PermissionsAfterFirstSave(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "sshelf")
-	a := New(Config{Dir: dir, Terminal: stillTerm{}})
+	a := New(Config{Dir: dir})
 	if _, err := a.Load(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +76,7 @@ func TestSEC_FILE_002_NoticeShownOnce(t *testing.T) {
 	if err := os.Chmod(paths.ConfigFile(dir), 0o644); err != nil { //nolint:gosec // a deliberately loose mode to repair
 		t.Fatal(err)
 	}
-	a := New(Config{Dir: dir, Terminal: stillTerm{}})
+	a := New(Config{Dir: dir})
 	l, err := a.Load(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -87,7 +87,7 @@ func TestSEC_FILE_002_NoticeShownOnce(t *testing.T) {
 	if m := permOf(t, paths.ConfigFile(dir)); m != paths.FileMode {
 		t.Fatalf("config.json mode %o after start", m)
 	}
-	l, err = New(Config{Dir: dir, Terminal: stillTerm{}}).Load(context.Background())
+	l, err = New(Config{Dir: dir}).Load(context.Background())
 	if err != nil || len(l.Notices) != 0 {
 		t.Fatalf("second start: notices = %q, %v", l.Notices, err)
 	}
@@ -99,7 +99,7 @@ func TestFR_CFG_003_BrokenConfigUntouched(t *testing.T) {
 	if err := os.WriteFile(paths.ConfigFile(dir), []byte(broken), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	a := New(Config{Dir: dir, Terminal: stillTerm{}})
+	a := New(Config{Dir: dir})
 	_, err := a.Load(context.Background())
 	le, ok := errors.AsType[*LoadError](err)
 	if !ok || !errors.Is(err, store.ErrCorrupt) || le.Path != paths.ConfigFile(dir) || le.Line != 3 {
@@ -115,7 +115,7 @@ func TestFR_CFG_003_UnknownSettingNotice(t *testing.T) {
 	if err := os.WriteFile(paths.ConfigFile(dir), []byte(`{"version": 1, "settings": {"fancy": true}}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	l, err := New(Config{Dir: dir, Terminal: stillTerm{}}).Load(context.Background())
+	l, err := New(Config{Dir: dir}).Load(context.Background())
 	if err != nil || len(l.Notices) == 0 || !strings.Contains(l.Notices[len(l.Notices)-1], `"fancy"`) {
 		t.Fatalf("Load = %+v, %v", l, err)
 	}

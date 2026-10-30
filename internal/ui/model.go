@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"image/color"
 	"strings"
 	"time"
 
@@ -71,9 +72,8 @@ type HostDeleteFailedMsg struct {
 	Err   error
 }
 
-// ConnectedMsg carries an authenticated session. An app.FramedSession
-// opens a tab; any other session is handed the terminal with tea.Exec
-// (the MVP path, removed by T-037).
+// ConnectedMsg carries an authenticated session; it opens a tab, or
+// reconnects an ended one (FR-TAB-002, FR-CONN-010).
 type ConnectedMsg struct {
 	attempt int
 	HostID  domain.ID
@@ -89,25 +89,12 @@ type ConnectFailedMsg struct {
 	Err     error
 }
 
-// execEndedMsg reports that a session run with tea.Exec returned the
-// terminal (the MVP path, removed by T-037). Err is nil for exit status
-// 0, a *session.ExitError, a *session.DisconnectError, or another error.
-type execEndedMsg struct {
-	HostID domain.ID
-	Label  string
-	Err    error
-}
-
-// execFunc is tea.Exec; tests replace it.
-type execFunc func(tea.ExecCommand, tea.ExecCallback) tea.Cmd
-
 // Model is the root Bubble Tea model.
 type Model struct {
 	svc    app.Service
 	screen components.Screen // nil while loading
 	modals []components.Modal
 	status string
-	exec   execFunc
 
 	identities []domain.Identity // for the host form's picker
 	prev       components.Screen // the screen to return to while a form is open
@@ -131,25 +118,32 @@ type Model struct {
 	attemptTab int  // the ended tab the attempt in progress reconnects; 0 for a new tab
 	quitAsked  bool // the "Quit and close N sessions?" confirmation is open
 
+	// fg and bg are the terminal's default colours once Bubble Tea
+	// reports them; every session answers OSC 10/11 with them
+	// (ARCH-SESS-016). nil until reported.
+	fg, bg color.Color
+
 	clicks components.ClickTracker // recognises double-clicks (ARCH-UI-007)
 
-	now    func() time.Time                           // injectable clock
-	tick   func() tea.Cmd                             // the one-second clock; tests replace it
-	listen func(num int, s app.FramedSession) tea.Cmd // waits for a session's next update; tests replace it
+	now    func() time.Time                     // injectable clock
+	tick   func() tea.Cmd                       // the one-second clock; tests replace it
+	listen func(num int, s app.Session) tea.Cmd // waits for a session's next update; tests replace it
 }
 
 // New returns the root model. It does no I/O; Init loads the config.
 func New(svc app.Service) Model {
-	return Model{svc: svc, exec: tea.Exec, now: time.Now, tick: tickEverySecond, listen: listenSession}
+	return Model{svc: svc, now: time.Now, tick: tickEverySecond, listen: listenSession}
 }
 
-// Init implements tea.Model.
+// Init implements tea.Model. Besides loading the config it asks the
+// terminal for its default colours, for the sessions' emulators
+// (ARCH-SESS-016).
 func (m Model) Init() tea.Cmd {
 	svc := m.svc
 	return tea.Batch(func() tea.Msg {
 		l, err := svc.Load(context.Background())
 		return LoadedMsg{Hosts: l.Hosts, Identities: l.Identities, Notices: l.Notices, Err: err}
-	}, probeStore(svc))
+	}, probeStore(svc), tea.RequestBackgroundColor, tea.RequestForegroundColor)
 }
 
 // Update implements tea.Model.
@@ -423,16 +417,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.cancelAttempt()
 		m.modals = nil
 		m.status = ""
-		if fs, ok := msg.Session.(app.FramedSession); ok {
-			if t := m.attemptTabPtr(); t != nil {
-				return m.reconnected(t, fs)
-			}
-			return m.openTab(msg.HostID, msg.Label, m.attemptAddr, fs)
+		if t := m.attemptTabPtr(); t != nil {
+			return m.reconnected(t, msg.Session)
 		}
-		hostID, label := msg.HostID, msg.Label
-		return m, m.exec(msg.Session, func(err error) tea.Msg {
-			return execEndedMsg{HostID: hostID, Label: label, Err: err}
-		})
+		return m.openTab(msg.HostID, msg.Label, m.attemptAddr, msg.Session)
 
 	case ConnectFailedMsg:
 		if msg.attempt != m.attempt || m.cancel == nil {
@@ -452,13 +440,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case keychanged.CloseMsg:
 		m.popModal()
-		return m, nil
-
-	case execEndedMsg:
-		m.status = endedStatus(msg.Label, msg.Err)
-		if l, ok := m.screen.(hostlist.Model); ok {
-			m.screen = l.Select(msg.HostID)
-		}
 		return m, nil
 	}
 
@@ -522,8 +503,12 @@ func (m Model) startConnect(hostID domain.ID, label string) (tea.Model, tea.Cmd)
 	m.modals = append(m.modals, connecting.New(label))
 	m.status = ""
 	svc, attempt := m.svc, m.attempt
+	var size app.Size // 80×24 until the terminal size is known
+	if m.width > 0 {
+		size = m.areaSize()
+	}
 	return m, func() tea.Msg {
-		s, err := svc.Connect(ctx, hostID)
+		s, err := svc.Connect(ctx, hostID, size)
 		if err != nil {
 			return ConnectFailedMsg{attempt: attempt, HostID: hostID, Label: label, Err: err}
 		}
@@ -585,16 +570,6 @@ func failedStatus(label string, err error) string {
 	}
 	if re, ok := errors.AsType[*app.HostKeyRevokedError](err); ok {
 		return fmt.Sprintf("%s: host key revoked (%s line %d); connection refused", label, re.Entry.File, re.Entry.Line)
-	}
-	return label + ": " + domain.Sanitize(err.Error()) // may carry server text
-}
-
-// endedStatus is the status-bar text after a session (FR-CONN-005), e.g.
-// "web-prod: exited (3)" or "web-prod: connection lost: <reason>".
-func endedStatus(label string, err error) string {
-	label = domain.Sanitize(label)
-	if err == nil {
-		return label + ": exited (0)"
 	}
 	return label + ": " + domain.Sanitize(err.Error()) // may carry server text
 }

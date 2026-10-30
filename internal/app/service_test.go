@@ -13,13 +13,6 @@ import (
 	"github.com/RafaelXokito/sshelf/internal/testutil/sshtest"
 )
 
-// stillTerm is a session.Terminal of fixed size that never resizes.
-type stillTerm struct{}
-
-func (stillTerm) MakeRaw() (func() error, error)     { return func() error { return nil }, nil }
-func (stillTerm) Size() (int, int, error)            { return 80, 24, nil }
-func (stillTerm) Resizes() (<-chan struct{}, func()) { return nil, func() {} }
-
 // sliceFixture is a config dir with one key-file host pointing at an
 // sshtest server, as in the T-004 demo.
 func sliceFixture(t *testing.T, authorize bool) (*App, *sshtest.Server) {
@@ -60,7 +53,6 @@ func sliceFixture(t *testing.T, authorize bool) (*App, *sshtest.Server) {
 		Dir:             dir,
 		KnownHostsFiles: []string{kh},
 		Home:            home,
-		Terminal:        stillTerm{},
 	})
 	return a, srv
 }
@@ -74,12 +66,14 @@ func TestFR_CONN_001_ServiceConnectsKeyFileHost(t *testing.T) {
 	if hosts := l.Hosts; len(hosts) != 2 || hosts[0].Label != "web-prod" || hosts[1].Label != "zeta" {
 		t.Fatalf("hosts = %+v, want sorted by label", hosts)
 	}
-	s, err := a.Connect(context.Background(), "h1")
+	s, err := a.Connect(context.Background(), "h1", Size{Cols: 100, Rows: 28})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = s.Close() }()
-	if pty := srv.RequestsOfType("pty-req"); len(pty) != 1 || pty[0].Width != 80 || pty[0].Height != 24 {
+	// The PTY is the session area, with the emulator's TERM (FR-CONN-001
+	// revision).
+	if pty := srv.RequestsOfType("pty-req"); len(pty) != 1 || pty[0].Width != 100 || pty[0].Height != 28 || pty[0].Term != "xterm-256color" {
 		t.Fatalf("pty-req = %+v", pty)
 	}
 	if sh := srv.RequestsOfType("shell"); len(sh) != 1 {
@@ -92,7 +86,7 @@ func TestARCH_SESS_002_AuthFailureReturnsNoSession(t *testing.T) {
 	if _, err := a.Load(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	s, err := a.Connect(context.Background(), "h1")
+	s, err := a.Connect(context.Background(), "h1", Size{})
 	if err == nil || s != nil {
 		t.Fatalf("Connect() = %v, %v; want an auth error and no session", s, err)
 	}
@@ -105,11 +99,11 @@ func TestARCH_SESS_002_AuthFailureReturnsNoSession(t *testing.T) {
 }
 
 func TestConnectUnknownHost(t *testing.T) {
-	a := New(Config{Dir: t.TempDir(), Terminal: stillTerm{}})
+	a := New(Config{Dir: t.TempDir()})
 	if _, err := a.Load(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := a.Connect(context.Background(), "nope"); !errors.Is(err, ErrHostNotFound) {
+	if _, err := a.Connect(context.Background(), "nope", Size{}); !errors.Is(err, ErrHostNotFound) {
 		t.Fatalf("err = %v", err)
 	}
 	// Without SetSend an unknown host key is rejected without a prompt.

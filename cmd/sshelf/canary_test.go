@@ -114,13 +114,6 @@ func (cs canaries) envHits() []string {
 	return cs.hits("os.Environ()", []byte(strings.Join(os.Environ(), "\n")))
 }
 
-// canaryTerm is a session.Terminal that never resizes and needs no TTY.
-type canaryTerm struct{}
-
-func (canaryTerm) MakeRaw() (func() error, error)     { return func() error { return nil }, nil }
-func (canaryTerm) Size() (int, int, error)            { return 80, 24, nil }
-func (canaryTerm) Resizes() (<-chan struct{}, func()) { return nil, func() {} }
-
 // TestARCH_SEC_001_CanaryScan is the in-process ARCH-SEC-001 acceptance:
 // with debug logging on and a MemStore, it saves a host with a canary
 // password and one with a canary key and passphrase, connects both, edits
@@ -153,7 +146,6 @@ func TestARCH_SEC_001_CanaryScan(t *testing.T) {
 		KnownHostsFiles: paths.KnownHostsFiles(cfgDir, home),
 		Secrets:         store,
 		Home:            home,
-		Terminal:        canaryTerm{},
 	})
 	ctx := context.Background()
 	if _, err := a.Load(ctx); err != nil {
@@ -176,13 +168,14 @@ func TestARCH_SEC_001_CanaryScan(t *testing.T) {
 		t.Fatalf("store holds %d items, want 3 (password, key, passphrase)", n)
 	}
 	for _, h := range []domain.Host{pwHost.Host, keyHost.Host} {
-		sess, err := a.Connect(ctx, h.ID)
+		sess, err := a.Connect(ctx, h.ID, app.Size{Cols: 80, Rows: 22})
 		if err != nil {
 			t.Fatalf("connect %s: %v", h.Label, err)
 		}
 		if err := sess.Close(); err != nil {
 			t.Fatal(err)
 		}
+		<-sess.Done()
 	}
 	edited := pwHost.Host
 	edited.Label = "pw-renamed"

@@ -8,8 +8,7 @@ import (
 	"github.com/RafaelXokito/sshelf/internal/session"
 )
 
-// The M2 session shape (design §8.4). The types are the session package's;
-// T-037 renames FramedSession to Session when it removes the MVP handover.
+// The session shape (design §8.4). The types are the session package's.
 
 // Size is a session area in cells.
 type Size = session.Size
@@ -31,11 +30,11 @@ const (
 // Snapshot is a copy of a session's screen, taken under the emulator lock.
 type Snapshot = session.Snapshot
 
-// FramedSession is a session rendered inside sshelf's frame (design §8.4,
+// Session is a session rendered inside sshelf's frame (design §8.4,
 // ADR-012). Input methods never block. Updates is closed after the end;
 // then Err reports the cause once: nil (exit 0), *session.ExitError,
 // *session.DisconnectError or session.ErrInternal.
-type FramedSession interface {
+type Session interface {
 	SendKey(k uv.KeyPressEvent) error
 	SendMouse(m uv.MouseEvent) error
 	Paste(text string) error
@@ -59,5 +58,5 @@ type FramedSession interface {
 	Close() error
 }
 
-// The emulator-backed session is a FramedSession.
-var _ FramedSession = (*session.Session)(nil)
+// The emulator-backed session is a Session.
+var _ Session = (*session.Session)(nil)

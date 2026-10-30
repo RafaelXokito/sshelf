@@ -146,8 +146,8 @@ func TestFR_TAB_002_SameHostTwice(t *testing.T) {
 	if h := headerLine(d); !strings.Contains(h, "│ 1 web-prod │[2 web-prod]│") {
 		t.Fatalf("header = %q", h)
 	}
-	if len(svc.connected) != 2 || d.execs != 0 {
-		t.Fatalf("connects = %v, execs = %d", svc.connected, d.execs)
+	if len(svc.connected) != 2 || len(d.root().tabs) != 2 {
+		t.Fatalf("connects = %v, tabs = %d", svc.connected, len(d.root().tabs))
 	}
 	if a, b := d.root().tabs[0].sess, d.root().tabs[1].sess; a == b {
 		t.Fatal("both tabs share one session")
@@ -159,7 +159,7 @@ func TestFR_TAB_002_NumbersNotReused(t *testing.T) {
 	for _, id := range []domain.ID{"h1", "h2", "h3"} {
 		connectHost(t, d, id)
 	}
-	first := d.root().tabs[0].sess.(framedStub)
+	first := d.root().tabs[0].sess.(*apptest.FakeSession)
 	m, cmd := d.root().closeTab(1)
 	d.m = m
 	d.run(cmd)
@@ -259,7 +259,7 @@ func TestFR_TAB_003_LabelSanitisedAndCut(t *testing.T) {
 	}
 
 	// D-014: what the remote prints never names the tab.
-	s := d.root().tabs[0].sess.(framedStub)
+	s := d.root().tabs[0].sess.(*apptest.FakeSession)
 	s.Output("\x1b]0;remote title\x07prompt$ ")
 	d.pump(1)
 	if h := headerLine(d); strings.Contains(h, "remote title") {

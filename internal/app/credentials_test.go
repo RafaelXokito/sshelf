@@ -115,7 +115,6 @@ func credApp(t *testing.T, store secrets.Store, srvs []*sshtest.Server, identiti
 		KnownHostsFiles: []string{paths.KnownHostsFile(dir)},
 		Secrets:         store,
 		Home:            t.TempDir(),
-		Terminal:        stillTerm{},
 	})
 	if _, err := a.Load(context.Background()); err != nil {
 		t.Fatal(err)
@@ -160,7 +159,7 @@ func failOnPrompt(t *testing.T, a *App) {
 
 func connectOK(t *testing.T, a *App, hostID string) {
 	t.Helper()
-	s, err := a.Connect(context.Background(), domain.ID(hostID))
+	s, err := a.Connect(context.Background(), domain.ID(hostID), Size{})
 	if err != nil {
 		t.Fatalf("connect %s: %v", hostID, err)
 	}
@@ -319,7 +318,7 @@ func TestSEC_SESSION_001_NoGetOnRejectedHostKey(t *testing.T) {
 	a := credApp(t, store, nil, `[{"id": "i1", "name": "ops", "has_password": true}]`,
 		fmt.Sprintf(`[{"id": "h1", "label": "web-prod", "hostname": %q, "port": %d, "user": "deploy", "identity_id": "i1"}]`, srv.Host(), srv.Port()))
 	// No SetSend: the unknown host key is rejected without a prompt.
-	if s, err := a.Connect(context.Background(), "h1"); !errors.Is(err, ErrHostKeyRejected) {
+	if s, err := a.Connect(context.Background(), "h1", Size{}); !errors.Is(err, ErrHostKeyRejected) {
 		if s != nil {
 			_ = s.Close()
 		}
@@ -346,7 +345,7 @@ func TestSEC_SESSION_001_PasswordNotSentToOtherHost(t *testing.T) {
 		`[{"id": "ha", "label": "a", "hostname": %[1]q, "port": %[2]d, "user": "deploy", "identity_id": "ia"},
 		  {"id": "hb", "label": "b", "hostname": %[3]q, "port": %[4]d, "user": "deploy", "identity_id": "ib"}]`)
 	cancelPrompts(a) // B rejects its password, then asks the user: cancelled
-	if s, err := a.Connect(context.Background(), "hb"); err == nil {
+	if s, err := a.Connect(context.Background(), "hb", Size{}); err == nil {
 		_ = s.Close()
 		t.Fatal("host B accepted a password it was never given")
 	}
