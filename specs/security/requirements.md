@@ -492,7 +492,7 @@ Priority: M3 · Status: Implemented · Threats: T-22, T-23 · Source: D-020
 When the system downloads or uploads a file, it shall write the data to `<name>.sshelf-part` in the target directory,
 created with mode 0600, and only after the last byte is written and the size checked shall it set the file's mode
 and modification time and rename it to the final name.
-Priority: M3 · Status: Draft · Threats: T-18, T-23 · Source: D-020
+Priority: M3 · Status: Implemented · Threats: T-18, T-23 · Source: D-020
 - AC1: A download interrupted at 50 % leaves the old target (if any) byte-for-byte unchanged and a
   `<name>.sshelf-part` file of mode 0600; no file with the final name and partial content ever exists (polling test).
 - AC2: A completed transfer whose received size differs from the size the source reported fails with "size

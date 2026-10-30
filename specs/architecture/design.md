@@ -1040,11 +1040,11 @@ removed in revision 2.
 - Acceptance: In UI tests the fake `app.Browser` panics when called from `Update` (the ARCH-UI-002 goroutine marker). `files` unit tests: a listing returns `Entries`, `Skipped` (unsafe names) and `Truncated`; the 64 MiB browse-channel budget cancels a listing (sshtest serving long names); the result never holds an unsafe name.
 
 **ARCH-SFTP-003**: The system shall run each SFTP tab's transfers in its own goroutines, at most 2 at a time, report state changes through a capacity-1 channel written without blocking, and let the UI read progress through a snapshot, so that no transfer ever blocks the UI goroutine or waits for it.
-- Priority: M3 · Status: Draft · Source: ADR-018, NFR-PERF-008
+- Priority: M3 · Status: Implemented · Source: ADR-018, NFR-PERF-008
 - Acceptance: With 10 queued files, never more than 2 are `running` (sshtest counts concurrent open write handles). 10,000 state changes leave at most one pending notification. A stalled sshtest (not answering) blocks no call made from `Update` for more than 1 ms. Workers start through `term.SafeGo`; a panic forced in one (`sshelf_faultinject`) fails that job with `internal error` and leaves the tab and other sessions running. No worker calls `Program.Send`. `goleak` passes after the tab closes.
 
 **ARCH-SFTP-004**: The system shall stream every transfer through fixed-size buffers, writing downloads to a local `<name>.sshelf-part` through `File.WriteTo` with a cancelling, size-limiting writer and uploads to a remote part file through 1 MiB `WriteAt` calls, and shall cancel a transfer within 1 s.
-- Priority: M3 · Status: Draft · Source: ADR-016 limitation 3, ADR-018, NFR-SIZE-004
+- Priority: M3 · Status: Implemented · Source: ADR-016 limitation 3, ADR-018, NFR-SIZE-004
 - Acceptance: A 64 MiB transfer in each direction is cancelled at about 50 %: the job is `cancelled` within 1 s and its part file is gone. The download writer stops at the size from `Fstat` (SEC-SFTP-004 AC3). The heap check of NFR-SIZE-004 passes.
 
 **ARCH-SFTP-005**: The system shall record, for each transfer, the source's size and modification time when it starts and, for uploads, a checkpoint {acknowledged offset, part size, part mtime} every 8 MiB and on every clean pause or cancel, and shall resume only under the conditions of FR-SFTP-017.

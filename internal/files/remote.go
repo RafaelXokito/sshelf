@@ -6,6 +6,7 @@ import (
 	"io"
 	"io/fs"
 	"log/slog"
+	"os"
 	"path"
 	"strconv"
 	"strings"
@@ -407,4 +408,127 @@ func statusText(se *sftp.StatusError) string {
 		}
 	}
 	return s
+}
+
+// The transfer channel's primitives (ADR-018). transfer.go builds the
+// queue's downloads and uploads on them; they all wrap errors with
+// remoteErr.
+
+// remoteFile is a file open on the transfer channel.
+type remoteFile struct {
+	f *sftp.File
+}
+
+// openSource opens p for reading and describes the open file (fstat), so
+// the size and time recorded are those of what is read.
+func (r *RemoteFS) openSource(p string) (*remoteFile, fs.FileInfo, error) {
+	f, err := r.transfer.Open(p)
+	if err != nil {
+		return nil, nil, remoteErr(err)
+	}
+	fi, err := f.Stat()
+	if err != nil {
+		_ = f.Close()
+		return nil, nil, remoteErr(err)
+	}
+	return &remoteFile{f: f}, fi, nil
+}
+
+// openPart opens the upload part file p for writing, creating it, and
+// emptying it unless keep (to resume). A new part's mode is set to
+// PartMode (SEC-SFTP-003).
+func (r *RemoteFS) openPart(p string, keep bool) (*remoteFile, error) {
+	flags := os.O_WRONLY | os.O_CREATE
+	if !keep {
+		flags |= os.O_TRUNC
+	}
+	f, err := r.transfer.OpenFile(p, flags)
+	if err != nil {
+		return nil, remoteErr(err)
+	}
+	if !keep {
+		_ = f.Chmod(PartMode) // best effort: some servers refuse fsetstat
+	}
+	return &remoteFile{f: f}, nil
+}
+
+// copyTo writes the file from offset off to w through the library's
+// concurrent WriteTo; it stops when w fails (ADR-016 limitation 3).
+func (f *remoteFile) copyTo(off int64, w io.Writer) (int64, error) {
+	if _, err := f.f.Seek(off, io.SeekStart); err != nil {
+		return 0, remoteErr(err)
+	}
+	n, err := f.f.WriteTo(w)
+	if err != nil && !errors.Is(err, errSizeChanged) && !errors.Is(err, context.Canceled) {
+		err = remoteErr(err)
+	}
+	return n, err
+}
+
+// WriteAt writes b at off and returns how much of b, from its start, the
+// server acknowledged (ADR-016 limitation 4).
+func (f *remoteFile) WriteAt(b []byte, off int64) (int, error) {
+	n, err := f.f.WriteAt(b, off)
+	return n, remoteErr(err)
+}
+
+// Stat describes the open file.
+func (f *remoteFile) Stat() (fs.FileInfo, error) {
+	fi, err := f.f.Stat()
+	return fi, remoteErr(err)
+}
+
+// Truncate cuts the open file to size.
+func (f *remoteFile) Truncate(size int64) error { return remoteErr(f.f.Truncate(size)) }
+
+// Close closes the file.
+func (f *remoteFile) Close() error { return remoteErr(f.f.Close()) }
+
+// lstat describes p on the transfer channel without following a link.
+func (r *RemoteFS) lstat(p string) (fs.FileInfo, error) {
+	fi, err := r.transfer.Lstat(p)
+	return fi, remoteErr(err)
+}
+
+// stat describes p on the transfer channel, following a link.
+func (r *RemoteFS) stat(p string) (fs.FileInfo, error) {
+	fi, err := r.transfer.Stat(p)
+	return fi, remoteErr(err)
+}
+
+// mkdir creates the directory p with the server's default mode.
+func (r *RemoteFS) mkdir(p string) error { return remoteErr(r.transfer.Mkdir(p)) }
+
+// remove removes the file p.
+func (r *RemoteFS) remove(p string) error { return remoteErr(r.transfer.Remove(p)) }
+
+// renameFallback forces the remove-and-rename path; tests set it.
+var renameFallback bool
+
+// finishUpload sets the part's permission bits to mode & 0777 and its
+// modification time, then moves it over final: with posix-rename when
+// the server offers it, otherwise by removing final first and renaming,
+// which leaves a short window without the file (ADR-016 limitation 5,
+// SEC-SFTP-003 AC3).
+func (r *RemoteFS) finishUpload(part, final string, mode fs.FileMode, mtime time.Time) error {
+	if err := r.transfer.Chmod(part, mode&0o777); err != nil {
+		return remoteErr(err)
+	}
+	if err := r.transfer.Chtimes(part, mtime, mtime); err != nil {
+		return remoteErr(err)
+	}
+	if _, ok := r.transfer.HasExtension("posix-rename@openssh.com"); ok && !renameFallback {
+		return remoteErr(r.transfer.PosixRename(part, final))
+	}
+	if err := r.transfer.Remove(final); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return remoteErr(err)
+	}
+	return remoteErr(r.transfer.Rename(part, final))
+}
+
+// answered reports whether err is the server's answer to a request (a
+// status), so the connection was still up when it was sent.
+func answered(err error) bool {
+	var se *sftp.StatusError
+	return errors.As(err, &se) || errors.Is(err, fs.ErrNotExist) || errors.Is(err, fs.ErrPermission)
 }
