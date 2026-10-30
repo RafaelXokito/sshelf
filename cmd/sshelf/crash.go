@@ -123,8 +123,13 @@ func (g guard) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return guard{model: m}, guardCmd(cmd)
 }
 
-// View implements tea.Model.
-func (g guard) View() tea.View { return g.model.View() }
+// View implements tea.Model. The E2E build records each frame's chrome
+// (frames_fault.go).
+func (g guard) View() tea.View {
+	v := g.model.View()
+	recordFrame(v)
+	return v
+}
 
 var cmdType = reflect.TypeFor[tea.Cmd]()
 

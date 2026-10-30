@@ -28,12 +28,19 @@ import (
 //	                space, until the channel closes
 
 // HostileCorpus is the set of sequences a hostile server sends
-// (ARCH-SESS-011, SEC-SESSION-005): clipboard, titles, a hyperlink, colour
-// changes, DCS, DECRQSS, APC, PM, SOS, a title report, a reset and 8-bit
-// C1 forms.
+// (ARCH-SESS-011, SEC-SESSION-005): clipboard writes and reads, titles, a
+// hyperlink, colour changes, DCS, DECRQSS, XTGETTCAP, APC (kitty
+// graphics), sixel, PM, SOS, mode toggles meant for the user's terminal
+// (alternate screen, bracketed paste, focus events, the kitty keyboard
+// protocol, a stray paste end marker), terminal
+// queries (DA1, DA2, DSR, CPR, DECRQM, XTVERSION, window reports), a
+// reset, 8-bit C1 forms, and very long, cut and broken sequences. The
+// only text it prints is the hyperlink's "link"; none of it prints "evil".
 var HostileCorpus = []string{
 	"\x1b]52;c;c2VjcmV0\x07",
+	"\x1b]52;c;?\x07",
 	"\x1b]0;evil title\x07",
+	"\x1b]1;evil icon\x07",
 	"\x1b]2;evil title\x1b\\",
 	"\x1b]8;;https://evil.example/\x1b\\link\x1b]8;;\x1b\\",
 	"\x1b]4;1;rgb:ff/00/00\x07",
@@ -41,12 +48,27 @@ var HostileCorpus = []string{
 	"\x1bP+q544e\x1b\\",
 	"\x1bP$qm\x1b\\",
 	"\x1b_Gf=100;AAAA\x1b\\",
+	"\x1b_Ga=T,f=100,t=d;iVBORw0KGgoevil\x1b\\",
+	"\x1bPq#0;2;0;0;0#0~~@@vv@@~~$\x1b\\",
 	"\x1b^privacy\x1b\\",
 	"\x1bXsos\x1b\\",
-	"\x1b[21t",
+	"\x1b[?1049h\x1b[?1049l",
+	"\x1b[?2004h\x1b[?2004l",
+	"\x1b[?1004h\x1b[?1004l",
+	"\x1b[>1u\x1b[?u\x1b[<u",
+	"\x1b[201~",
+	"\x1b[c\x1b[>c\x1b[5n\x1b[6n\x1b[?6n",
+	"\x1b[?2004$p\x1b[>0q",
+	"\x1b[21t\x1b[14t\x1b[18t",
 	"\x1bc",
 	"\x9b31m\x9d0;c1 title\x9c",
 	"\xc2\x9b31m",
+	"\x1b]2;" + strings.Repeat("evil ", 16<<10) + "\x07",
+	"\x1b[" + strings.Repeat("1;", 4000) + "m\x1b[m",
+	"\x1b]0;evil cut by CAN\x18",
+	"\x1bP$qevil cut by ESC\x1b[m",
+	"\x1b[?1;2\x1b]2;evil after a broken CSI\x07",
+	"\x1b]52;c;" + strings.Repeat("ZXZpbA", 8<<10) + "\x1b\\",
 }
 
 // QuerySequences is what the query command sends.

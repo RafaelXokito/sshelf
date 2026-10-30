@@ -401,7 +401,7 @@ Priority: MVP · Status: Implemented · Threats: T-20
 The system shall pass remote session output only to sshelf's terminal emulator and shall write to the user's
 terminal only characters and SGR styles rendered from emulator cells, so that no OSC (titles, clipboard, hyperlinks,
 colour changes), DCS, APC, PM, SOS or terminal query from a server reaches the user's terminal.
-Priority: M2 · Status: Draft · Threats: T-15 · Source: D-009, ADR-012
+Priority: M2 · Status: Implemented · Threats: T-15 · Source: D-009, ADR-012
 - AC1: sshtest's `hostile` script (OSC 52 clipboard write, OSC 0/2 titles, OSC 8 link, OSC 4/10/11 colour sets,
   DCS, APC, `ESC[21t`, DECRQSS, `ESC c`, 8-bit C1 forms) runs in a session; the PTY output of sshelf contains
   none of `ESC ]`, `ESC P`, `ESC _`, `ESC ^`, `ESC X` or a C1 byte, and the window title is unchanged.
