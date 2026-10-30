@@ -7,6 +7,7 @@ import (
 	"net"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -300,6 +301,27 @@ func TestARCH_TEST_001_LoopbackOnly(t *testing.T) {
 	host, port, err := net.SplitHostPort(s.Addr())
 	if err != nil || host != "127.0.0.1" || port == "0" {
 		t.Fatalf("Addr() = %q", s.Addr())
+	}
+}
+
+// TestARCH_TEST_001_WithPortStaysOnLoopback: a fixed port (sshtestd
+// -port) still listens on 127.0.0.1 only.
+func TestARCH_TEST_001_WithPortStaysOnLoopback(t *testing.T) {
+	free := New(t)
+	_, port, err := net.SplitHostPort(free.Addr())
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := strconv.Atoi(port)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := free.Close(); err != nil {
+		t.Fatal(err)
+	}
+	s := New(t, WithPort(p))
+	if s.Addr() != net.JoinHostPort("127.0.0.1", port) {
+		t.Fatalf("Addr() = %q, want 127.0.0.1:%s", s.Addr(), port)
 	}
 }
 
