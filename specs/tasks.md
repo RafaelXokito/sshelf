@@ -752,6 +752,15 @@ conventions above. v1 requirements are not yet checked by
 - **Done when:** the tests pass with `-race`, lint is clean and `go run ./scripts/tracecheck` is green.
 - **Estimate:** 0.5 d
 
+### T-061 · Duplicate host
+
+- **Delivers:** D-022 (design §9.7, credential-storage §7 "Duplicate host"). `c` on the host list (`keys.DuplicateHost`, in the host-list keymap and the footer as `c duplicate`; `I import` leaves the footer to fit 80 columns) opens `hostedit.NewDuplicate`: the host form of a new host pre-filled from the selected one, titled "Duplicate host <label>", labelled by `domain.CopyLabel` ("X Copy", "X Copy 2", … unique case-insensitively), a hidden identity's secrets shown only as "set"/"not set", a clean form that Esc closes without writing or reading anything. Save sends `HostCredentials.CopyOf`; `app.SaveHostWithCredentials` builds the copy from the stored source (no `last_connected_at`, no import source), links a shared identity as it is, and for a hidden one `Get`s each unchanged, uncleared secret and saves a new hidden identity with `Set`, rolling back every item it created and writing no config if a `Get`, `Set` or the config write fails, with a message naming the field. The README host-list keys list `c`.
+- **Satisfies:** FR-HOST-004, FR-HOST-011, FR-NAV-003 (v1 revision)
+- **Depends on:** T-044
+- **Tests:** `TestFR_HOST_004_CopyLabel` (table: free, taken in another case, `Copy 2` taken, label with spaces), `TestFR_HOST_004_KeyOpensPrefilledForm` (shared and hidden sources; title, label, fields, "set" statuses, no store call), `TestFR_HOST_004_CancelCreatesNothing` (Esc and `[ Cancel ]`: no save, no store call), `TestFR_HOST_004_SaveSelectsCopy`, `TestFR_HOST_004_FooterAndKeymap`, `TestFR_HOST_004_DuplicateGolden` (80×24 and 120×40), the host list goldens re-recorded with the new footer, `TestFR_HOST_004_CopyKeepsFieldsNotLastUse`, `TestFR_HOST_011_CopiesHiddenSecrets` (`secrets.MemStore`: new refs under the new ID, same values, source untouched, independent after edit and delete), `TestFR_HOST_011_TypedAndClearedFields`, `TestFR_HOST_011_SharedIdentityReferenced` (no store call), `TestFR_HOST_011_StoreErrorLeavesNothing` (failed `Get`: denied, not found; failed second `Set`; failed config write: no new item, `config.json` unchanged, message names the field), `TestFR_HOST_011_NoCanary` (no secret in `config.json`, the view or the error).
+- **Done when:** the tests pass with `-race`, lint is clean, `go run ./scripts/tracecheck` is green, and FR-HOST-004, FR-HOST-011 and the FR-NAV-003 v1 revision are `Implemented`.
+- **Estimate:** 1 d
+
 ---
 
 ## v1 milestones (outline)
@@ -761,7 +770,7 @@ passes.
 
 | Milestone | Scope (requirement IDs) |
 |---|---|
-| **v1-A Organise** | Groups, nesting, collapse and inheritance (FR-GROUP-001 … FR-GROUP-005); tags and tag filter (FR-TAG-001, FR-TAG-002); clone, notes, favourites, reachability, details pane (FR-HOST-004 … FR-HOST-009); history (FR-HIST-001); highlighting, help, too-small, recent, sort, group filter, multi-select (FR-NAV-005 … FR-NAV-011; the last-use order, FR-NAV-018, is T-044); wider search (ARCH-UI-003) |
+| **v1-A Organise** | Groups, nesting, collapse and inheritance (FR-GROUP-001 … FR-GROUP-005); tags and tag filter (FR-TAG-001, FR-TAG-002); notes, favourites, reachability, details pane (FR-HOST-005 … FR-HOST-009; duplicate, FR-HOST-004 and FR-HOST-011, is T-061); history (FR-HIST-001); highlighting, help, too-small, recent, sort, group filter, multi-select (FR-NAV-005 … FR-NAV-011; the last-use order, FR-NAV-018, is T-044); wider search (ARCH-UI-003) |
 | **v1-B Connection extras** | ssh-agent (FR-CONN-007, SEC-AGENT-001); keepalive (FR-CONN-009, ARCH-SESS-007); agent forwarding (FR-CONN-011, SEC-AGENT-002, ARCH-SESS-009); startup command (FR-CONN-012); quick connect (FR-CONN-013). Reconnect and disconnect moved to M2 (FR-CONN-010, FR-CONN-014, ARCH-SESS-006, ARCH-SESS-008). |
 | **v1-C Jump hosts and forwarding** | FR-JUMP-001 … FR-JUMP-004, SEC-HOSTKEY-010, ARCH-SESS-012; forwarding rules, tunnels view and safety (FR-FWD-001 … FR-FWD-007, ARCH-SESS-013) |
 | **v1-D Snippets** | FR-SNIP-001 … FR-SNIP-006 |

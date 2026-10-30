@@ -266,6 +266,12 @@ Then `Delete` each of the three refs, showing a warning that names any item that
 (SEC-CRED-004). Config first means a
 crash leaves at worst an orphan item, never a dangling reference.
 
+**Duplicate host** (D-022, FR-HOST-011). Opening the duplicate's form reads nothing. On Save, a source host
+with a hidden identity gets a new hidden identity for the copy: each secret the source has and the form left
+unchanged is read with `Get` and written with `Set` under the new identity's UUID, then the flow is "Create
+identity" above (rollback of the new items on any failure, config last). A failed `Get` stops the save before
+anything is written. A shared identity is linked, not copied, and needs no store call. Cancel calls nothing.
+
 **Connect.** Resolve host → identity. Handshake. Verify the host key (SEC-HOSTKEY-*), with each hop first for jump
 chains. **Only then** `Get` the needed fields (SEC-SESSION-001). On `ErrNotFound`, prompt for the value (SEC-CRED-007);
 offering to save it is v1 (FR-IDENT-005). On `ErrDenied`, abort with a message (SEC-CRED-006). On `ErrUnavailable` (no store, D-101), skip a stored key and prompt for a password or passphrase for this connection only, without saving it (SEC-CRED-005, SEC-CRED-006). Build the auth methods,

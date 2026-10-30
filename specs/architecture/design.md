@@ -1804,7 +1804,7 @@ stateDiagram-v2
     Welcome --> [*] : q
     Import --> HostList : apply / esc
 
-    HostList --> HostEdit : a / e
+    HostList --> HostEdit : a / e / c (duplicate, v1)
     HostEdit --> HostList : ctrl+s / esc
     HostList --> Identities : i
     Identities --> IdentityEdit : a / e
@@ -1870,7 +1870,7 @@ defined in `ui/keys`. FR-NAV-003 is authoritative for the host list.
 | Context | Keys |
 |---|---|
 | Global (outside text inputs) | `?` help (v1) · `esc` back · `ctrl+c` quit (in a form it cancels the form instead) |
-| Host list | `↑`/`↓` or `k`/`j` move · `g`/`G` first/last · `/` search · `enter` connect · `a` add · `e` edit · `d` delete (confirm) · `i` identities · `I` import · `q` quit. v1: `y` duplicate · `f` favourite · `,` settings · groups (key to be assigned; `g` is taken) |
+| Host list | `↑`/`↓` or `k`/`j` move · `g`/`G` first/last · `/` search · `enter` connect · `a` add · `e` edit · `d` delete (confirm) · `i` identities · `I` import · `q` quit. v1: `c` duplicate (D-022, FR-HOST-004) · `f` favourite · `,` settings · groups (key to be assigned; `g` is taken) |
 | Forms | `tab`/`shift+tab` move between fields · `ctrl+s` save · `esc` cancel (confirm if there are unsaved changes) |
 | TOFU | `y` trust and save · `enter`/`esc` cancel. Enter never trusts a key. "Trust once" is v1 (FR-KH-007). |
 | Any tab (M2) | `ctrl+]` then: `q` disconnect (confirm) · `?` help · `h`/`0` Hosts tab · `1`–`9` tab · `n`/`p` next/previous tab · `[` scrollback mode · `ctrl+]` literal `ctrl+]` (§8.5) |
@@ -2145,6 +2145,43 @@ presses hit the same row of the same pane. The wheel moves the pane's
 scroll position and pulls its cursor along to stay on screen; a click on
 the progress line opens the transfers view (it does not close it), and
 other clicks inside the transfers view do nothing.
+
+### 9.7 Duplicate host (v1, D-022)
+
+`c` on the host list sends `hostlist.DuplicateHostMsg{Host}`; the root
+model opens `hostedit.NewDuplicate(src, hosts, identities)`, the host form
+of a new host (ID "") pre-filled from `src` with the label
+`domain.CopyLabel(src.Label, hosts)`: "`<label> Copy`", then
+"`<label> Copy 2`", "`… Copy 3`", the first one that no host's label equals
+case-insensitively (FR-HOST-003's rule). The form looks like the edit form
+(title "Duplicate host `<label>`"): a hidden identity shows as "(none)" with
+its key file path and "set"/"not set" for each secret, a shared identity
+stays selected. Opening the form reads nothing from the store, and the form
+starts clean, so Esc closes it without a confirm and nothing is written
+anywhere (FR-HOST-004).
+
+Save sends the usual `hostedit.SaveMsg` with `HostCredentials.CopyOf` set
+to the source host's ID, and `app.SaveHostWithCredentials` does the rest
+under its lock, so the UI never holds a copied secret (FR-HOST-011):
+
+1. The new host starts from the source host as stored (every field, v1
+   ones included) with a zero `Meta`, no `LastConnectedAt` and no
+   `Import`; the form's fields (label, hostname, port, user, identity)
+   replace the source's. A missing source is `ErrHostNotFound`.
+2. A shared identity, chosen or kept, is linked as it is: no identity is
+   created and the store is not called.
+3. With "(none)" and a source hidden identity, the host is validated
+   first, then each secret the source has (`has_*`) that the form neither
+   typed nor cleared is read with `Get` into the credentials, as if typed.
+   A failed `Get` is returned as "could not copy the `<field>`: `<reason>`"
+   (a `*StoreError` for a denied or missing store, `MsgCopyNotOnDevice` for
+   `ErrNotFound`), before anything is written.
+4. The new hidden identity (new ID, the source's username and the form's
+   key path) is then saved exactly as one typed in the form: `Set` per
+   secret, every item this save created deleted again if a `Set` or the
+   config write fails, `config.json` written last
+   (credential-storage §7). The copied secrets are destroyed with the
+   rest of the credentials before the call returns.
 
 ## 10. Testing strategy
 

@@ -58,7 +58,7 @@ verification.** It has 33 requirements.
 | Area | MVP | Deferred to v1 / Later |
 |------|-----|------------------------|
 | Credentials (`FR-CRED`) | Save secrets in the OS store with no sshelf password; clear message when the store is unavailable | Opt-in plaintext fallback (Later) |
-| Hosts (`FR-HOST`) | Add or edit, delete, validate, credentials in the host form | Clone, notes, favourites, reachability check, copy command, details pane |
+| Hosts (`FR-HOST`) | Add or edit, delete, validate, credentials in the host form | Duplicate, notes, favourites, reachability check, copy command, details pane |
 | Identities (`FR-IDENT`) | Manage identities, link to hosts with a username override, key from a file or stored in sshelf, never show secrets | Save a typed password, key generation and deployment, reveal a password |
 | Connect (`FR-CONN`) | Session, key, password or keyboard-interactive auth, prompt for missing secrets, resize, return to list, clear errors | ssh-agent, keepalive, reconnect, agent forwarding, startup command, quick connect, `~.` escape |
 | Known hosts (`FR-KH`) | Unknown-key prompt (trust and save or cancel), changed-key block with removal instructions, trust `~/.ssh/known_hosts`, sshelf's own `known_hosts` file | Trust once, known-hosts view, certificate authorities |
@@ -193,12 +193,17 @@ If the label is empty, longer than 64 characters or equal (case-insensitive) to 
   - Ports `0`, `65536` and `abc` are rejected. `65535` is accepted.
   - Hostname `my host` is rejected. `2001:db8::1` is accepted.
 
-### FR-HOST-004 · Clone a host
-When the user triggers the clone action on a host, the system shall open the host form pre-filled with that host's fields and the label suffixed with " copy".
+### FR-HOST-004 · Duplicate a host
+When the user presses `c` on a host in the host list, the system shall open the host form pre-filled with that host's fields and credentials and labelled `<label> Copy`, or `<label> Copy <n>` with the smallest `n` from 2 that no host's label equals case-insensitively, and shall create nothing until the form is saved.
 
-- **Priority:** v1 · **Status:** Draft
+- **Priority:** v1 · **Status:** Draft · **Source:** D-022
 - **Acceptance:**
-  - Cloning `web-prod` opens the form with every field copied and the label `web-prod copy`. Esc saves nothing.
+  - Duplicating `web-prod` opens "Duplicate host web-prod" with the hostname, port, username and identity choice copied and the label `web-prod Copy`. With `WEB-PROD copy` saved, the label is `web-prod Copy 2`; with that saved too, `web-prod Copy 3`.
+  - A host with its own credentials (FR-HOST-010) shows "(none)" as the identity and its key file path, and each secret field shows only "set" or "not set" (FR-IDENT-004). No secret is read to open the form.
+  - Esc, Ctrl+C or `[ Cancel ]` closes the form and creates nothing: `config.json` and the credential store are unchanged, and the store is not called.
+  - The saved copy is a new host with a new ID that keeps every other field of the source (group, tags, notes, jump hosts, forwards, options, favourite) but has no `last_connected_at` and no import source. The source host is unchanged.
+  - The label is not shortened: a copy label over 64 characters gets the FR-HOST-003 error on Save.
+  - The host list footer shows `c duplicate`, and `c` is in the host list's keymap (FR-NAV-003 v1 revision).
 
 ### FR-HOST-005 · Host notes
 The system shall store an optional free-text note of up to 4,096 characters for each host and show it in the host details pane.
@@ -247,6 +252,17 @@ When the user enters a username plus a password or a key (stored or file path) d
   - A first-time user adds a host with a username and password and connects without opening the identities view.
   - The hidden identity is not listed in the identities view. Its secrets are stored as in FR-CRED-001.
   - Editing the host's credentials updates the hidden identity. Choosing a shared identity instead deletes the hidden one and its secrets.
+
+### FR-HOST-011 · Duplicated credentials
+When the user saves a duplicate (FR-HOST-004) of a host that has its own credentials (FR-HOST-010), the system shall give the new host its own hidden identity and copy each of the source's stored secrets that the form left unchanged to a new credential-store item under the new identity, reading it with `Get` and writing it with `Set`, without displaying it.
+
+- **Priority:** v1 · **Status:** Draft · **Source:** D-022
+- **Acceptance:**
+  - The new hidden identity has a new ID and the source's username, key file path and `has_*` flags. The source's items are untouched, and the copies are independent: editing or deleting either host leaves the other's secrets as they were.
+  - A secret typed in the form replaces the copied value, and a secret cleared in the form is not copied.
+  - A host linked to a shared identity is duplicated with a link to the same identity: no identity is created and the store is not called. Choosing a shared identity in the duplicate's form copies nothing either.
+  - If a `Get` or `Set` fails (access denied, no store, or the secret is not on this device, D-108), the save fails with a message naming the field, such as "could not copy the password: Access to Keychain was denied". The items already written are deleted, `config.json` is not written, and the form stays open.
+  - No secret value appears on screen, in `config.json` or in the log.
 
 ---
 
@@ -638,6 +654,9 @@ The system shall provide these bindings in the host list: ↑/↓ or `k`/`j` to 
   - While the search field is focused, letter keys type into the query.
   - Ctrl+C inside a form cancels the form and does not quit.
   - In any other view, Esc goes back to the previous view. `q` quits only from the host list.
+- **v1 revision** · Priority: v1 · Status: Draft · Source: D-022
+  - *Revised:* The system shall provide these bindings in the host list: ↑/↓ or `k`/`j` to move, `g`/`G` for first/last, `/` to search, `Enter` to connect, `a` to add, `c` to duplicate (FR-HOST-004), `e` to edit, `d` to delete, `i` for identities, `I` to import, and `q` or `Ctrl+C` to quit.
+  - *Acceptance:* the criteria above. The footer shows `c duplicate`; to fit 80 columns it no longer shows `I import`, which stays bound and is listed in the keymap and the README.
 
 ### FR-NAV-004 · Key hints footer
 The system shall show a one-line footer with the main key bindings of the current view.
