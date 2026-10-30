@@ -583,7 +583,7 @@ The system shall display each host as one line showing the label and `user@hostn
   - Port 22 is omitted from the display.
   - Lines wider than the terminal are truncated with `…`.
   - With no hosts, the Welcome screen (FR-NAV-013) is shown instead of the list.
-- **v1 revision** · Priority: v1 · Status: Draft · Source: D-016
+- **v1 revision** · Priority: v1 · Status: Implemented · Source: D-016
   - *Revised:* The system shall display each host as one line showing the label and `user@hostname:port`, in the order of FR-NAV-018.
   - *Acceptance:* the criteria above, with the order, the relative time and the narrow-terminal rule of FR-NAV-018.
 
@@ -723,7 +723,7 @@ While the Hosts tab is focused and no modal is open, when the user clicks a tab 
 ### FR-NAV-018 · Hosts ordered by last use
 The system shall order the host list by the time each host's last session was established, most recent first, followed by the hosts never connected in A–Z order by label, and show that time on each row as a dim relative time.
 
-- **Priority:** v1 · **Status:** Draft · **Source:** D-016
+- **Priority:** v1 · **Status:** Implemented · **Source:** D-016
 - **Acceptance:**
   - A session counts once it is established: authenticated and its shell (or remote command) opened (ARCH-SESS-002). sshelf then sets the host's `last_connected_at` to the current time (RFC 3339, UTC, whole seconds) and writes `config.json` through the atomic save (SEC-FILE-003). Reconnecting an ended tab (FR-CONN-010) counts.
   - A failed dial, a cancelled TOFU prompt (FR-KH-001), an authentication failure or cancel, a session that could not be opened and a cancelled attempt leave `last_connected_at` and `config.json` unchanged.

@@ -1,0 +1,24 @@
+sshelf │[Hosts]│
+
+> web-prod             ubuntu@10.0.0.10                                 just now
+  cache                redis@cache.internal                               5m ago
+  db-staging           admin@10.0.1.20:2222                               2h ago
+  a-host-with-a-very-long-label-for-the-list someone@long-hostname.sub…   1d ago
+  api-eu               deploy@api.eu.example.com                          3d ago
+  legacy-ftp           ftp.example.org                                    Sep 12
+  archive              archive.example.org                              Sep 2025
+  Bastion              jump@bastion.example.com:2200
+  zeta                 10.0.0.30
+
+
+
+
+
+
+
+
+
+
+
+
+enter connect • / search • a add • e edit • d delete • I import • q quit

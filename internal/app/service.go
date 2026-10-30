@@ -1,7 +1,6 @@
 package app
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"log/slog"
@@ -9,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/RafaelXokito/sshelf/internal/domain"
 	"github.com/RafaelXokito/sshelf/internal/paths"
@@ -28,7 +28,7 @@ type LoadError = store.LoadError
 
 // Loaded is the result of Service.Load.
 type Loaded struct {
-	Hosts []domain.Host // sorted by label
+	Hosts []domain.Host // in last-use order (domain.CompareLastUse)
 	// Identities are every identity, hidden ones included, sorted by
 	// label. They carry no secrets.
 	Identities []domain.Identity
@@ -78,7 +78,7 @@ type Service interface {
 // SavedHost is the result of Service.SaveHost.
 type SavedHost struct {
 	Host  domain.Host   // as saved, with its ID
-	Hosts []domain.Host // every host after the save, sorted by label
+	Hosts []domain.Host // every host after the save, in last-use order
 	// Identities are every identity after the save, hidden ones
 	// included, sorted by name.
 	Identities []domain.Identity
@@ -101,6 +101,9 @@ type Config struct {
 	// Home is the directory "~" in key paths expands to; "" means
 	// os.UserHomeDir.
 	Home string
+	// Now is the clock that stamps a host's last connection
+	// (FR-NAV-018); nil means time.Now. Tests set a fake one.
+	Now func() time.Time
 }
 
 // App implements Service, and sshclient.Prompter for its own connections.
@@ -119,6 +122,9 @@ type App struct {
 
 // New returns an App. It does no I/O.
 func New(cfg Config) *App {
+	if cfg.Now == nil {
+		cfg.Now = time.Now
+	}
 	return &App{cfg: cfg}
 }
 
@@ -159,13 +165,10 @@ func (a *App) Load(ctx context.Context) (Loaded, error) {
 	return Loaded{Hosts: sortedHosts(snap.Data.Hosts), Identities: sortedIdentities(snap.Data.Identities), FirstRun: snap.FirstRun, Notices: notices}, nil
 }
 
-// sortedHosts returns a copy of hosts sorted by label, case-insensitively.
+// sortedHosts returns a copy of hosts in the host list's order: last use,
+// then label (domain.CompareLastUse, FR-NAV-018).
 func sortedHosts(hosts []domain.Host) []domain.Host {
-	hosts = slices.Clone(hosts)
-	slices.SortStableFunc(hosts, func(x, y domain.Host) int {
-		return cmp.Compare(strings.ToLower(x.Label), strings.ToLower(y.Label))
-	})
-	return hosts
+	return domain.SortByLastUse(hosts)
 }
 
 // SaveHost implements Service (FR-HOST-001): SaveHostWithCredentials
@@ -224,5 +227,30 @@ func (a *App) Connect(ctx context.Context, hostID domain.ID, size Size) (Session
 		return nil, err // never a typed nil inside the interface
 	}
 	slog.Debug("connect: session open", "host", h.Label)
+	if ctx.Err() == nil { // a cancelled attempt's session is discarded by the UI
+		a.recordConnected(hostID)
+	}
 	return s, nil
+}
+
+// recordConnected stamps the host's last connection with the current
+// time and writes config.json (FR-NAV-018). Connect calls it only once the
+// session is established: authenticated, and the shell or command
+// started. The time is kept in memory even if the write fails, so the
+// next save writes it; a failed write does not fail the connection.
+func (a *App) recordConnected(id domain.ID) {
+	now := a.cfg.Now().UTC().Truncate(time.Second)
+	a.mu.Lock()
+	defer a.mu.Unlock() // held across the write, so saves never interleave
+	i := slices.IndexFunc(a.data.Hosts, func(h domain.Host) bool { return h.ID == id })
+	if i < 0 {
+		return // deleted while connecting
+	}
+	data := a.data
+	data.Hosts = slices.Clone(a.data.Hosts)
+	data.Hosts[i].LastConnectedAt = &now
+	a.data = data
+	if err := a.saveConfig(data); err != nil {
+		slog.Debug("connect: last connection not saved", "host", data.Hosts[i].Label, "err", err)
+	}
 }

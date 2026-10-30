@@ -10,6 +10,7 @@ import (
 	"os"
 	"slices"
 	"sort"
+	"time"
 
 	"github.com/RafaelXokito/sshelf/internal/domain"
 )
@@ -102,7 +103,8 @@ func decode(path string, b []byte) (*Snapshot, error) {
 			Err:     ErrNewerVersion,
 		}
 	}
-	s := &Snapshot{Data: f.toDomain()}
+	s := &Snapshot{}
+	s.Data, s.Warnings = f.toDomain()
 	// Unknown setting keys are ignored with a warning (FR-CFG-003).
 	var probe struct {
 		Settings map[string]any `json:"settings"`
@@ -200,9 +202,43 @@ type fileHost struct {
 	Tags         []string `json:"tags"`
 	JumpHostIDs  []string `json:"jump_host_ids"`
 	ForwardAgent bool     `json:"forward_agent"`
+	// LastConnectedAt is the host's last established session, RFC 3339
+	// in UTC with whole seconds (FR-NAV-018). It is optional and was added
+	// without a version bump: older files have no such field.
+	LastConnectedAt string `json:"last_connected_at,omitempty"`
 }
 
-func (f fileConfig) toDomain() domain.Data {
+// parseLastConnected returns the time in s, in UTC to the second, and
+// true; nil and true for ""; nil and false for anything that is not an
+// RFC 3339 time within the years 1 to 9999, the range that can always be
+// written again.
+func parseLastConnected(s string) (*time.Time, bool) {
+	if s == "" {
+		return nil, true
+	}
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		return nil, false
+	}
+	t = t.UTC().Truncate(time.Second)
+	if y := t.Year(); y < 1 || y > 9999 {
+		return nil, false
+	}
+	return &t, true
+}
+
+// formatLastConnected is the inverse of parseLastConnected.
+func formatLastConnected(t *time.Time) string {
+	if t == nil {
+		return ""
+	}
+	return t.UTC().Truncate(time.Second).Format(time.RFC3339)
+}
+
+// toDomain converts the file to domain data. The warnings name values
+// that were ignored, one line each.
+func (f fileConfig) toDomain() (domain.Data, []string) {
+	var warnings []string
 	d := domain.Data{Version: Version}
 	d.Settings.Theme = f.Settings.Theme
 	for _, g := range f.Groups {
@@ -241,9 +277,14 @@ func (f fileConfig) toDomain() domain.Data {
 			dh.JumpHostIDs = append(dh.JumpHostIDs, domain.ID(j))
 		}
 		dh.Options.ForwardAgent = h.ForwardAgent
+		var ok bool
+		if dh.LastConnectedAt, ok = parseLastConnected(h.LastConnectedAt); !ok {
+			warnings = append(warnings, fmt.Sprintf("config.json: host %q: last_connected_at %q is not an RFC 3339 time; ignored",
+				domain.Sanitize(h.Label), domain.Sanitize(h.LastConnectedAt)))
+		}
 		d.Hosts = append(d.Hosts, dh)
 	}
-	return d
+	return d, warnings
 }
 
 func fromDomain(d domain.Data) fileConfig {
@@ -278,16 +319,17 @@ func fromDomain(d domain.Data) fileConfig {
 	}
 	for _, h := range d.Hosts {
 		fh := fileHost{
-			ID:           string(h.ID),
-			Label:        h.Label,
-			Hostname:     h.Hostname,
-			Port:         h.Port,
-			User:         h.User,
-			IdentityID:   string(h.IdentityID),
-			GroupID:      string(h.GroupID),
-			Tags:         append([]string{}, h.Tags...),
-			JumpHostIDs:  []string{},
-			ForwardAgent: h.Options.ForwardAgent,
+			ID:              string(h.ID),
+			Label:           h.Label,
+			Hostname:        h.Hostname,
+			Port:            h.Port,
+			User:            h.User,
+			IdentityID:      string(h.IdentityID),
+			GroupID:         string(h.GroupID),
+			Tags:            append([]string{}, h.Tags...),
+			JumpHostIDs:     []string{},
+			ForwardAgent:    h.Options.ForwardAgent,
+			LastConnectedAt: formatLastConnected(h.LastConnectedAt),
 		}
 		for _, j := range h.JumpHostIDs {
 			fh.JumpHostIDs = append(fh.JumpHostIDs, string(j))

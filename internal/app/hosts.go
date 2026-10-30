@@ -10,7 +10,7 @@ import (
 
 // DeletedHost is the result of DeleteHost.
 type DeletedHost struct {
-	Hosts      []domain.Host     // every remaining host, sorted by label
+	Hosts      []domain.Host     // every remaining host, in last-use order
 	Identities []domain.Identity // every remaining identity
 	Warnings   []string          // stored items that could not be deleted
 }

@@ -57,13 +57,16 @@ cfg="$work/home/xdg/sshelf"
 # Trust server A only, so the TOFU prompt shows once, for server B.
 grep -A1 '^known_hosts line' "$work/a.out" | tail -1 >"$cfg/known_hosts"
 chmod 600 "$cfg/known_hosts"
+# db-staging was last used three hours ago (FR-NAV-018), so it heads the list;
+# the other two have never been connected. (BSD date first, then GNU date.)
+used=$(date -u -v-3H +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '3 hours ago' +%Y-%m-%dT%H:%M:%SZ)
 cat >"$cfg/config.json" <<EOF
 {
   "version": 1,
   "identities": [{"id": "0192a000-0000-7000-8000-000000000001", "name": "demo", "username": "demo", "key_path": "$key"}],
   "hosts": [
     {"id": "0192a000-0000-7000-8000-000000000011", "label": "web-prod", "hostname": "127.0.0.1", "port": $PORT_A, "user": "demo", "identity_id": "0192a000-0000-7000-8000-000000000001", "tags": ["prod"]},
-    {"id": "0192a000-0000-7000-8000-000000000012", "label": "db-staging", "hostname": "127.0.0.1", "port": $PORT_A, "user": "demo", "identity_id": "0192a000-0000-7000-8000-000000000001", "tags": ["staging"]},
+    {"id": "0192a000-0000-7000-8000-000000000012", "label": "db-staging", "hostname": "127.0.0.1", "port": $PORT_A, "user": "demo", "identity_id": "0192a000-0000-7000-8000-000000000001", "tags": ["staging"], "last_connected_at": "$used"},
     {"id": "0192a000-0000-7000-8000-000000000013", "label": "raspberrypi", "hostname": "127.0.0.1", "port": $PORT_B, "user": "demo", "identity_id": "0192a000-0000-7000-8000-000000000001", "tags": ["home"]}
   ]
 }

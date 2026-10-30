@@ -191,7 +191,7 @@ func TestARCH_UI_001_M2_Walkthrough(t *testing.T) {
 	}
 	golden(t, "walk-m2-3-hosts", d.m)
 
-	d.press('k', "k") // db-staging, above web-prod
+	d.press('j', "j") // db-staging, below web-prod, which moved to the top (FR-NAV-018)
 	d.press(tea.KeyEnter, "")
 	if r := d.root(); len(r.tabs) != 2 || r.focus != 2 {
 		t.Fatalf("tabs = %d, focus = %d after connecting db-staging", len(r.tabs), r.focus)

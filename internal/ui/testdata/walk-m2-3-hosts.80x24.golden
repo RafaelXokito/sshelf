@@ -1,7 +1,7 @@
 sshelf │[Hosts]│ 1 web-prod │
 
+> web-prod             ubuntu@10.0.0.10                                 just now
   db-staging           admin@10.0.1.20:2222
-> web-prod             ubuntu@10.0.0.10
   zeta                 10.0.0.30
 
 

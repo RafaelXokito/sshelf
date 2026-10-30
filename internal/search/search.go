@@ -1,6 +1,7 @@
 package search
 
 import (
+	"cmp"
 	"math"
 	"slices"
 	"strings"
@@ -32,8 +33,9 @@ func (s source) Len() int            { return len(s.hosts) }
 
 // Filter returns the indexes of the hosts whose label, hostname or user
 // fuzzy-matches query, case-insensitively, best match first (FR-NAV-002).
-// A host scores its best field. Equal scores keep the hosts' order. An
-// empty or blank query returns every index in order.
+// A host scores its best field. Equal scores put the more recently
+// connected host first (domain.CompareRecency, FR-NAV-018), then keep the
+// hosts' order. An empty or blank query returns every index in order.
 func Filter(hosts []domain.Host, query string) []int {
 	query = strings.TrimSpace(query)
 	out := make([]int, 0, len(hosts))
@@ -57,6 +59,11 @@ func Filter(hosts []domain.Host, query string) []int {
 			out = append(out, i)
 		}
 	}
-	slices.SortStableFunc(out, func(a, b int) int { return best[b] - best[a] })
+	slices.SortStableFunc(out, func(a, b int) int {
+		if c := cmp.Compare(best[b], best[a]); c != 0 {
+			return c
+		}
+		return domain.CompareRecency(hosts[a], hosts[b])
+	})
 	return out
 }
