@@ -1008,7 +1008,7 @@ sshelf │ Hosts │ 1 raspberrypi4 ● │[2 web-prod]│
 ### FR-TAB-001 · Switch between tabs
 While several tabs are open, when the user presses the prefix key followed by a tab number, `n`, `p`, `h` or `0`, the system shall focus that session tab, the next tab, the previous tab or the Hosts tab, and show the focused session's current screen.
 
-- **Priority:** M2 · **Status:** Draft · **Source:** D-010 (was `Later` "In-app session switcher")
+- **Priority:** M2 · **Status:** Implemented · **Source:** D-010 (was `Later` "In-app session switcher")
 - **Acceptance:**
   - With 2 sessions open, switching away and back shows the same screen content in each, plus any output that arrived while the tab was in the background.
   - `Ctrl+]` `1` to `9` focus session tabs 1 to 9 by number; a number with no tab does nothing. `Ctrl+]` `h` and `Ctrl+]` `0` focus the Hosts tab while the sessions keep running.
@@ -1047,7 +1047,7 @@ While a session tab is not focused, when its session receives output, the system
 ### FR-TAB-005 · Prefix key
 While any tab is focused and no modal is open, when the user presses `Ctrl+]`, the system shall treat the next key as a tab command (`q` disconnect, `?` help, `h` or `0` Hosts tab, `1`–`9` tab, `n` next tab, `p` previous tab, `[` scrollback mode, `Ctrl+]` send a literal `Ctrl+]`) and shall send neither key to the remote.
 
-- **Priority:** M2 · **Status:** Draft · **Source:** D-009, D-010 (the preview approved by the product owner)
+- **Priority:** M2 · **Status:** Implemented · **Source:** D-009, D-010 (the preview approved by the product owner)
 - **Acceptance:**
   - Each command has a unit test on the prefix state machine and a test through the root model.
   - `Ctrl+]` `Ctrl+]` sends exactly one byte, `0x1d`, to the remote.

@@ -550,7 +550,7 @@ removed in revision 2.
   - *Acceptance:* Unit tests end a session each way and pass `goleak`. With two sessions open, a panic forced in one session's output goroutine (build tag `sshelf_faultinject`) ends that session with `ErrInternal` while the other still echoes input (PTY test). sshelf's own terminal restore happens only when it exits; that path is still checked by `stty -a` before and after (PTY test).
 
 **ARCH-SESS-006**: The system shall recognise the prefix key and its command in the UI layer, on decoded key events and before any encoding, so that no byte of a prefix command reaches a session.
-- Priority: M2 · Status: Draft · Source: FR-TAB-005, FR-CONN-014 (replaces the v1 `~` escape parser, which is dropped)
+- Priority: M2 · Status: Implemented · Source: FR-TAB-005, FR-CONN-014 (replaces the v1 `~` escape parser, which is dropped)
 - Acceptance: A table test over the prefix state machine in `ui/keys` (idle → prefix → command or cancel) covers every command of FR-TAB-005, Esc, an unknown key and `Ctrl+]` twice. A root-model test with a recording session double shows that `Ctrl+]` `n` sends zero bytes and `Ctrl+]` `Ctrl+]` sends exactly `0x1d`.
 
 **ARCH-SESS-007**: While a connection is open, the system shall send `keepalive@openssh.com` requests every `ServerAliveInterval` (default 30 s) and close the connection after `ServerAliveCountMax` (default 3) unanswered requests in a row.

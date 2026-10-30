@@ -8,11 +8,14 @@ import (
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
+	uv "github.com/charmbracelet/ultraviolet"
 
 	"github.com/RafaelXokito/sshelf/internal/app"
 	"github.com/RafaelXokito/sshelf/internal/domain"
 	"github.com/RafaelXokito/sshelf/internal/ui/components"
 	"github.com/RafaelXokito/sshelf/internal/ui/keys"
+	"github.com/RafaelXokito/sshelf/internal/ui/modals/confirm"
+	"github.com/RafaelXokito/sshelf/internal/ui/modals/help"
 	"github.com/RafaelXokito/sshelf/internal/ui/screens/hostlist"
 	"github.com/RafaelXokito/sshelf/internal/ui/tabs"
 )
@@ -227,12 +230,77 @@ func (m Model) updateSessions(msg tea.Msg) (Model, tea.Cmd, bool) {
 		t.done, t.ended = true, msg.Err
 		return m, nil, true
 
+	case closeTabMsg:
+		m, cmd := m.closeTab(msg.Num)
+		return m, cmd, true
+
 	case tickMsg:
 		m.ticking = false
 		m, cmd := m.ensureTick()
 		return m, cmd, true
 	}
 	return m, nil, false
+}
+
+// closeTabMsg closes tab Num and its session; the Disconnect confirmation
+// delivers it on y (FR-CONN-014).
+type closeTabMsg struct{ Num int }
+
+// prefixPending is the status text while the prefix key waits for its
+// command (FR-TAB-005).
+func prefixPending() string { return keys.Prefix.Help().Key + " …" }
+
+// statusLine is the Hosts tab's status line.
+func (m Model) statusLine() string {
+	if m.prefix {
+		return prefixPending()
+	}
+	return m.status
+}
+
+// runPrefix runs a step of the prefix state machine (design §8.5). No
+// byte of a prefix command reaches a session, except the literal Ctrl+]
+// of Ctrl+] Ctrl+] (ARCH-SESS-006).
+func (m Model) runPrefix(r keys.PrefixResult) (tea.Model, tea.Cmd) {
+	t := m.focused()
+	switch r.Action {
+	case keys.PrefixDoLiteral:
+		if t != nil && !t.done {
+			_ = t.sess.SendBytes([]byte{0x1d})
+		}
+	case keys.PrefixDoDisconnect:
+		if t != nil {
+			q := "Disconnect " + domain.Sanitize(t.label) + "?"
+			m.modals = append(m.modals, confirm.New(q, closeTabMsg{Num: t.num}))
+		}
+	case keys.PrefixDoHelp:
+		m.modals = append(m.modals, help.New())
+	case keys.PrefixDoHosts:
+		return m.focusTab(0)
+	case keys.PrefixDoTab:
+		return m.focusNum(r.Tab)
+	case keys.PrefixDoNext:
+		return m.focusNext(1)
+	case keys.PrefixDoPrev:
+		return m.focusNext(-1)
+	}
+	return m, nil
+}
+
+// sessionKey handles a key on a session tab that is neither a modal's nor
+// the prefix key's: a live session gets it, encoded by the session
+// (FR-TAB-006).
+func (m Model) sessionKey(t *sessionTab, k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if !t.done {
+		_ = t.sess.SendKey(toKeyEvent(k)) // never blocks; a full queue drops it (ARCH-SESS-014)
+	}
+	return m, nil
+}
+
+// toKeyEvent converts a Bubble Tea key press to the ultraviolet event the
+// session encodes, field by field (design §8.4).
+func toKeyEvent(k tea.KeyPressMsg) uv.KeyPressEvent {
+	return uv.KeyPressEvent{Text: k.Text, Mod: k.Mod, Code: k.Code, ShiftedCode: k.ShiftedCode, BaseCode: k.BaseCode, IsRepeat: k.IsRepeat}
 }
 
 // header is the first line of every frame: the title and the tab bar
@@ -263,6 +331,9 @@ func (m Model) viewWidth() int {
 // sessionStatus is the focused session's status bar (FR-TAB-007).
 func (m Model) sessionStatus(t *sessionTab) string {
 	w := m.viewWidth()
+	if m.prefix {
+		return prefixPending()
+	}
 	if n := len(m.modals); n > 0 {
 		if h, ok := m.modals[n-1].(components.Hinter); ok {
 			return components.Help(h.Hints()...)
@@ -276,8 +347,7 @@ func (m Model) sessionStatus(t *sessionTab) string {
 
 // prefixHint is the status-bar hint of a prefix command: "Ctrl+] ? help".
 func prefixHint(b key.Binding) string {
-	h := b.Help()
-	return keys.Prefix.Help().Key + " " + h.Key + " " + h.Desc
+	return keys.Prefix.Help().Key + " " + b.Keys()[0] + " " + b.Help().Desc
 }
 
 // endedReason is why a session ended, as its tab shows it: "exited (3)"

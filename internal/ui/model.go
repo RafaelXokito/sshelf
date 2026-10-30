@@ -126,6 +126,7 @@ type Model struct {
 	focus   int           // 0 = Hosts tab, i = tabs[i-1]
 	nextNum int           // the last tab number given; numbers are never reused
 	ticking bool          // a tickMsg is on its way
+	prefix  bool          // ctrl+] seen, waiting for the command key (design §8.5)
 
 	now    func() time.Time                           // injectable clock
 	tick   func() tea.Cmd                             // the one-second clock; tests replace it
@@ -166,13 +167,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyPressMsg:
-		if m.focus != 0 {
-			if len(m.modals) > 0 {
-				return m.updateTopModal(msg)
-			}
-			return m, nil // key routing to sessions comes with the prefix key (T-035)
-		}
-		if key.Matches(msg, keys.ForceQuit) {
+		// Key routing, in order (design §9.4): Ctrl+C on the Hosts tab,
+		// the top modal, the prefix key, the focused tab.
+		if m.focus == 0 && key.Matches(msg, keys.ForceQuit) {
+			m.prefix = false
 			if fs, ok := m.screen.(components.FormScreen); ok {
 				// Ctrl+C cancels a form instead of quitting (FR-NAV-003).
 				m.modals = nil
@@ -182,7 +180,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 		if len(m.modals) > 0 {
+			m.prefix = false // the prefix key is off while a modal is open
 			return m.updateTopModal(msg)
+		}
+		if armed, r := keys.PrefixStep(m.prefix, msg); r.Action != keys.PrefixNone {
+			m.prefix = armed
+			return m.runPrefix(r)
+		}
+		if t := m.focused(); t != nil {
+			return m.sessionKey(t, msg)
 		}
 		if m.screen == nil {
 			if key.Matches(msg, keys.Quit) {
@@ -376,7 +382,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(m.modals) > 0 {
 			return m.updateTopModal(msg)
 		}
-		if m.focus != 0 {
+		if t := m.focused(); t != nil {
+			if !t.done {
+				_ = t.sess.Paste(msg.Content) // never blocks; a full queue drops it (ARCH-SESS-014)
+			}
 			return m, nil
 		}
 
@@ -604,11 +613,11 @@ func (m Model) View() tea.View {
 			body = append(body, "")
 		}
 		out = append(out, body...)
-		out = append(out, statusStyle.Render(m.status))
+		out = append(out, statusStyle.Render(m.statusLine()))
 	} else {
 		out = append(out, body...)
-		if m.status != "" {
-			out = append(out, "", statusStyle.Render(m.status))
+		if m.statusLine() != "" {
+			out = append(out, "", statusStyle.Render(m.statusLine()))
 		}
 	}
 	out = append(out, foot)
