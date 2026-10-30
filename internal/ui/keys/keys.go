@@ -120,5 +120,9 @@ func Maps() []Map {
 		{Name: "identities", Bindings: []key.Binding{Up, Down, AddIdentity, EditIdentity, DeleteIdentity, BackToHosts, ForceQuit}},
 		{Name: "form secret field", Bindings: append([]key.Binding{ClearSecret}, textInput...)},
 		{Name: "form key file field", Bindings: append([]key.Binding{StoreKeyFile}, textInput...)},
+		{Name: "prefix", Bindings: PrefixCommands()},
+		{Name: "prefix help", Bindings: []key.Binding{CloseHelp, ForceQuit}},
+		{Name: "ended session", Bindings: []key.Binding{Reconnect, CloseTab, Prefix}},
+		{Name: "scrollback", Bindings: []key.Binding{ScrollUp, ScrollDown, ScrollPageUp, ScrollPageDown, ScrollTop, ScrollBottom, ScrollExit, Prefix}},
 	}
 }

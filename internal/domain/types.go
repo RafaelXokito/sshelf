@@ -107,7 +107,6 @@ type Settings struct {
 	ServerAliveInterval time.Duration // default 30s
 	ServerAliveCountMax int           // default 3
 	ConnectTimeout      time.Duration // default 10s (FR-CONN-006)
-	EscapeChar          string        // default "~"; "none" disables
 	Theme               string        // v1
 	HostListSort        string        // "label" | "recent"
 }

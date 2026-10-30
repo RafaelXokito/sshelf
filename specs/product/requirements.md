@@ -416,7 +416,7 @@ When an interactive session ends, the system shall restore the host list with th
 - **Acceptance:**
   - `exit 3` shows "web-prod: exited (3)". A server shutdown shows "web-prod: connection lost: <reason>".
   - The terminal is fully restored, with no raw mode and no remote screen remnants.
-- **M2 revision** · Priority: M2 · Status: Draft · Source: D-010
+- **M2 revision** · Priority: M2 · Status: Implemented · Source: D-010
   - *Revised:* When a session ends, the system shall keep its tab open with the last remote screen, show the remote exit status or the disconnect reason in that tab's status bar together with `r` reconnect and `x` close, and, when the user presses `x`, close the tab.
   - *Acceptance:*
     - `exit 3` shows `✕ exited (3) · r reconnect · x close` in that tab's status bar; a server shutdown shows `✕ connection lost: <reason> · r reconnect · x close`. The last remote screen stays visible above it.
@@ -461,7 +461,7 @@ While a session is active, the system shall send a keepalive request at the effe
 ### FR-CONN-010 · Reconnect from an ended tab
 While a tab shows an ended session, when the user presses `r`, the system shall connect to the same host again and run the new session in the same tab.
 
-- **Priority:** M2 · **Status:** Draft · **Source:** Tabby, Termius, D-010 (was v1 "Reconnect after a drop")
+- **Priority:** M2 · **Status:** Implemented · **Source:** Tabby, Termius, D-010 (was v1 "Reconnect after a drop")
 - **Acceptance:**
   - `r` is offered after a drop and after a normal `exit` alike (FR-CONN-005 revision). The host is connected exactly as from the host list, with the same modals, shown over the ended tab.
   - The new session keeps the tab's number and position; the old screen and scrollback are discarded once the new session is established.
@@ -1008,7 +1008,7 @@ sshelf │ Hosts │ 1 raspberrypi4 ● │[2 web-prod]│
 ### FR-TAB-001 · Switch between tabs
 While several tabs are open, when the user presses the prefix key followed by a tab number, `n`, `p`, `h` or `0`, the system shall focus that session tab, the next tab, the previous tab or the Hosts tab, and show the focused session's current screen.
 
-- **Priority:** M2 · **Status:** Draft · **Source:** D-010 (was `Later` "In-app session switcher")
+- **Priority:** M2 · **Status:** Implemented · **Source:** D-010 (was `Later` "In-app session switcher")
 - **Acceptance:**
   - With 2 sessions open, switching away and back shows the same screen content in each, plus any output that arrived while the tab was in the background.
   - `Ctrl+]` `1` to `9` focus session tabs 1 to 9 by number; a number with no tab does nothing. `Ctrl+]` `h` and `Ctrl+]` `0` focus the Hosts tab while the sessions keep running.
@@ -1028,7 +1028,7 @@ When a connection started from the host list succeeds, the system shall open a n
 ### FR-TAB-003 · Tab bar
 The system shall show a one-line header that starts with `sshelf`, then the `Hosts` tab, then one entry `<number> <host label>` per session tab, separated by `│`, with the focused tab highlighted.
 
-- **Priority:** M2 · **Status:** Draft · **Source:** D-009, D-010
+- **Priority:** M2 · **Status:** Implemented · **Source:** D-009, D-010
 - **Acceptance:**
   - The focused tab is shown in reverse video, and its padding spaces are replaced by `[` and `]` (`│[2 web-prod]│`), so focus is not shown by colour alone (NFR-UX-003).
   - Labels are sanitised (SEC-SESSION-003) and cut to 20 columns with `…`. A tab shows the host label only; a window title set by the remote (OSC 0 or 2) is never shown (SEC-SESSION-005).
@@ -1038,7 +1038,7 @@ The system shall show a one-line header that starts with `sshelf`, then the `Hos
 ### FR-TAB-004 · Activity and end markers
 While a session tab is not focused, when its session receives output, the system shall mark that tab with `●` until it is focused; and when a session ends, the system shall mark its tab with `✕` until it is reconnected or closed.
 
-- **Priority:** M2 · **Status:** Draft · **Source:** D-010
+- **Priority:** M2 · **Status:** Implemented · **Source:** D-010
 - **Acceptance:**
   - Output in a background tab shows `1 raspberrypi4 ●`; focusing the tab removes the marker. Output in the focused tab never sets it.
   - An ended session shows `✕` instead of `●`, focused or not.
@@ -1047,7 +1047,7 @@ While a session tab is not focused, when its session receives output, the system
 ### FR-TAB-005 · Prefix key
 While any tab is focused and no modal is open, when the user presses `Ctrl+]`, the system shall treat the next key as a tab command (`q` disconnect, `?` help, `h` or `0` Hosts tab, `1`–`9` tab, `n` next tab, `p` previous tab, `[` scrollback mode, `Ctrl+]` send a literal `Ctrl+]`) and shall send neither key to the remote.
 
-- **Priority:** M2 · **Status:** Draft · **Source:** D-009, D-010 (the preview approved by the product owner)
+- **Priority:** M2 · **Status:** Implemented · **Source:** D-009, D-010 (the preview approved by the product owner)
 - **Acceptance:**
   - Each command has a unit test on the prefix state machine and a test through the root model.
   - `Ctrl+]` `Ctrl+]` sends exactly one byte, `0x1d`, to the remote.
@@ -1085,7 +1085,7 @@ While a session tab is not focused, the system shall keep reading that session's
 ### FR-TAB-009 · Quit with open sessions
 When the user quits sshelf (`q` on the host list or the Welcome screen, or Ctrl+C on the Hosts tab) while at least one session is live, the system shall ask "Quit and close N sessions?" and quit only on `y`.
 
-- **Priority:** M2 · **Status:** Draft · **Source:** D-010
+- **Priority:** M2 · **Status:** Implemented · **Source:** D-010
 - **Acceptance:**
   - The confirmation defaults to No: `n`, Enter and Esc keep sshelf running with every session intact.
   - Ended tabs do not count. With no live session, `q` quits at once as in the MVP.
@@ -1094,7 +1094,7 @@ When the user quits sshelf (`q` on the host list or the Welcome screen, or Ctrl+
 ### FR-TAB-010 · Scrollback mode
 While a session tab is focused, when the user presses the prefix key followed by `[`, the system shall show the session's scrollback and screen as one view that PgUp, PgDn, the arrow keys, `g` and `G` move, until the user presses Esc.
 
-- **Priority:** M2 · **Status:** Draft · **Source:** D-010, tmux copy mode
+- **Priority:** M2 · **Status:** Implemented · **Source:** D-010, tmux copy mode
 - **Acceptance:**
   - The scrollback keeps the last 2,000 lines that scrolled off the main screen (NFR-SIZE-003). The alternate screen used by `vim` or `htop` adds nothing to it.
   - The status bar shows `scrollback 120/2000 · ↑↓ PgUp PgDn g G · esc back`. Keys are not sent to the remote; output keeps arriving, and the view stays on the same lines until the user moves it or those lines leave the scrollback.

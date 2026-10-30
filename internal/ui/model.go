@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
@@ -32,7 +33,6 @@ import (
 )
 
 var (
-	titleStyle  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("212"))
 	statusStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
 	dimStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
 )
@@ -71,7 +71,9 @@ type HostDeleteFailedMsg struct {
 	Err   error
 }
 
-// ConnectedMsg carries an authenticated session, ready for tea.Exec.
+// ConnectedMsg carries an authenticated session. An app.FramedSession
+// opens a tab; any other session is handed the terminal with tea.Exec
+// (the MVP path, removed by T-037).
 type ConnectedMsg struct {
 	attempt int
 	HostID  domain.ID
@@ -87,10 +89,10 @@ type ConnectFailedMsg struct {
 	Err     error
 }
 
-// SessionEndedMsg reports that an attached session returned the terminal.
-// Err is nil for exit status 0, a *session.ExitError, a
-// *session.DisconnectError, or another error.
-type SessionEndedMsg struct {
+// execEndedMsg reports that a session run with tea.Exec returned the
+// terminal (the MVP path, removed by T-037). Err is nil for exit status
+// 0, a *session.ExitError, a *session.DisconnectError, or another error.
+type execEndedMsg struct {
 	HostID domain.ID
 	Label  string
 	Err    error
@@ -116,12 +118,27 @@ type Model struct {
 
 	attempt     int                // id of the latest connection attempt
 	attemptHost domain.ID          // host of the attempt in progress
+	attemptAddr string             // user@host:port of that host
 	cancel      context.CancelFunc // cancels the attempt in progress; nil if none
+
+	// Session tabs (design §9.4, ADR-015).
+	tabs    []*sessionTab // in opening order
+	focus   int           // 0 = Hosts tab, i = tabs[i-1]
+	nextNum int           // the last tab number given; numbers are never reused
+	ticking bool          // a tickMsg is on its way
+	prefix  bool          // ctrl+] seen, waiting for the command key (design §8.5)
+
+	attemptTab int  // the ended tab the attempt in progress reconnects; 0 for a new tab
+	quitAsked  bool // the "Quit and close N sessions?" confirmation is open
+
+	now    func() time.Time                           // injectable clock
+	tick   func() tea.Cmd                             // the one-second clock; tests replace it
+	listen func(num int, s app.FramedSession) tea.Cmd // waits for a session's next update; tests replace it
 }
 
 // New returns the root model. It does no I/O; Init loads the config.
 func New(svc app.Service) Model {
-	return Model{svc: svc, exec: tea.Exec}
+	return Model{svc: svc, exec: tea.Exec, now: time.Now, tick: tickEverySecond, listen: listenSession}
 }
 
 // Init implements tea.Model.
@@ -138,24 +155,45 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if next, cmd, ok := m.updateIdentities(msg); ok {
 		return next, cmd
 	}
+	if next, cmd, ok := m.updateSessions(msg); ok {
+		return next, cmd
+	}
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		m.screen = m.sized(m.screen)
+		for _, t := range m.tabs {
+			if !t.done {
+				t.sess.Resize(m.areaSize())
+			}
+		}
 		return m, nil
 
 	case tea.KeyPressMsg:
-		if key.Matches(msg, keys.ForceQuit) {
+		// Key routing, in order (design §9.4): Ctrl+C on the Hosts tab,
+		// the top modal, the prefix key, the focused tab.
+		if m.focus == 0 && key.Matches(msg, keys.ForceQuit) {
+			m.prefix = false
 			if fs, ok := m.screen.(components.FormScreen); ok {
 				// Ctrl+C cancels a form instead of quitting (FR-NAV-003).
 				m.modals = nil
 				return m.Update(fs.Cancel())
 			}
-			m.cancelAttempt()
-			return m, tea.Quit
+			return m.quit()
 		}
 		if len(m.modals) > 0 {
+			m.prefix = false // the prefix key is off while a modal is open
 			return m.updateTopModal(msg)
+		}
+		if armed, r := keys.PrefixStep(m.prefix, msg); r.Action != keys.PrefixNone {
+			m.prefix = armed
+			return m.runPrefix(r)
+		}
+		if t := m.focused(); t != nil {
+			return m.sessionKey(t, msg)
+		}
+		if key.Matches(msg, keys.Quit) && m.quitKeyQuits() && m.liveSessions() > 0 {
+			return m.quit() // q on the host list or Welcome asks first (FR-TAB-009)
 		}
 		if m.screen == nil {
 			if key.Matches(msg, keys.Quit) {
@@ -290,6 +328,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case confirm.DoneMsg:
 		m.popModal()
+		m.quitAsked = false
 		if msg.Then != nil {
 			then := msg.Then
 			return m, func() tea.Msg { return then }
@@ -300,6 +339,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.cancel != nil {
 			return m, nil // one attempt at a time
 		}
+		m.attemptAddr, m.attemptTab = "", msg.Tab
+		if t := m.attemptTabPtr(); t != nil {
+			m.attemptAddr = t.addr
+		}
+		if h, ok := m.hostByID(msg.HostID); ok {
+			m.attemptAddr = sessionAddr(h)
+		}
 		return m.startConnect(msg.HostID, msg.Label)
 
 	case connecting.CancelMsg:
@@ -308,7 +354,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.cancelAttempt()
 		m.modals = nil
-		m.status = "connection cancelled"
+		if t := m.attemptTabPtr(); t != nil {
+			t.failure = "connection cancelled" // the tab stays ended (FR-CONN-010)
+		} else {
+			m.status = "connection cancelled"
+		}
 		return m, nil
 
 	case app.HostKeyPromptMsg:
@@ -345,6 +395,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(m.modals) > 0 {
 			return m.updateTopModal(msg)
 		}
+		if t := m.focused(); t != nil {
+			if !t.done {
+				_ = t.sess.Paste(msg.Content) // never blocks; a full queue drops it (ARCH-SESS-014)
+			}
+			return m, nil
+		}
 
 	case tofu.DoneMsg:
 		// The modal was popped when it was answered (components.Closer).
@@ -362,9 +418,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.cancelAttempt()
 		m.modals = nil
 		m.status = ""
+		if fs, ok := msg.Session.(app.FramedSession); ok {
+			if t := m.attemptTabPtr(); t != nil {
+				return m.reconnected(t, fs)
+			}
+			return m.openTab(msg.HostID, msg.Label, m.attemptAddr, fs)
+		}
 		hostID, label := msg.HostID, msg.Label
 		return m, m.exec(msg.Session, func(err error) tea.Msg {
-			return SessionEndedMsg{HostID: hostID, Label: label, Err: err}
+			return execEndedMsg{HostID: hostID, Label: label, Err: err}
 		})
 
 	case ConnectFailedMsg:
@@ -373,7 +435,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.cancelAttempt()
 		m.modals = nil
-		m.status = components.ErrorPrefix + failedStatus(msg.Label, msg.Err)
+		if t := m.attemptTabPtr(); t != nil {
+			t.failure = failedStatus(msg.Label, msg.Err) // the tab stays ended (FR-CONN-010)
+		} else {
+			m.status = components.ErrorPrefix + failedStatus(msg.Label, msg.Err)
+		}
 		if me, ok := errors.AsType[*app.HostKeyMismatchError](msg.Err); ok {
 			m.modals = append(m.modals, keychanged.New(msg.Label, me))
 		}
@@ -383,7 +449,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.popModal()
 		return m, nil
 
-	case SessionEndedMsg:
+	case execEndedMsg:
 		m.status = endedStatus(msg.Label, msg.Err)
 		if l, ok := m.screen.(hostlist.Model); ok {
 			m.screen = l.Select(msg.HostID)
@@ -528,12 +594,17 @@ func endedStatus(label string, err error) string {
 	return label + ": " + domain.Sanitize(err.Error()) // may carry server text
 }
 
-// View implements tea.Model. The layout is the title, a blank line, the
-// active screen with the modals under it, the status line and the footer.
-// Once the terminal size is known the view fills it exactly: the body is
-// cut or padded so that the footer is always the last line, and every line
-// is truncated to the width with "…" (NFR-UX-002).
+// View implements tea.Model. The first line is the header with the tab
+// bar (FR-TAB-003). On the Hosts tab the layout below it is the MVP one:
+// a blank line, the active screen with the modals under it, the status
+// line and the footer; a session tab is drawn by sessionView
+// (ARCH-UI-005). Once the terminal size is known the view fills it
+// exactly: the body is cut or padded so that the footer is always the last
+// line, and every line is truncated to the width with "…" (NFR-UX-002).
 func (m Model) View() tea.View {
+	if t := m.focused(); t != nil {
+		return m.sessionView(t)
+	}
 	body, foot := m.screenLines()
 	body = m.withBanner(body)
 	if n := len(m.modals); n > 0 {
@@ -554,7 +625,7 @@ func (m Model) View() tea.View {
 		}
 	}
 
-	out := []string{titleStyle.Render("sshelf"), ""}
+	out := []string{m.header(), ""}
 	if m.height > 0 {
 		h := m.bodyHeight()
 		body = body[:min(len(body), h)]
@@ -562,17 +633,17 @@ func (m Model) View() tea.View {
 			body = append(body, "")
 		}
 		out = append(out, body...)
-		out = append(out, statusStyle.Render(m.status))
+		out = append(out, statusStyle.Render(m.statusLine()))
 	} else {
 		out = append(out, body...)
-		if m.status != "" {
-			out = append(out, "", statusStyle.Render(m.status))
+		if m.statusLine() != "" {
+			out = append(out, "", statusStyle.Render(m.statusLine()))
 		}
 	}
 	out = append(out, foot)
 	if m.width > 0 {
 		for i, l := range out {
-			out[i] = ansi.Truncate(l, m.width, "…")
+			out[i] = truncateLine(l, m.width)
 		}
 	}
 
@@ -580,6 +651,9 @@ func (m Model) View() tea.View {
 	v.AltScreen = true
 	return v
 }
+
+// truncateLine cuts l to width columns with "…" (NFR-UX-002).
+func truncateLine(l string, width int) string { return ansi.Truncate(l, width, "…") }
 
 // footer returns the footer line the view ends with.
 func (m Model) footer() string {

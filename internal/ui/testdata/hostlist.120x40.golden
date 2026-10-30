@@ -1,4 +1,4 @@
-sshelf
+sshelf │[Hosts]│
 
 > api                  api.internal
   ipv6                 root@[2001:db8::1]:2222

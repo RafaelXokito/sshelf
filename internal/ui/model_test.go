@@ -11,10 +11,12 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/RafaelXokito/sshelf/internal/app"
+	"github.com/RafaelXokito/sshelf/internal/app/apptest"
 	"github.com/RafaelXokito/sshelf/internal/domain"
 	"github.com/RafaelXokito/sshelf/internal/session"
 	"github.com/RafaelXokito/sshelf/internal/testutil"
@@ -60,10 +62,24 @@ type fakeService struct {
 
 	fakeIdentities // identities_test.go
 
+	// framed are the framed sessions the next Connect calls return, in
+	// order, before falling back to session.
+	framed []*apptest.FakeSession
+
 	mu        sync.Mutex
 	connected []domain.ID
 	saves     []domain.Host // hosts passed to SaveHost
 }
+
+// framedStub is what fakeService.Connect returns for a framed session:
+// the M2 fake, plus the MVP methods app.Session still requires until
+// T-037.
+type framedStub struct{ *apptest.FakeSession }
+
+func (framedStub) SetStdin(io.Reader)  {}
+func (framedStub) SetStdout(io.Writer) {}
+func (framedStub) SetStderr(io.Writer) {}
+func (framedStub) Run() error          { panic("Run called on a framed session") }
 
 // SaveHost mimics app.App.SaveHost in memory.
 func (f *fakeService) SaveHost(_ context.Context, h domain.Host) (app.SavedHost, error) {
@@ -111,9 +127,16 @@ func (f *fakeService) Connect(_ context.Context, id domain.ID) (app.Session, err
 	f.checkGoroutine("Connect")
 	f.mu.Lock()
 	f.connected = append(f.connected, id)
+	var framed *apptest.FakeSession
+	if len(f.framed) > 0 {
+		framed, f.framed = f.framed[0], f.framed[1:]
+	}
 	f.mu.Unlock()
 	if f.connectErr != nil {
 		return nil, f.connectErr
+	}
+	if framed != nil {
+		return framedStub{framed}, nil
 	}
 	return f.session, nil
 }
@@ -126,18 +149,53 @@ type driver struct {
 	m     tea.Model
 	execs int
 	quit  bool
+
+	// Session listeners and the status-bar clock would block a
+	// synchronous driver, so they are parked: pump runs a tab's pending
+	// listener once its fake session has output or has ended, and ticks
+	// counts the clock ticks asked for.
+	listeners map[int]tea.Cmd
+	ticks     int
+	clock     time.Time
 }
 
+// testEpoch is the driver's clock at the start of every test.
+var testEpoch = time.Date(2026, 10, 30, 9, 0, 0, 0, time.UTC)
+
 func newDriver(t *testing.T, svc *fakeService) *driver {
-	d := &driver{t: t, svc: svc}
+	d := &driver{t: t, svc: svc, listeners: map[int]tea.Cmd{}, clock: testEpoch}
 	m := New(svc)
 	m.exec = func(c tea.ExecCommand, fn tea.ExecCallback) tea.Cmd {
 		d.execs++
 		return func() tea.Msg { return fn(c.Run()) }
 	}
+	m.now = func() time.Time { return d.clock }
+	m.tick = func() tea.Cmd { d.ticks++; return nil }
+	m.listen = func(num int, s app.FramedSession) tea.Cmd {
+		d.listeners[num] = listenSession(num, s)
+		return nil
+	}
 	d.m = m
 	d.run(m.Init())
 	return d
+}
+
+// pump delivers the pending update or end of session tab num.
+func (d *driver) pump(num int) {
+	d.t.Helper()
+	cmd, ok := d.listeners[num]
+	if !ok {
+		d.t.Fatalf("no listener for tab %d", num)
+	}
+	delete(d.listeners, num)
+	d.send(cmd())
+}
+
+// focus focuses tab i (0 = Hosts) through the model method.
+func (d *driver) focus(i int) {
+	m, cmd := d.root().focusTab(i)
+	d.m = m
+	d.run(cmd)
 }
 
 // send delivers msg to Update and runs the resulting commands to

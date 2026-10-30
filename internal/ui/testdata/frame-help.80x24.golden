@@ -1,0 +1,24 @@
+sshelf │ Hosts │ 1 db-staging │[2 web-prod]│
+screen of B
+
+
+
+
+
+
+
+
+╭──────────────────────╮
+│ Press Ctrl+], then:  │
+│                      │
+│ q       disconnect   │
+│ ?       help         │
+│ h/0     hosts        │
+│ 1-9     tab          │
+│ n       next tab     │
+│ p       previous tab │
+│ [       scrollback   │
+│ Ctrl+]  send Ctrl+]  │
+│ esc     cancel       │
+╰──────────────────────╯
+?/esc close

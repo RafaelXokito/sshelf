@@ -1,0 +1,24 @@
+sshelf │ Hosts │[1 web-prod ✕]│
+ubuntu@web-prod:~$ uptime
+ 09:00:00 up 12 days,  3:04,  1 user,  load average: 0.08, 0.03, 0.01
+ubuntu@web-prod:~$
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+✕ exited (3) · r reconnect · x close
