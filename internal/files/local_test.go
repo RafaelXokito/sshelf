@@ -233,7 +233,8 @@ func TestSEC_SFTP_002_SwapRace(t *testing.T) {
 			symlink(t, "inner.txt", part)
 		},
 		"other file": func() {
-			if err := os.Remove(part); err != nil {
+			// Moved aside, not removed, so the new file cannot reuse its inode.
+			if err := os.Rename(part, part+".old"); err != nil {
 				t.Error(err)
 			}
 			writeFile(t, part, "other")
