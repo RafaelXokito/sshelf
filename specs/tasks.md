@@ -1,6 +1,6 @@
 # sshelf implementation plan
 
-Status: Draft · Owner: delivery · Last updated: 2026-10-30 (M2 added)
+Status: Draft · Owner: delivery · Last updated: 2026-10-30 (M3 added)
 
 This is the ordered plan for the MVP: every `MVP` requirement in
 `product/requirements.md` (`FR-*`), `security/requirements.md` (`SEC-*`),
@@ -8,8 +8,10 @@ This is the ordered plan for the MVP: every `MVP` requirement in
 to at least one task in the [traceability matrix](#traceability-matrix).
 [`decisions.md`](decisions.md) wins any conflict. Milestone **M2** (framed
 sessions, tabs and mouse, D-009 to D-012) follows the MVP with tasks T-031 to
-T-043 and its own [matrix](#m2-traceability-matrix). The v1 milestones are
-outlined at the end without task detail.
+T-043 and its own [matrix](#m2-traceability-matrix). Milestone **M3** (the
+SFTP tab, D-017 to D-020) follows with tasks T-045 to T-059 and its own
+[matrix](#m3-traceability-matrix). The v1 milestones are outlined at the end
+without task detail.
 
 The MVP's internal milestones were first called M0 to M5. They are now
 **MVP-M0** to **MVP-M5**, so that "M2" means only the product milestone and
@@ -49,6 +51,7 @@ the `M2` priority.
 | **MVP-M5 Hardening and MVP gate** | T-026 … T-030 | CLI, crash safety, canary scan, NFR checks, traceability gate | 6 |
 | **MVP total** | 31 tasks | | **46** |
 | **M2 Framed sessions, tabs and mouse** | T-031 … T-043 | Sessions rendered in sshelf's frame through `x/vt`, tabs with a prefix key, background sessions, scrollback, reconnect in the tab, mouse on sshelf screens and for remote apps that ask, form buttons | **25** (critical path 12.5) |
+| **M3 SFTP** | T-045 … T-059 | An SFTP tab with local and remote panes, opened from the host list or on a session's connection; copy files and folders, rename, delete, mkdir; a transfer queue with progress, conflicts, resume and pause on a dropped connection; edit-locally in `$EDITOR`; mouse and drag; path-safety and canary checks | **29** (critical path 15) |
 
 ---
 
@@ -531,6 +534,199 @@ them in dependency order and rebase rather than resolve by hand.
 
 ---
 
+## M3 SFTP
+
+Milestone M3 implements D-017 to D-020: the SFTP tab (ADR-020) over
+`internal/files` and `github.com/pkg/sftp` (ADR-016), connections shared by a
+session and its SFTP tab (ADR-017), the transfer queue with resume (ADR-018)
+and edit-locally (ADR-019). It starts after the M2 gate (T-043). Every `M3`
+requirement, including the **M3 revision** blocks, is mapped in the
+[M3 traceability matrix](#m3-traceability-matrix). The task conventions above
+apply unchanged; "fake browser" means `apptest.FakeBrowser`, a test double of
+`app.Browser` (design §8.9) with canned listings and a scripted queue.
+
+**Out of scope (D-007, `product/requirements.md` §3.2):** FTP, FTPS and SCP;
+sync or mirror; remote-to-remote copy; a permission or owner editor (chmod,
+chown); bookmarks; following symlinks in recursive copies; a persistent
+queue (resume across sshelf restarts).
+
+**Parallel lanes.** Five lanes start on day 1 and join in T-054:
+
+| Lane | Tasks | Needs from other lanes |
+|---|---|---|
+| A · test server and remote core | T-045 → T-046 → T-051 → T-052 | T-048 (leases) for T-046 |
+| B · local side | T-047 | none (joins T-051) |
+| C · connection sharing | T-048 | none |
+| D · panes and transfers UI | T-049 → T-050, T-049 → T-053 | none (fake browser) |
+| E · mouse and drag | T-056 | T-049 |
+| Join | T-054 (A + C + D) → T-055, T-057, T-058 → T-059 | |
+
+Critical path: T-048 → T-046 → T-051 → T-052 → T-054 → T-055 → T-059,
+15 days. T-049, T-050, T-053 and T-056 all edit `internal/ui/sftpview`; T-048
+and T-054 edit `internal/ui/model.go` and `sessions.go`. Merge in dependency
+order and rebase rather than resolve by hand.
+
+### T-045 · sshtest SFTP subsystem
+
+- **Delivers:** `github.com/pkg/sftp v1.13.12` pinned in `go.mod` (ADR-016; `go mod why` shows `internal/testutil/sshtest` until T-046). sshtest serves `subsystem sftp` with `sftp.NewRequestServer` and a `Handlers` implementation over an `os.Root` on a temp dir (read, write, setstat, rename, posix-rename, remove, mkdir, rmdir, symlink, readlink, realpath, list, stat, lstat), with a home of `/home/pi` mapped inside it. Options `WithSFTP(dir)`, `WithSFTPHostile(...)` (the SEC-SFTP-001 names, 150,000 entries, a 70-level chain, an oversize file, hostile status messages), `WithSFTPFault` (drop the connection or fail after N bytes of a named file), `WithSFTPZeroFile`, `WithoutSFTP`, `WithMaxSessions(n)`; per-file byte counters and the open-handle count. `sshtestd -sftp DIR` for the acceptance run.
+- **Satisfies:** ARCH-TEST-004
+- **Depends on:** none (starts on day 1)
+- **Tests:** `TestARCH_TEST_004_ServesDir`, `TestARCH_TEST_004_ConfinedToRoot` (`..`, absolute paths and a symlink to `/` all fail), `TestARCH_TEST_004_HostileListing`, `TestARCH_TEST_004_FaultAfterBytes`, `TestARCH_TEST_004_WithoutSFTP`, `TestARCH_TEST_004_MaxSessions`, `TestARCH_TEST_004_ZeroFile`, `TestARCH_TEST_004_ByteCounters` (all with a plain `pkg/sftp` client).
+- **Done when:** a `pkg/sftp` client can list, read, write, rename and delete in the served dir and nothing outside it, on Linux and macOS with `-race`.
+- **Estimate:** 1.5 d
+
+### T-046 · Remote core: `internal/files` listings, names and operations
+
+- **Delivers:** `internal/files` with `remote.go` (the only product file importing `pkg/sftp`): `Open(lease, opts)` opening the browse channel through `NewClientPipe` behind a byte-counting reader and the transfer channel (one channel when the second is refused), `Getwd`/`RealPath` start directory, `List` with the 30 s timeout, the 64 MiB budget and the 100,000 cap, `Count`, `Stat`, `Rename`, `Mkdir`, `Delete` (own `Lstat` walk, links removed not followed, depth cap 64), sanitised errors; `names.go` with the SEC-SFTP-001 check and `Display`. archtest: the `files` row of design §5.2 and the `pkg/sftp` rule. `goleak.VerifyTestMain` in `files`.
+- **Satisfies:** ARCH-SFTP-001, ARCH-SFTP-002 (partial: remote side), SEC-SFTP-001, SEC-SFTP-004 (partial: listings, depth), SEC-SFTP-008, FR-SFTP-005 (partial: remote start), FR-SFTP-010 (partial: back end), FR-SFTP-011 (partial: back end), FR-SFTP-012 (partial: back end)
+- **Depends on:** T-045, T-048 (`Lease`)
+- **Tests:** `TestARCH_SFTP_001_TwoChannels`, `TestARCH_SFTP_001_OneChannelFallback`, `TestARCH_SFTP_001_CloseReleasesOnce`, `TestARCH_SFTP_001_OnlyRemoteGoImportsSftp` (archtest), `TestARCH_SFTP_002_ListingBudget`, `TestSEC_SFTP_001_HostileNames`, `FuzzSEC_SFTP_001_NameStaysInDir`, `TestSEC_SFTP_004_ListingCap`, `TestSEC_SFTP_004_DepthCap`, `TestSEC_SFTP_008_StatusMessageSanitised`, `TestSEC_SFTP_008_RealpathSanitised`, `TestFR_SFTP_005_RemoteStartsAtRealpath`, `TestFR_SFTP_010_RenameRefusesExisting`, `TestFR_SFTP_011_DeleteDoesNotFollowLinks`, `TestFR_SFTP_011_CountStopsAt100k`, `TestFR_SFTP_012_MkdirExisting`.
+- **Done when:** every remote operation works against sshtest, the hostile suite passes, and coverage of `files` is at least 80 %.
+- **Estimate:** 2 d
+
+### T-047 · Local side: listings and confined writes
+
+- **Delivers:** `files/local.go`: local `List` (`os.ReadDir` + `Lstat`, the 100,000 cap, the same `Entry` shape), `Count`, `Stat`, `Rename`, `Mkdir`, `Delete` (`os.RemoveAll` semantics, links not followed), the start directory (working directory, else `$HOME`, FR-SFTP-005), and the write primitives every download uses: `os.Root` per target directory, part files created `O_CREATE|O_EXCL|O_WRONLY` 0600, reopened `O_NOFOLLOW` with an `Fstat`/`Lstat` identity check, `Chmod(mode & 0777)`, `Chtimes`, `Rename` into place, and a new root per created subdirectory. A test hook between check and open for the race test.
+- **Satisfies:** SEC-SFTP-002, SEC-SFTP-003 (partial: local side), FR-SFTP-005 (partial: local start), ARCH-SFTP-002 (partial: local side)
+- **Depends on:** none (starts on day 1)
+- **Tests:** `TestSEC_SFTP_002_SymlinkTargetUnchanged`, `TestSEC_SFTP_002_SymlinkDirNotEntered`, `TestSEC_SFTP_002_PartSymlinkRefused`, `TestSEC_SFTP_002_SwapRace`, `TestSEC_SFTP_002_DeleteKeepsLinkTarget`, `TestSEC_SFTP_003_PartModeAndRename`, `TestFR_SFTP_005_LocalStartsInWorkingDir`, `TestFR_SFTP_005_FallsBackToHome`, `TestFR_SFTP_012_LocalMkdirMode`.
+- **Done when:** no write path in `local.go` takes a joined path string to `os.OpenFile`; all go through a root (code review plus a `go vet`-style grep test).
+- **Estimate:** 1.5 d
+
+### T-048 · Shared connections
+
+- **Delivers:** `sshclient.Conn` and `Lease` (ADR-017) with the waiter goroutine through `term.SafeGo`; `session.New(lease, opts)` taking ownership of a lease, the waiter watching `Conn.Done()`, `Close` releasing the lease; `Session.Conn()`; `app.Session.ConnID()`; `app.Connect` creating the `Conn`; `app.Service.OpenSFTPOn(s)` returning a second lease (wrapped by `files.Open` once T-046 lands; until then a stub `Browser` used only by tests); the `Ctrl+]` `q` question of the FR-CONN-014 revision; `apptest.FakeSession.ConnID`.
+- **Satisfies:** ARCH-CONN-006, ARCH-SESS-008 (M3 revision), FR-CONN-014 (M3 revision), FR-SFTP-004 (partial: session side)
+- **Depends on:** none (starts on day 1)
+- **Tests:** `TestARCH_CONN_006_LastReleaseCloses`, `TestARCH_CONN_006_DoubleReleaseNoop`, `TestARCH_CONN_006_LeaseAfterCloseFails`, `TestARCH_CONN_006_DropClosesDone`, `TestARCH_SESS_008_M3_ExitKeepsSharedConn`, `TestARCH_SESS_008_M3_DropIsDisconnectError`, `TestFR_CONN_014_M3_SharedQuestion`, `TestFR_CONN_014_M3_LastUserClosesConn`, `TestFR_SFTP_004_ShellExitKeepsConn`. The M2 session tests pass unchanged except for the constructor.
+- **Done when:** the whole M2 suite passes on top of leases, sshtest counts exactly one connection close per connection in every test, and `goleak` is clean.
+- **Estimate:** 2 d
+
+### T-049 · SFTP tab and panes (with a fake browser)
+
+- **Delivers:** `ui/sftpview` with `Layout` and the panes of design §9.6 (titles, `..`, sorting, `▸`, `/`, `@`, sizes, item counts with `…`, mtime from 50 columns, cursor `>`, focus), the progress line's message slot and the footer from `ui/keys`; the SFTP tab in the root model's tab list (shared numbering, `sftp: <label>` in the tab bar, `●`/`✕`); `s` on the host list and `Ctrl+]` `s` (with `ConnID` matching) against the fake service; `app.Browser` and `apptest.FakeBrowser`; navigation, `tab`, `enter`, `backspace`/`h`, `~`, `.`, `/` filter, `space` marks, `R`, `?` help; goldens of the approved layout at 80×24 and 120×40.
+- **Satisfies:** FR-SFTP-002 (partial: UI), FR-SFTP-003 (partial: UI), FR-SFTP-006, FR-SFTP-007, FR-SFTP-008, FR-SFTP-009, FR-SFTP-013, FR-SFTP-023, FR-TAB-003 (M3 revision), FR-TAB-005 (M3 revision, partial: `s`), ARCH-UI-001 (M3 revision, partial), ARCH-UI-005 (M3 revision), ARCH-SFTP-007 (partial: tab list and layout)
+- **Depends on:** none (starts on day 1; fake browser)
+- **Tests:** `TestFR_SFTP_006_SortDirsFirst`, `TestFR_SFTP_006_SizeUnits`, `TestFR_SFTP_006_ItemCountsVisibleOnly`, `TestFR_SFTP_006_MtimeColumnFrom50`, `TestFR_SFTP_007_Keys` (table), `TestFR_SFTP_007_ParentKeepsCursor`, `TestFR_SFTP_007_SymlinkDirOpensLinkPath`, `TestFR_SFTP_008_HiddenToggle`, `TestFR_SFTP_008_FilterSubstring`, `TestFR_SFTP_009_MarkMovesDown`, `TestFR_SFTP_009_MarksDroppedOnCd`, `TestFR_SFTP_013_RefreshKeepsCursor`, `TestFR_SFTP_023_ApprovedLayoutGolden` (80×24, 120×40, odd width), `TestFR_TAB_003_M3_SftpLabel`, `TestFR_TAB_005_M3_PrefixS`, `TestFR_SFTP_003_FocusesExistingTab`, `TestARCH_UI_005_M3_FrameGoldens`, `TestARCH_SFTP_007_SharedNumbering`, `TestARCH_UI_004_SftpBindingsHaveHelp`.
+- **Done when:** the approved layout golden matches the product owner's mock-up line for line (apart from data), and every key has a root-model test.
+- **Estimate:** 3 d
+
+### T-050 · File operations in the UI
+
+- **Delivers:** the input modal (rename, mkdir) with the name rules; the delete flow with the background count ("Counting… esc cancel") and the counted confirmation; error and warning lines on the progress line (`✕`, `⚠`, 10 s rule); refresh after each operation with the cursor on the affected name; `e` and `c` hints in the footer.
+- **Satisfies:** FR-SFTP-010, FR-SFTP-011, FR-SFTP-012, FR-SFTP-024
+- **Depends on:** T-049
+- **Tests:** `TestFR_SFTP_010_RenameModalGolden`, `TestFR_SFTP_010_RejectsUnsafeName`, `TestFR_SFTP_010_ExistingRefused`, `TestFR_SFTP_011_ConfirmCountsEntries`, `TestFR_SFTP_011_DefaultsNo`, `TestFR_SFTP_011_CountCancel`, `TestFR_SFTP_011_StopsAtFirstError`, `TestFR_SFTP_012_CursorOnNewDir`, `TestFR_SFTP_024_ErrorLine`, `TestFR_SFTP_024_SkippedWarning`.
+- **Done when:** every modal of the flow has a golden and a click-free keyboard path.
+- **Estimate:** 1.5 d
+
+### T-051 · Transfer queue and streaming
+
+- **Delivers:** `files/queue.go` and `transfer.go` per ADR-018: the FIFO queue, two workers through `term.SafeGo`, directory jobs that insert their children, download through `WriteTo` with the cancelling, size-limiting writer into a local part file (T-047 primitives), upload through 1 MiB `WriteAt` into a remote part file, `PosixRename` or remove-and-rename, `Chmod(mode & 0777)` and `Chtimes` on both sides, symlink and special-file skipping with counts, conflicts parked as `waiting` with answers and "apply to all" per batch, "keep both" naming, cancel (part files removed) and retry, the coalesced `Updates()` and the `Transfers()` snapshot with 5 s moving-average rate and ETA, the 1,000-row history.
+- **Satisfies:** FR-SFTP-001 (partial: back end), FR-SFTP-015 (partial: back end), FR-SFTP-016 (partial: back end), ARCH-SFTP-003, ARCH-SFTP-004, SEC-SFTP-003, SEC-SFTP-004 (oversize file)
+- **Depends on:** T-046, T-047
+- **Tests:** `TestFR_SFTP_001_RoundTripSHA256` (100 MiB), `TestFR_SFTP_001_TreeBothWays`, `TestFR_SFTP_001_MtimeAndMode`, `TestFR_SFTP_001_SkipsSymlinksInTree`, `TestFR_SFTP_016_KeepBothNaming`, `TestFR_SFTP_016_ApplyToAllPerBatch`, `TestFR_SFTP_016_OldFileIntactUntilDone`, `TestFR_SFTP_015_CancelRemovesPart`, `TestARCH_SFTP_003_AtMostTwo`, `TestARCH_SFTP_003_UpdatesCoalesce`, `TestARCH_SFTP_003_PanicFailsOnlyJob` (`sshelf_faultinject`), `TestARCH_SFTP_004_CancelWithinOneSecond`, `TestSEC_SFTP_003_NoPartialFinalName`, `TestSEC_SFTP_003_SizeChangedFails`, `TestSEC_SFTP_003_PosixRenameOrFallback`, `TestSEC_SFTP_004_OversizeFileCut`.
+- **Done when:** the queue tests pass with `-race` and `goleak` on Linux and macOS, and a 1 GiB transfer runs with flat heap in a quick local check (the CI bound is T-058).
+- **Estimate:** 3 d
+
+### T-052 · Resume, pause and reconnect (back end)
+
+- **Delivers:** the source records and upload checkpoints (every 8 MiB and on clean pause or cancel), the resume decision of FR-SFTP-017 with its reasons, truncation to the checkpoint, pause on `Conn.Done()`, `Browser.Attach(lease)` that reopens both channels and requeues paused jobs in order, `app.Service.ReconnectSFTP`.
+- **Satisfies:** FR-SFTP-017, FR-SFTP-018 (partial: back end), ARCH-SFTP-005, FR-SFTP-004 (partial: drop pauses)
+- **Depends on:** T-051
+- **Tests:** `TestARCH_SFTP_005_ResumeDecisionTable`, `TestFR_SFTP_017_DownloadResumes` (fault after 20 MiB of 64), `TestFR_SFTP_017_UploadResumesFromCheckpoint`, `TestFR_SFTP_017_RemoteChangedRestarts`, `TestFR_SFTP_017_LeftoverPartNotResumed`, `TestFR_SFTP_018_DropPausesAll`, `TestFR_SFTP_018_AttachResumesInOrder`, `TestFR_SFTP_004_DropPausesSftp`.
+- **Done when:** sshtest's byte counters prove less than 48 MiB re-sent in both directions, and every "restart" reason is reachable in the table test.
+- **Estimate:** 2 d
+
+### T-053 · Transfers UI (with a fake browser)
+
+- **Delivers:** the progress line (golden format, dropping order, 4 Hz tick, paused and waiting texts), `c` queuing with marks cleared, the transfers view (`t`, states as text, `x`, `r`, `enter`, `C`, Esc), the conflict modal, the disconnected tab state (`✕`, `r` reconnect through the connect flow, `x` with confirmation, refused operations), `Ctrl+]` `q` close confirmation with the transfer count, activity marker on a finished or failed transfer in the background.
+- **Satisfies:** FR-SFTP-014, FR-SFTP-015, FR-SFTP-016, FR-SFTP-018, FR-SFTP-025 (partial: UI), FR-SFTP-001 (partial: UI)
+- **Depends on:** T-049
+- **Tests:** `TestFR_SFTP_014_ProgressLineGolden`, `TestFR_SFTP_014_DropsCountsThenBar`, `TestFR_SFTP_014_RedrawAtMost4Hz`, `TestFR_SFTP_015_ViewGolden` (every state), `TestFR_SFTP_015_Keys`, `TestFR_SFTP_016_ConflictModalGolden`, `TestFR_SFTP_016_EscSkips`, `TestFR_SFTP_018_DisconnectedGolden`, `TestFR_SFTP_018_ReconnectSameTab`, `TestFR_SFTP_018_RefusedWhileDisconnected`, `TestFR_SFTP_025_CloseConfirmCountsTransfers`, `TestFR_SFTP_001_CopyQueuesAndClearsMarks`.
+- **Done when:** every state and modal has a golden at 80×24 and 120×40 and a keyboard path.
+- **Estimate:** 2 d
+
+### T-054 · Wire real SFTP tabs
+
+- **Delivers:** `app.Service.OpenSFTP(ctx, hostID)` through the normal connect flow, `OpenSFTPOn` and `ReconnectSFTP` returning `*files.Browser` as `app.Browser`; `ErrNoSFTP`; the root model's quit path closing SFTP tabs (`CloseTabs`), the FR-TAB-009 question with tab and transfer counts, SIGTERM/SIGHUP cancelling transfers; the M3 walk-through; PTY E2E of upload and download.
+- **Satisfies:** FR-SFTP-002, FR-SFTP-003, FR-SFTP-004, FR-SFTP-025, FR-TAB-009 (M3 revision), FR-TAB-005 (M3 revision), ARCH-UI-001 (M3 revision), ARCH-SFTP-007, ARCH-SFTP-002
+- **Depends on:** T-048, T-050, T-052, T-053
+- **Tests:** `TestFR_SFTP_002_E2EOpenFromHostList` (no `pty-req`), `TestFR_SFTP_002_NoSftpNoTab`, `TestFR_SFTP_003_E2ESameConnectionNoAuth`, `TestFR_SFTP_004_E2ECloseEitherFirst`, `TestFR_SFTP_025_E2ECloseReleases`, `TestFR_TAB_009_M3_QuestionCounts`, `TestFR_TAB_009_M3_SigtermCancelsTransfers`, `TestARCH_UI_001_M3_Walkthrough`, `TestARCH_SFTP_007_QuitClosesAll`, `TestFR_SFTP_001_E2EUploadDownload` (PTY, checksums).
+- **Done when:** the PTY suite uploads and downloads against sshtest on Linux and macOS, and every connection close is counted exactly once.
+- **Estimate:** 2 d
+
+### T-055 · Edit locally
+
+- **Delivers:** `internal/ui/editor` (`Words`, `Command`, `Run` with `tea.ExecProcess`); archtest's `os/exec` exception for that package only; `files/edit.go` (`EditCopy`: private temp dir and file, SHA-256 change check, remote-changed check, upload through a part file keeping the mode, save-as `.local-edit` remotely or into the local pane's dir, `Remove`, crash-cleanup registry used by `cmd/sshelf`'s panic handler); the root-model flow of design §8.10 with the editconflict and upload-failure modals; `tea.RequestWindowSize` after the editor; the 64 MiB limit and symlink resolution.
+- **Satisfies:** FR-SFTP-019, FR-SFTP-020, ARCH-SFTP-006, ARCH-SESS-001 (M3 revision), SEC-MEM-008 (M3 revision), SEC-SFTP-005, SEC-SFTP-006
+- **Depends on:** T-054
+- **Tests:** `TestARCH_SFTP_006_EditorWords`, `TestARCH_SFTP_006_CommandArgsAndEnv`, `TestARCH_SFTP_006_SessionsKeepReading` (PTY), `TestARCH_SFTP_006_ResizeAfterEditor` (PTY), `TestARCH_SESS_001_M3_ExecOnlyInEditor` (archtest with a fixture module), `TestSEC_MEM_008_M3_EditorArgsNoCanary`, `TestSEC_SFTP_005_ModesUnderUmask0`, `TestSEC_SFTP_005_RemovedOnEveryPath` (table, including the faultinject panic), `TestSEC_SFTP_006_NoShell`, `TestFR_SFTP_019_E2EFakeEditorAppends` (PTY), `TestFR_SFTP_019_NonZeroExitNoUpload`, `TestFR_SFTP_019_EditorNotFound`, `TestFR_SFTP_019_UploadFailedModal`, `TestFR_SFTP_019_TooLargeRefused`, `TestFR_SFTP_020_RemoteChangedChoices`, `TestFR_SFTP_020_RemoteDeleted`.
+- **Done when:** `go list -deps` shows `os/exec` in `internal/ui/editor` only, the PTY test leaves no `sshelf-edit-*` directory, and the fake editor scripts live in `testdata`.
+- **Estimate:** 2.5 d
+
+### T-056 · Mouse and drag in the SFTP tab (with a fake browser)
+
+- **Delivers:** the SFTP rows of the mouse-mode policy (cell motion); clicks (focus pane, select row), double-click as `enter`, wheel ±3 on the pane under the pointer, tab-bar clicks on an SFTP tab, a click on the progress line opening the transfers view; motion and release routed to `sftpview` on SFTP tabs only; drag with the hint and pane highlight, release over the other pane queuing the copy.
+- **Satisfies:** FR-SFTP-021, FR-SFTP-022, ARCH-UI-006 (M3 revision), ARCH-UI-007 (M3 revision)
+- **Depends on:** T-049
+- **Tests:** `TestFR_SFTP_021_ClickFocusesAndSelects`, `TestFR_SFTP_021_DoubleClickOpensDir`, `TestFR_SFTP_021_WheelScrollsPaneUnderPointer`, `TestFR_SFTP_021_TabBarClick`, `TestFR_SFTP_021_ProgressLineClickOpensTransfers`, `TestFR_SFTP_022_DragCopiesMarked`, `TestFR_SFTP_022_DragHintGolden`, `TestFR_SFTP_022_ReleaseSamePaneCancels`, `TestFR_SFTP_022_ClickIsNotDrag`, `TestARCH_UI_006_M3_SftpCellMotion`, `TestARCH_UI_007_M3_LayoutMatchesView`, `TestARCH_UI_007_M3_MotionIgnoredElsewhere`, `TestNFR_UX_001_EveryActionBound` (extended to the SFTP tab).
+- **Done when:** every mouse interaction of design §9.5's SFTP rows has a root-model test with coordinates that include the header row.
+- **Estimate:** 1.5 d
+
+### T-057 · SFTP security suite and canary extension
+
+- **Delivers:** the end-to-end hostile-server suite through the real binary (unsafe names, symlink tricks in the download folder, 150,000 entries, a 70-level chain, an oversize file, escape sequences in status messages scanned in the PTY output); the canary harness (T-028, T-042) extended with the M3 flows of SEC-SFTP-007 and with every SFTP frame (pane titles, progress line, modals) added to what it scans; the debug-log rule (paths at debug only, never contents).
+- **Satisfies:** SEC-SFTP-007, SEC-SFTP-001 (E2E), SEC-SFTP-002 (E2E), SEC-SFTP-004 (E2E heap), SEC-SFTP-008 (PTY scan)
+- **Depends on:** T-054 (T-055 for the edit flows of the canary)
+- **Tests:** `TestSEC_SFTP_007_CanaryHarnessM3`, `TestSEC_SFTP_007_NoTransferRecordsWhenLoggingOff`, `TestSEC_SFTP_007_PasswordCanaryNotInFrames`, `TestSEC_SFTP_001_E2EHostileDownload`, `TestSEC_SFTP_002_E2EPlantedSymlink`, `TestSEC_SFTP_004_E2EHugeListingHeap`, `TestSEC_SFTP_008_PTYScan`.
+- **Done when:** zero canary hits and zero forbidden sequences across all M3 flows on both OSes.
+- **Estimate:** 1.5 d
+
+### T-058 · M3 NFR checks
+
+- **Delivers:** the perf-job checks for transfer throughput, UI responsiveness during transfers, large listings and transfer memory; the PR template's perf section gains an `sftp` row (MB/s each way, heap peak).
+- **Satisfies:** NFR-PERF-007, NFR-PERF-008, NFR-PERF-009, NFR-SIZE-004
+- **Depends on:** T-054
+- **Tests:** `TestNFR_PERF_007_Throughput`, `BenchmarkNFR_PERF_007_Download`, `BenchmarkNFR_PERF_007_Upload`, `TestNFR_PERF_008_FrameGaps`, `TestNFR_PERF_009_TenThousandEntries`, `BenchmarkNFR_PERF_009_SortAndRender`, `TestNFR_SIZE_004_TransferHeap`.
+- **Done when:** each check passes 5 consecutive CI runs; if throughput is under 50 MB/s, the profile and the cause (sshtest, sshelf or `pkg/sftp`) are in the PR and the product owner decides before the limit changes.
+- **Estimate:** 1.5 d
+
+### T-059 · M3 acceptance gate
+
+- **Delivers:**
+  - Each **M3 revision** block is folded into its requirement (new sentence and criteria, `Priority: M3`, `Status: Implemented`) and removed: FR-TAB-003, FR-TAB-005, FR-TAB-009, FR-CONN-014, SEC-MEM-008, ARCH-SESS-001, ARCH-SESS-008, ARCH-UI-001, ARCH-UI-005, ARCH-UI-006, ARCH-UI-007. Their rows move to the M3 matrix.
+  - `scripts/tracecheck` covers M3: it reads requirements with priority `MVP`, `M2` or `M3`; it reads the [M3 traceability matrix](#m3-traceability-matrix) and the "M3 manual-only requirements" table; the revision-block rule matches `**M2 revision**` and `**M3 revision**`. Fixtures for each new rule. `TestNFR_QUAL_001_EveryMVPAndM2IDTraced` becomes `TestNFR_QUAL_001_EveryMilestoneIDTraced`; NFR-QUAL-001's text, the CI step message and `CONTRIBUTING.md` step 4 say "every MVP, M2 and M3 ID".
+  - Every M3 requirement set to `Implemented`; the counts in each spec file updated.
+  - The M3 section of [`acceptance.md`](acceptance.md) run and signed off on macOS and Linux; `docs/release-checklist.md` gains its manual items (a real OpenSSH `sftp-server`, `vim` and `code -w` as editors, drag in the named terminals).
+  - ADR-016's limitation list updated with the upstream status of limitation 1, and the M3 questions in `product/requirements.md` §22 updated with the product owner's answers.
+- **Satisfies:** NFR-QUAL-001 (M3 extension), FR-SFTP-019 (manual: a real editor), FR-SFTP-021 and FR-SFTP-022 (manual: a real terminal's mouse)
+- **Depends on:** T-045 … T-058
+- **Tests:** `TestNFR_QUAL_001_EveryMilestoneIDTraced`, `TestNFR_QUAL_001_M3RevisionBlockFails` (fixture), `TestNFR_QUAL_001_M3MatrixRead` (fixture), and the existing tracecheck tests.
+- **Done when:** `go run ./scripts/tracecheck` reports zero problems over MVP, M2 and M3, no revision block remains, coverage still meets NFR-QUAL-003 (with `files` in the 80 % list), and the M3 checklist is signed off.
+- **Estimate:** 1.5 d
+
+| Task | Title | Estimate | Depends on |
+|---|---|---|---|
+| T-045 | sshtest SFTP subsystem | 1.5 d | none |
+| T-046 | Remote core: listings, names, operations | 2 d | T-045, T-048 |
+| T-047 | Local side: listings and confined writes | 1.5 d | none |
+| T-048 | Shared connections | 2 d | none |
+| T-049 | SFTP tab and panes (fake browser) | 3 d | none |
+| T-050 | File operations in the UI | 1.5 d | T-049 |
+| T-051 | Transfer queue and streaming | 3 d | T-046, T-047 |
+| T-052 | Resume, pause and reconnect | 2 d | T-051 |
+| T-053 | Transfers UI (fake browser) | 2 d | T-049 |
+| T-054 | Wire real SFTP tabs | 2 d | T-048, T-050, T-052, T-053 |
+| T-055 | Edit locally | 2.5 d | T-054 |
+| T-056 | Mouse and drag | 1.5 d | T-049 |
+| T-057 | Security suite and canary | 1.5 d | T-054 |
+| T-058 | M3 NFR checks | 1.5 d | T-054 |
+| T-059 | M3 acceptance gate | 1.5 d | T-045 … T-058 |
+| **M3 total** | 15 tasks | **29 d** | critical path 15 d |
+
+---
+
 ## v1
 
 v1 tasks are planned one at a time, ahead of the milestone outline below,
@@ -564,9 +760,10 @@ passes.
 | **v1-F Settings** | External-change guard (FR-CFG-004, SEC-FILE-005, ARCH-DATA-005); `NO_COLOR`, themes, key bindings, defaults, settings view (FR-CFG-005 … FR-CFG-009); `--config` (FR-CLI-002) |
 | **v1-G Release** | NFR-SIZE-001, NFR-BUILD-002, NFR-PORT-003; goreleaser pipeline and first tagged release (NFR-PERF-004 moved to M2) |
 
-`Later` items (FR-CRED-003, FR-CONN-015 … FR-CONN-017, FR-KH-006, SEC-HOSTKEY-011, FR-SFTP-*,
+`Later` items (FR-CRED-003, FR-CONN-015 … FR-CONN-017, FR-KH-006, SEC-HOSTKEY-011,
 SEC-CRED-008 and the rest) are not planned. FR-TAB-001, ARCH-SESS-010 and
-ARCH-SESS-011 were `Later` and are now M2.
+ARCH-SESS-011 were `Later` and are now M2; FR-SFTP-001 and FR-SFTP-002
+were `Later` and are now M3.
 
 ---
 
@@ -871,3 +1068,109 @@ MVP tasks first.
 Totals: 21 FR + 2 SEC + 18 ARCH + 5 NFR = **46 M2 requirements**: 36 new
 or promoted, 9 revised from the MVP (folded in by T-043) and SEC-SESSION-006
 (added by T-043), all covered by T-031 … T-043.
+
+## M3 manual-only requirements
+
+An `M3` requirement listed here needs no automated test, under the same
+rules as the MVP table above.
+
+| ID | Why it cannot be automated | Steps |
+|---|---|---|
+
+None planned: every M3 requirement has at least one automated test. These M3
+acceptance criteria are also checked by hand in the M3 section of
+[`acceptance.md`](acceptance.md), because they need a real OpenSSH
+`sftp-server`, a real editor or the user's own terminal emulator:
+
+- FR-SFTP-001 and FR-SFTP-017: copy, interrupt and resume against a real OpenSSH server.
+- FR-SFTP-019 and FR-SFTP-020: edit-locally with `vim` and with a GUI editor that needs a wait flag (`code -w`).
+- FR-SFTP-021 and FR-SFTP-022: clicks, wheel and drag in the named terminals of NFR-PORT-002.
+- SEC-SFTP-002: a symlink planted in the download folder, by hand.
+
+## M3 traceability matrix
+
+Every `M3` requirement and the tasks that cover it; the task that completes
+an ID is listed last. Requirements that M3 revises keep their earlier tasks
+first.
+
+### Functional (`FR-*`)
+
+| ID | Tasks |
+|---|---|
+| FR-CONN-014 | T-035, T-037, T-048 |
+| FR-SFTP-001 | T-051, T-053, T-054 |
+| FR-SFTP-002 | T-049, T-054 |
+| FR-SFTP-003 | T-049, T-054 |
+| FR-SFTP-004 | T-048, T-052, T-054 |
+| FR-SFTP-005 | T-046, T-047 |
+| FR-SFTP-006 | T-049 |
+| FR-SFTP-007 | T-049 |
+| FR-SFTP-008 | T-049 |
+| FR-SFTP-009 | T-049 |
+| FR-SFTP-010 | T-046, T-050 |
+| FR-SFTP-011 | T-046, T-050 |
+| FR-SFTP-012 | T-046, T-047, T-050 |
+| FR-SFTP-013 | T-049 |
+| FR-SFTP-014 | T-053 |
+| FR-SFTP-015 | T-051, T-053 |
+| FR-SFTP-016 | T-051, T-053 |
+| FR-SFTP-017 | T-052 |
+| FR-SFTP-018 | T-052, T-053 |
+| FR-SFTP-019 | T-055, T-059 |
+| FR-SFTP-020 | T-055 |
+| FR-SFTP-021 | T-056, T-059 |
+| FR-SFTP-022 | T-056, T-059 |
+| FR-SFTP-023 | T-049 |
+| FR-SFTP-024 | T-050 |
+| FR-SFTP-025 | T-053, T-054 |
+| FR-TAB-003 | T-034, T-042, T-049 |
+| FR-TAB-005 | T-035, T-049, T-054 |
+| FR-TAB-009 | T-036, T-054 |
+
+### Security (`SEC-*`)
+
+| ID | Tasks |
+|---|---|
+| SEC-MEM-008 | T-000, T-010, T-055 |
+| SEC-SFTP-001 | T-046, T-057 |
+| SEC-SFTP-002 | T-047, T-057 |
+| SEC-SFTP-003 | T-047, T-051 |
+| SEC-SFTP-004 | T-046, T-051, T-057 |
+| SEC-SFTP-005 | T-055 |
+| SEC-SFTP-006 | T-055 |
+| SEC-SFTP-007 | T-057 |
+| SEC-SFTP-008 | T-046, T-057 |
+
+### Architecture (`ARCH-*`)
+
+| ID | Tasks |
+|---|---|
+| ARCH-CONN-006 | T-048 |
+| ARCH-SESS-001 | T-000, T-002, T-055 |
+| ARCH-SESS-008 | T-032, T-036, T-048 |
+| ARCH-SFTP-001 | T-046 |
+| ARCH-SFTP-002 | T-046, T-047, T-054 |
+| ARCH-SFTP-003 | T-051 |
+| ARCH-SFTP-004 | T-051 |
+| ARCH-SFTP-005 | T-052 |
+| ARCH-SFTP-006 | T-055 |
+| ARCH-SFTP-007 | T-049, T-054 |
+| ARCH-TEST-004 | T-045 |
+| ARCH-UI-001 | T-004, T-030, T-034, T-037, T-043, T-049, T-054 |
+| ARCH-UI-005 | T-034, T-049 |
+| ARCH-UI-006 | T-038, T-041, T-056 |
+| ARCH-UI-007 | T-038, T-040, T-056 |
+
+### Non-functional (`NFR-*`)
+
+| ID | Tasks |
+|---|---|
+| NFR-PERF-007 | T-058 |
+| NFR-PERF-008 | T-058 |
+| NFR-PERF-009 | T-058 |
+| NFR-SIZE-004 | T-058 |
+
+Totals: 29 FR + 9 SEC + 15 ARCH + 4 NFR = **57 M3 requirements**: 46 new or
+promoted and 11 revised (FR-TAB-003, FR-TAB-005, FR-TAB-009, FR-CONN-014,
+SEC-MEM-008, ARCH-SESS-001, ARCH-SESS-008, ARCH-UI-001, ARCH-UI-005,
+ARCH-UI-006, ARCH-UI-007; folded in by T-059), all covered by T-045 … T-059.
