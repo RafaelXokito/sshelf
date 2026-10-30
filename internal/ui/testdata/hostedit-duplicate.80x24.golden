@@ -1,0 +1,24 @@
+sshelf │[Hosts]│
+
+Duplicate host zeta
+
+> Label       zeta Copy_
+  Hostname    10.0.0.30
+  Port        22
+  Username    optional
+  Identity    (none)
+  Password    (set)
+  Key file    optional
+  Stored key  (not set)
+  Passphrase  (not set)
+
+              [ Save ]   [ Cancel ]
+
+
+
+
+
+
+
+
+tab next field • shift+tab previous field • ctrl+s save • esc cancel

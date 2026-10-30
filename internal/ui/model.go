@@ -253,6 +253,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case hostlist.EditHostMsg:
 		return m.openForm(msg.Host), nil
 
+	case hostlist.DuplicateHostMsg:
+		src := msg.Host
+		return m.openFormWith(func(hosts []domain.Host) hostedit.Model {
+			return hostedit.NewDuplicate(src, hosts, m.identities)
+		}), nil
+
 	case hostedit.SaveMsg:
 		svc, h, c := m.svc, msg.Host, msg.Creds
 		return m, func() tea.Msg {
@@ -489,6 +495,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // openForm shows the host form for h (the zero Host to add one) and keeps
 // the screen to return to.
 func (m Model) openForm(h domain.Host) Model {
+	return m.openFormWith(func(hosts []domain.Host) hostedit.Model { return hostedit.New(h, hosts, m.identities) })
+}
+
+// openFormWith is openForm with the form built by form from the hosts.
+func (m Model) openFormWith(form func(hosts []domain.Host) hostedit.Model) Model {
 	var hosts []domain.Host
 	switch s := m.screen.(type) {
 	case hostlist.Model:
@@ -499,7 +510,7 @@ func (m Model) openForm(h domain.Host) Model {
 	}
 	m.prev = m.screen
 	m.status = ""
-	f := hostedit.New(h, hosts, m.identities)
+	f := form(hosts)
 	if m.noStore != nil {
 		f = f.WithoutStore(m.noStore.Store)
 	}

@@ -48,7 +48,7 @@ func TestNFR_UX_001_EveryActionBound(t *testing.T) {
 			list = m
 		}
 	}
-	for _, want := range []string{"up", "k", "down", "j", "g", "G", "/", "enter", "a", "e", "d", "i", "I", "q", "ctrl+c"} {
+	for _, want := range []string{"up", "k", "down", "j", "g", "G", "/", "enter", "a", "c", "e", "d", "i", "I", "q", "ctrl+c"} {
 		if !slices.ContainsFunc(list.Bindings, func(b key.Binding) bool { return slices.Contains(b.Keys(), want) }) {
 			t.Errorf("host list has no binding for %q", want)
 		}

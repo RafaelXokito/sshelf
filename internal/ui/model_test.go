@@ -55,6 +55,7 @@ type fakeService struct {
 	connected []domain.ID
 	sizes     []app.Size    // the session area passed to each Connect
 	saves     []domain.Host // hosts passed to SaveHost
+	copyOf    []domain.ID   // HostCredentials.CopyOf of each duplicate saved
 }
 
 // SaveHost mimics app.App.SaveHost in memory.

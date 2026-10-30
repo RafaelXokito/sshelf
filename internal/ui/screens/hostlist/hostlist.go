@@ -56,6 +56,10 @@ type AddHostMsg struct{}
 // EditHostMsg asks the root model to open the host form for Host.
 type EditHostMsg struct{ Host domain.Host }
 
+// DuplicateHostMsg asks the root model to open the host form for a copy
+// of Host (FR-HOST-004).
+type DuplicateHostMsg struct{ Host domain.Host }
+
 // DeleteHostMsg asks the root model to delete a host. The list sends it
 // only after the user confirmed (FR-HOST-002).
 type DeleteHostMsg struct {
@@ -193,7 +197,9 @@ func (m Model) Hints() []key.Binding {
 	if m.searching {
 		return []key.Binding{keys.Connect, keys.ClearSearch, keys.SearchUp, keys.SearchDown}
 	}
-	return []key.Binding{keys.Connect, keys.Search, keys.AddHost, keys.EditHost, keys.DeleteHost, keys.Import, keys.Quit}
+	// I import is bound but left out, so that the footer fits 80
+	// columns (FR-NAV-003 v1 revision).
+	return []key.Binding{keys.Connect, keys.Search, keys.AddHost, keys.DuplicateHost, keys.EditHost, keys.DeleteHost, keys.Quit}
 }
 
 // Update implements components.Screen.
@@ -307,6 +313,10 @@ func (m Model) updateList(k tea.KeyPressMsg) (components.Screen, tea.Cmd) {
 	case key.Matches(k, keys.EditHost):
 		if h, ok := m.Selected(); ok {
 			return m, func() tea.Msg { return EditHostMsg{Host: h} }
+		}
+	case key.Matches(k, keys.DuplicateHost):
+		if h, ok := m.Selected(); ok {
+			return m, func() tea.Msg { return DuplicateHostMsg{Host: h} }
 		}
 	case key.Matches(k, keys.DeleteHost):
 		if h, ok := m.Selected(); ok {

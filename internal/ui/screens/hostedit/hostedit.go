@@ -74,11 +74,15 @@ type CancelledMsg struct{}
 // field is valid, sends SaveMsg; errors are shown next to their fields.
 // Esc closes the form, after a confirm when there are unsaved changes.
 type Model struct {
-	host  domain.Host // as opened; ID "" when adding
-	data  domain.Data // the other hosts and the identities, for validation
-	form  *components.Form
-	in    [rowIdentity]*components.TextInput
-	ident *components.Choice
+	host domain.Host // as opened; ID "" when adding
+	// copyOf is the host a duplicate copies (FR-HOST-004), and
+	// copyLabel its label for the title; copyOf is "" otherwise.
+	copyOf    domain.ID
+	copyLabel string
+	data      domain.Data // the other hosts and the identities, for validation
+	form      *components.Form
+	in        [rowIdentity]*components.TextInput
+	ident     *components.Choice
 
 	keyPath                   *components.TextInput
 	password, key, passphrase *components.SecretField
@@ -160,6 +164,23 @@ func New(h domain.Host, hosts []domain.Host, identities []domain.Identity) Model
 	return m
 }
 
+// NewDuplicate returns the form for a copy of src (FR-HOST-004, D-022):
+// a new host pre-filled with src's fields and labelled
+// domain.CopyLabel. src's hidden identity shows as in the edit form,
+// "(none)" with its key file and "set"/"not set" for each secret; nothing
+// is read from the credential store. The form starts clean, so Esc closes
+// it at once. Its SaveMsg carries Creds.CopyOf, so that the service
+// copies the rest, secrets included (FR-HOST-011).
+func NewDuplicate(src domain.Host, hosts []domain.Host, identities []domain.Identity) Model {
+	h := domain.Host{
+		Label: domain.CopyLabel(src.Label, hosts), Hostname: src.Hostname,
+		Port: src.Port, User: src.User, IdentityID: src.IdentityID,
+	}
+	m := New(h, hosts, identities)
+	m.copyOf, m.copyLabel = src.ID, src.Label
+	return m
+}
+
 // WithoutStore returns the form with its secret fields disabled,
 // explaining that store is not available (ARCH-SEC-006, D-101). A key
 // file and the username still save.
@@ -238,6 +259,7 @@ func (m Model) submit() (components.Screen, tea.Cmd) {
 		ClearPassword:   m.password.Cleared(),
 		ClearKey:        m.key.Cleared(),
 		ClearPassphrase: m.passphrase.Cleared(),
+		CopyOf:          m.copyOf,
 	}
 	return m, func() tea.Msg { return SaveMsg{Host: h, Creds: c} }
 }
@@ -292,7 +314,10 @@ const formTop = 2
 // View implements components.Screen.
 func (m Model) View() string {
 	title := "Add host"
-	if m.host.ID != "" {
+	switch {
+	case m.copyOf != "":
+		title = "Duplicate host " + domain.Sanitize(m.copyLabel)
+	case m.host.ID != "":
 		title = "Edit host " + domain.Sanitize(m.host.Label)
 	}
 	var b strings.Builder

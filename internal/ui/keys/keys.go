@@ -41,14 +41,17 @@ var (
 // Host list (FR-NAV-003). The groups key of design §9.3 is v1 and stays
 // unassigned; g is First.
 var (
-	First      = key.NewBinding(key.WithKeys("g", "home"), key.WithHelp("g", "first"))
-	Last       = key.NewBinding(key.WithKeys("G", "end"), key.WithHelp("G", "last"))
-	Search     = key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "search"))
-	AddHost    = key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "add"))
-	EditHost   = key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "edit"))
-	DeleteHost = key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "delete"))
-	Identities = key.NewBinding(key.WithKeys("i"), key.WithHelp("i", "identities"))
-	Import     = key.NewBinding(key.WithKeys("I"), key.WithHelp("I", "import"))
+	First   = key.NewBinding(key.WithKeys("g", "home"), key.WithHelp("g", "first"))
+	Last    = key.NewBinding(key.WithKeys("G", "end"), key.WithHelp("G", "last"))
+	Search  = key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "search"))
+	AddHost = key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "add"))
+	// DuplicateHost opens the host form pre-filled from the selected
+	// host (FR-HOST-004, D-022).
+	DuplicateHost = key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "duplicate"))
+	EditHost      = key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "edit"))
+	DeleteHost    = key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "delete"))
+	Identities    = key.NewBinding(key.WithKeys("i"), key.WithHelp("i", "identities"))
+	Import        = key.NewBinding(key.WithKeys("I"), key.WithHelp("I", "import"))
 )
 
 // Search field (FR-NAV-002): letters type into the query, so only the
@@ -144,7 +147,7 @@ var textInput = []key.Binding{CursorLeft, CursorRight, CursorHome, CursorEnd, De
 // v1) is generated from it; footers show a subset.
 func Maps() []Map {
 	return append([]Map{
-		{Name: "host list", Bindings: []key.Binding{Up, Down, First, Last, Search, Connect, OpenSFTP, AddHost, EditHost, DeleteHost, Identities, Import, Quit, ForceQuit}},
+		{Name: "host list", Bindings: []key.Binding{Up, Down, First, Last, Search, Connect, OpenSFTP, AddHost, DuplicateHost, EditHost, DeleteHost, Identities, Import, Quit, ForceQuit}},
 		{Name: "search", Bindings: append([]key.Binding{SearchUp, SearchDown, Connect, ClearSearch, ForceQuit}, textInput...)},
 		{Name: "welcome", Bindings: []key.Binding{WelcomeImport, WelcomeAdd, Quit, ForceQuit}},
 		{Name: "form", Bindings: []key.Binding{NextField, PrevField, Save, Cancel, ForceQuit}},

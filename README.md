@@ -39,6 +39,7 @@ On first launch, press `I` to import `~/.ssh/config` or `a` to add a host. The f
 | `enter` or double-click | connect |
 | `/` | search |
 | `a` / `e` / `d` | add / edit / delete |
+| `c` | duplicate (credentials are copied; nothing is saved until you save the form) |
 | `s` | open an SFTP tab |
 | `i` | identities (saved credentials) |
 | `I` | import `~/.ssh/config` |

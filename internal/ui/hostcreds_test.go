@@ -29,6 +29,19 @@ func (f *fakeService) SaveHostWithCredentials(ctx context.Context, h domain.Host
 		}
 	}
 	typed := c.KeyPath != "" || c.Password.Len() > 0 || c.Key.Len() > 0 || c.Passphrase.Len() > 0
+	if c.CopyOf != "" {
+		// A duplicate (FR-HOST-011): the source's hidden identity is
+		// copied, flags and all, under a new ID.
+		f.copyOf = append(f.copyOf, c.CopyOf)
+		if i := slices.IndexFunc(f.hosts, func(o domain.Host) bool { return o.ID == c.CopyOf }); i >= 0 && h.IdentityID == "" {
+			if j := slices.IndexFunc(f.identities, func(o domain.Identity) bool { return o.ID == f.hosts[i].IdentityID && o.Hidden }); j >= 0 {
+				id := f.identities[j]
+				id.ID, id.Label = domain.NewID(), h.Label
+				f.identities = append(slices.Clone(f.identities), id)
+				h.IdentityID = id.ID
+			}
+		}
+	}
 	switch {
 	case h.IdentityID != "" && hidden != nil && h.IdentityID != hidden.ID:
 		f.identities = slices.DeleteFunc(slices.Clone(f.identities), func(o domain.Identity) bool { return o.ID == hidden.ID })

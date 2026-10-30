@@ -196,7 +196,7 @@ If the label is empty, longer than 64 characters or equal (case-insensitive) to 
 ### FR-HOST-004 · Duplicate a host
 When the user presses `c` on a host in the host list, the system shall open the host form pre-filled with that host's fields and credentials and labelled `<label> Copy`, or `<label> Copy <n>` with the smallest `n` from 2 that no host's label equals case-insensitively, and shall create nothing until the form is saved.
 
-- **Priority:** v1 · **Status:** Draft · **Source:** D-022
+- **Priority:** v1 · **Status:** Implemented · **Source:** D-022
 - **Acceptance:**
   - Duplicating `web-prod` opens "Duplicate host web-prod" with the hostname, port, username and identity choice copied and the label `web-prod Copy`. With `WEB-PROD copy` saved, the label is `web-prod Copy 2`; with that saved too, `web-prod Copy 3`.
   - A host with its own credentials (FR-HOST-010) shows "(none)" as the identity and its key file path, and each secret field shows only "set" or "not set" (FR-IDENT-004). No secret is read to open the form.
@@ -256,12 +256,12 @@ When the user enters a username plus a password or a key (stored or file path) d
 ### FR-HOST-011 · Duplicated credentials
 When the user saves a duplicate (FR-HOST-004) of a host that has its own credentials (FR-HOST-010), the system shall give the new host its own hidden identity and copy each of the source's stored secrets that the form left unchanged to a new credential-store item under the new identity, reading it with `Get` and writing it with `Set`, without displaying it.
 
-- **Priority:** v1 · **Status:** Draft · **Source:** D-022
+- **Priority:** v1 · **Status:** Implemented · **Source:** D-022
 - **Acceptance:**
   - The new hidden identity has a new ID and the source's username, key file path and `has_*` flags. The source's items are untouched, and the copies are independent: editing or deleting either host leaves the other's secrets as they were.
   - A secret typed in the form replaces the copied value, and a secret cleared in the form is not copied.
   - A host linked to a shared identity is duplicated with a link to the same identity: no identity is created and the store is not called. Choosing a shared identity in the duplicate's form copies nothing either.
-  - If a `Get` or `Set` fails (access denied, no store, or the secret is not on this device, D-108), the save fails with a message naming the field, such as "could not copy the password: Access to Keychain was denied". The items already written are deleted, `config.json` is not written, and the form stays open.
+  - If a `Get` fails (access denied, no store, or the secret is not on this device, D-108), the save fails with a message naming the field, such as "could not copy the password: Access to Keychain was denied" (with no store at all, the D-101 explanation of FR-CRED-002). A failed `Set` or config write fails the save as for typed credentials (FR-HOST-010). In every case the items already written are deleted, `config.json` is not written, and the form stays open with the error under it.
   - No secret value appears on screen, in `config.json` or in the log.
 
 ---
@@ -654,7 +654,7 @@ The system shall provide these bindings in the host list: ↑/↓ or `k`/`j` to 
   - While the search field is focused, letter keys type into the query.
   - Ctrl+C inside a form cancels the form and does not quit.
   - In any other view, Esc goes back to the previous view. `q` quits only from the host list.
-- **v1 revision** · Priority: v1 · Status: Draft · Source: D-022
+- **v1 revision** · Priority: v1 · Status: Implemented · Source: D-022
   - *Revised:* The system shall provide these bindings in the host list: ↑/↓ or `k`/`j` to move, `g`/`G` for first/last, `/` to search, `Enter` to connect, `a` to add, `c` to duplicate (FR-HOST-004), `e` to edit, `d` to delete, `i` for identities, `I` to import, and `q` or `Ctrl+C` to quit.
   - *Acceptance:* the criteria above. The footer shows `c duplicate`; to fit 80 columns it no longer shows `I import`, which stays bound and is listed in the keymap and the README.
 

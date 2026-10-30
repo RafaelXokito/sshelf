@@ -21,4 +21,4 @@ sshelf │[Hosts]│ 1 web-prod │ 2 db-staging │ 3 web-prod │
 
 
 
-enter connect • / search • a add • e edit • d delete • I import • q quit
+enter connect • / search • a add • c duplicate • e edit • d delete • q quit
