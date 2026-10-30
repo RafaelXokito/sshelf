@@ -576,240 +576,568 @@ again if you turned it on for 2.3.
 
 # M2 manual acceptance checklist (framed sessions, tabs, mouse)
 
-Status: Draft, to run at the M2 gate · Owner: product owner · Task: T-043
+Status: Ready to run · Owner: product owner · Task: T-043
 
-This is the hands-on part of the M2 gate. It covers what only a person can
-judge: how real full-screen programs look inside the frame, how keys and the
-mouse feel, and that the terminal's own text selection still works. Run it
-on **macOS** and **Linux** with the M2 build, in the same scratch setup as
-the MVP checklist: do section 0, 1.1 and 2 above first (targets A and B and a
-real `sshd`), then add `acc-password` (4.1), `acc-otp` (4.7) and `acc-real`
-(6.1) if this is a fresh directory. Record the same header as above.
+This is the hands-on part of the M2 gate. Everything else is automated
+(`go test -race ./...`, `go run ./scripts/tracecheck`, which now covers MVP
+and M2, and `go run ./scripts/covercheck`). These steps cover what only a
+person at a real terminal can judge: real full-screen programs inside the
+frame, how keys and the mouse feel, the terminal's own text selection and
+copy, the clipboard, and the terminal state after sshelf exits.
+
+The checklist is self-contained: it does not need the MVP run above. Run it
+top to bottom on **macOS** (required; the clipboard steps use `pbcopy` and
+`pbpaste`), in one terminal emulator first (iTerm2 or Terminal.app), and
+then repeat the steps M2.12 lists in the other terminals you have. Linux
+differences are in M2.13. Tick **Pass** or **Fail** for each step and
+write anything odd under it.
 
 | | macOS | Linux |
 |---|---|---|
 | OS version | | |
-| Terminal emulator | | |
+| Terminal emulator(s) | | |
 | `sshelf --version` | | |
+| Real host used (M2.0.5) | | |
 | Tester, date | | |
 
-## M2.1 Frame and tabs
+**What this run touches.** The config directory is redirected to a scratch
+directory (`XDG_CONFIG_HOME`), so your real sshelf config is untouched.
+The passwords typed in M2.1 go to your login Keychain under the service
+`sshelf`; M2.14 deletes them. `~/.ssh` is not read or written by any step.
+The clipboard step M2.8 overwrites your clipboard with a test string.
 
-- [ ] **M2.1.1 Header on every screen.** Start `"$SSHELF_ACC/sshelf"`.
+**Keys used below.** `ctrl+]` is sshelf's prefix key: press `ctrl` and `]`
+together, let go, then press the next key. `ctrl+]` `h` means "prefix, then
+`h`". The prefix commands are: `1`…`9` tab, `h` or `0` Hosts tab, `n` next
+tab, `p` previous tab, `[` scrollback, `q` disconnect, `?` help, `ctrl+]`
+sends a literal `ctrl+]` to the remote, `esc` cancels.
 
-  Expected: the first line reads `sshelf │[Hosts]│`; the host list,
-  status line and footer are below it. — Pass [ ] Fail [ ]
+---
 
-- [ ] **M2.1.2 First tab.** `enter` on `acc-password`.
+## M2.0 Setup
 
-  Expected: a new tab `1 acc-password` is focused (shown highlighted and
-  in brackets); the sshtestd shell prompt fills the area between the header
-  and a status bar reading `● connected · alice@127.0.0.1:2201 · 00:00:0x ·
-  Ctrl+] ? help · Ctrl+] h hosts`, and the duration counts up.
+Open **four** terminal windows: **main** (sshelf runs here), **A** and
+**C** (two test servers) and **side** (for checks). Paste these lines into
+each of them first:
+
+```sh
+cd /path/to/sshelf            # the repository checkout
+export SSHELF_ACC=/tmp/sshelf-acceptance-m2
+export XDG_CONFIG_HOME="$SSHELF_ACC/xdg"
+export CFG="$XDG_CONFIG_HOME/sshelf"
+```
+
+- [ ] **M2.0.1 Start clean and build.** In **side**:
+
+  ```sh
+  rm -rf "$SSHELF_ACC" && mkdir -m 700 -p "$SSHELF_ACC"
+  go build -o "$SSHELF_ACC/sshelf" ./cmd/sshelf && "$SSHELF_ACC/sshelf" --version
+  ```
+
+  Expected: one line `sshelf <version> (commit <hash>, built <date>)`.
   — Pass [ ] Fail [ ]
 
-- [ ] **M2.1.3 Back to the hosts while the session runs.** `ctrl+]` then
-  `h`. Select `acc-real`, `enter`.
+- [ ] **M2.0.2 Test server A (port 2201).** In **A**:
 
-  Expected: the host list returns with tab 1 still in the bar; a second
-  tab `2 acc-real` opens with your real shell. — Pass [ ] Fail [ ]
+  ```sh
+  go run ./internal/testutil/sshtest/cmd/sshtestd -dir "$SSHELF_ACC/target-a" -port 2201 -password acc-pw-A
+  ```
 
-- [ ] **M2.1.4 Same host twice.** `ctrl+]` `h`, `enter` on `acc-password`
-  again.
+  Expected: `sshtestd listening on 127.0.0.1:2201` and a known_hosts line.
+  Leave it running. — Pass [ ] Fail [ ]
 
-  Expected: tab `3 acc-password` opens; tab 1 is unaffected.
+- [ ] **M2.0.3 Test server C (port 2203).** In **C**:
+
+  ```sh
+  go run ./internal/testutil/sshtest/cmd/sshtestd -dir "$SSHELF_ACC/target-c" -port 2203 -password acc-pw-C
+  ```
+
+  Expected: `sshtestd listening on 127.0.0.1:2203`. Leave it running.
   — Pass [ ] Fail [ ]
 
-- [ ] **M2.1.5 Switching.** Try `ctrl+]` `1`, `ctrl+]` `2`, `ctrl+]` `n`,
-  `ctrl+]` `p`, `ctrl+]` `0`.
+  sshtestd's shell is a stub: it understands only `echo <words>`, `size`
+  and `exit [N]`.
 
-  Expected: each key focuses the right tab at once, `n`/`p` wrap around
-  through `Hosts`, and each tab shows what it showed before.
+- [ ] **M2.0.4 A real `sshd`.** On macOS: System Settings → General →
+  Sharing → **Remote Login** on (allow your user), or use any server you
+  can log in to. `vim`, `htop`, `less` and `tmux` must be installed there
+  (on macOS: `brew install htop tmux`). In **side**:
+
+  ```sh
+  export REAL_HOST=127.0.0.1 REAL_PORT=22 REAL_USER="$USER"   # or your server
+  ssh -o BatchMode=yes -p "$REAL_PORT" "$REAL_USER@$REAL_HOST" true 2>&1 | head -1; echo checked
+  ```
+
+  Expected: `checked` (a "Permission denied" line from BatchMode is fine;
+  "Connection refused" is not). Write the host into the header table.
   — Pass [ ] Fail [ ]
 
-- [ ] **M2.1.6 Activity marker.** In tab 2 run `sleep 3; echo done`, then
-  immediately `ctrl+]` `1`.
+- [ ] **M2.0.5 Terminal state and clipboard before launch.** In **main**:
 
-  Expected: after about 3 s, tab 2 shows `●`; focusing it clears the
-  marker and shows `done`. — Pass [ ] Fail [ ]
+  ```sh
+  stty -a > "$SSHELF_ACC/stty-before"
+  printf 'clipboard-before-sshelf' | pbcopy; pbpaste; echo
+  ```
 
-- [ ] **M2.1.7 Help.** `ctrl+]` `?`, then `esc`.
+  Expected: `clipboard-before-sshelf`. — Pass [ ] Fail [ ]
 
-  Expected: an overlay lists every prefix command; `esc` closes it.
+## M2.1 Add the hosts with the mouse (forms and buttons)
+
+In **main**, start sshelf and keep it running until M2.11:
+
+```sh
+"$SSHELF_ACC/sshelf"
+```
+
+- [ ] **M2.1.1 Welcome screen and header.** Look at the first screen.
+
+  Expected: the first line is the header `sshelf │[Hosts]│`; below it the
+  Welcome screen with `[I] Import from ~/.ssh/config` and `[a] Add host`.
   — Pass [ ] Fail [ ]
 
-## M2.2 Full-screen programs in the frame (real `sshd`, tab 2)
+- [ ] **M2.1.2 Click a Welcome action.** Click `[a] Add host`.
 
-- [ ] **M2.2.1 TERM and size.** `echo "$TERM"; tput cols; tput lines`.
+  Expected: the host form opens with a `[ Save ]` and a `[ Cancel ]`
+  button at the bottom. — Pass [ ] Fail [ ]
 
-  Expected: `xterm-256color`, your terminal's width, and its height minus 2.
+- [ ] **M2.1.3 Click fields and Save.** Click the **Label** field and type
+  `acc-a`; click **Hostname**, type `127.0.0.1`; click **Port**, type
+  `2201`; click **Username**, type `alice`; click **Password**, type
+  `acc-pw-A`. Click `[ Save ]`.
+
+  Expected: each click puts the cursor in the clicked field; the Password
+  field never shows the characters; after the click on `[ Save ]` the host
+  list shows `acc-a` selected and the status line says `acc-a: saved`.
   — Pass [ ] Fail [ ]
 
-- [ ] **M2.2.2 vim.** `vim /tmp/sshelf-acc.txt`, type `ihello`, `esc`,
-  move with `h j k l`, arrows, `ctrl+←`/`ctrl+→` in insert mode, `:wq`.
+- [ ] **M2.1.4 Save errors and Cancel.** Press `a`. Click `[ Save ]` with
+  every field empty. Then type `x` into Label and click `[ Cancel ]`; at
+  the "discard changes?" question press `y`.
 
-  Expected: vim draws inside the frame (header and status bar stay in
-  place), colours and the cursor are right, `esc` acts immediately, and the
-  shell prompt is clean after `:wq`. — Pass [ ] Fail [ ]
+  Expected: `[ Save ]` shows the missing-label error and stays on the
+  form; `[ Cancel ]` with a change asks before discarding; `y` returns to
+  the list with no new host. — Pass [ ] Fail [ ]
 
-- [ ] **M2.2.3 htop.** `htop`, arrows, `F10` or `q`.
+- [ ] **M2.1.5 Choice arrows.** Press `a`, click the `›` next to
+  **Identity**, then the `‹`, then click `[ Cancel ]`.
 
-  Expected: colours and meters render; the screen returns to the shell
-  with no leftovers. — Pass [ ] Fail [ ]
+  Expected: each click changes the choice by one, exactly as `→`/`←` do;
+  Cancel with no change closes the form at once. — Pass [ ] Fail [ ]
 
-- [ ] **M2.2.4 less.** `less /etc/services`, `/tcp`, `n`, `G`, `q`.
+- [ ] **M2.1.6 Second test host, keyboard only.** `a`, then type
+  `acc-c`, `tab`, `127.0.0.1`, `tab`, `2203`, `tab`, `carol`; `tab` to
+  Password, type `acc-pw-C`; `tab` until `[ Save ]` is highlighted and
+  press `enter`.
 
-  Expected: search highlighting and the status line render; `q` returns
-  to a clean prompt. — Pass [ ] Fail [ ]
-
-- [ ] **M2.2.5 tmux.** `tmux`, `ctrl+b %`, `ctrl+b →`, type in both panes,
-  `exit` both.
-
-  Expected: tmux's prefix `ctrl+b` works and does not collide with
-  sshelf's `ctrl+]`; panes and the tmux status line render.
+  Expected: `acc-c: saved` (the buttons are reachable with `tab`).
   — Pass [ ] Fail [ ]
 
-- [ ] **M2.2.6 Keys.** At the shell prompt type `echo one two three`, then
-  `ctrl+←` twice, `alt+b`, `ctrl+a`, `ctrl+e`, `ctrl+c`; then `ctrl+]`
-  `ctrl+]` followed by `cat -v` and `enter` (then `ctrl+]` `ctrl+]`,
-  `enter`, `ctrl+d`).
+- [ ] **M2.1.7 Real host.** `a`, Label `acc-real`, Hostname `$REAL_HOST`,
+  Port `$REAL_PORT`, Username `$REAL_USER` (type the values, not the
+  variable names), and either Password (your login password) or Key file
+  (for example `~/.ssh/id_ed25519`); `ctrl+s`.
 
-  Expected: word movement and line editing work as in your terminal;
-  `ctrl+c` interrupts only the remote; `cat -v` prints `^]`.
+  Expected: `acc-real: saved`. — Pass [ ] Fail [ ]
+
+## M2.2 Tabs: two sshtestd sessions and a real host
+
+- [ ] **M2.2.1 Double-click to connect, trust on first use.**
+  Double-click `acc-a` in the list. In the **Unknown host key** box click
+  `[y] Trust and save`.
+
+  Expected: a single click only selects; the double-click starts the
+  connection; the TOFU box's buttons act like their keys. Tab
+  `1 acc-a` opens focused, shown in brackets, with the stub shell's `$ `
+  prompt between the header and a status bar reading
+  `● connected · alice@127.0.0.1:2201 · 00:00:0x · Ctrl+] ? help · Ctrl+] h hosts`;
+  the duration counts up. — Pass [ ] Fail [ ]
+
+- [ ] **M2.2.2 Second sshtestd tab.** `ctrl+]` `h`, select `acc-c`,
+  `enter`, `y` at the host-key box.
+
+  Expected: tab `2 acc-c` opens; tab 1 is still in the bar.
   — Pass [ ] Fail [ ]
 
-- [ ] **M2.2.7 Paste.** Copy a few lines of text with your terminal, then
-  paste into `cat` and into vim insert mode.
+- [ ] **M2.2.3 Real host tab.** `ctrl+]` `h`, `enter` on `acc-real`,
+  `y` at the host-key box if asked, and the password if prompted.
 
-  Expected: the text arrives intact; vim does not auto-indent it
-  (bracketed paste). — Pass [ ] Fail [ ]
-
-- [ ] **M2.2.8 Resize with tabs.** Resize the window, run `tput cols;
-  tput lines` in tab 2, then switch to tab 1 and run `size`.
-
-  Expected: both show the new session area (height minus 2) without
-  having been focused during the resize. — Pass [ ] Fail [ ]
-
-- [ ] **M2.2.9 Hostile output stays in the frame.** In tab 2 run
-  `printf '\033]0;HACKED\007\033]52;c;aGFja2Vk\007done\n'`.
-
-  Expected: `done` is printed; your terminal window title does not become
-  `HACKED`; your clipboard does not contain `hacked`. — Pass [ ] Fail [ ]
-
-## M2.3 Scrollback
-
-- [ ] **M2.3.1 Scrollback mode.** In tab 2 run `seq 1 3000`, then
-  `ctrl+]` `[`, `pgup` a few times, `g`, `G`, `esc`.
-
-  Expected: the status bar shows `scrollback …/2000`; `g` reaches line
-  1001 (the oldest kept line), `G` the end; `esc` returns to the live
-  prompt. — Pass [ ] Fail [ ]
-
-- [ ] **M2.3.2 Copy from scrollback.** In scrollback mode, select a few
-  numbers with the mouse and copy them with your terminal's copy shortcut.
-
-  Expected: your terminal selects text normally (sshelf has the mouse off
-  here); the copied text is the numbers. — Pass [ ] Fail [ ]
-
-## M2.4 Mouse
-
-- [ ] **M2.4.1 Host list.** `ctrl+]` `h`. Click a host, double-click
-  `acc-password`, then go back with `ctrl+]` `h` and use the wheel over the
-  list; click the search field and type `acc`.
-
-  Expected: a click selects; a double-click opens a new tab; the wheel
-  moves the selection; the click focuses search. — Pass [ ] Fail [ ]
-
-- [ ] **M2.4.2 Tab bar.** On the Hosts tab click `2 acc-real`.
-
-  Expected: tab 2 is focused. — Pass [ ] Fail [ ]
-
-- [ ] **M2.4.3 Forms.** `ctrl+]` `h`, `a`. Click the Hostname field and
-  type; click `›` on Identity; click `[ Cancel ]`, then `y` to discard.
-  Repeat and click `[ Save ]` with an empty label.
-
-  Expected: clicks focus fields and change the choice; `[ Cancel ]` asks
-  about unsaved changes; `[ Save ]` shows the label error.
+  Expected: tab `3 acc-real` with your remote shell prompt.
   — Pass [ ] Fail [ ]
 
-- [ ] **M2.4.4 Modals.** Select a host, `d`, then click `[n] No`.
-  Connect to an untrusted target if one is left (or delete its line from
-  `$CFG/known_hosts`) and click `[enter/esc] Cancel` in the TOFU box.
+- [ ] **M2.2.4 Same host twice.** `ctrl+]` `h`, `enter` on `acc-a`.
 
-  Expected: each click acts like its key; clicking outside a modal does
-  nothing. — Pass [ ] Fail [ ]
+  Expected: tab `4 acc-a` opens with no host-key box; tab 1 is
+  unaffected. — Pass [ ] Fail [ ]
 
-- [ ] **M2.4.5 Native selection in a plain shell.** Focus tab 2 (real
-  shell, no full-screen program) and select text with the mouse.
+- [ ] **M2.2.5 Switching with the prefix.** Press, in order: `ctrl+]` `1`,
+  `ctrl+]` `3`, `ctrl+]` `n`, `ctrl+]` `n`, `ctrl+]` `p`, `ctrl+]` `0`.
 
-  Expected: your terminal selects and copies text as usual; clicking does
-  not move anything in sshelf. — Pass [ ] Fail [ ]
+  Expected: tab 1, tab 3, tab 4, Hosts (wraps), tab 4, Hosts; each tab
+  shows what it showed before. — Pass [ ] Fail [ ]
 
-- [ ] **M2.4.6 Mouse in vim and htop.** In tab 2 run `vim -c 'set
-  mouse=a' /etc/hosts` and click on another line; quit; run `htop` and
-  click a process row and a column header; quit.
+- [ ] **M2.2.6 Click tabs on sshelf's screens.** On the Hosts tab click
+  `3 acc-real` in the header.
 
-  Expected: vim moves the cursor to the clicked cell (not one row off);
-  htop selects the clicked row and sorts by the clicked column. After
-  quitting, selection with the mouse works natively again (M2.4.5).
+  Expected: tab 3 is focused. — Pass [ ] Fail [ ]
+
+- [ ] **M2.2.7 Activity marker.** In tab 3 run `sleep 3; echo done`, then
+  at once `ctrl+]` `1`.
+
+  Expected: after about 3 s the header shows `3 acc-real ●`; `ctrl+]` `3`
+  clears the marker and shows `done`. — Pass [ ] Fail [ ]
+
+- [ ] **M2.2.8 Help overlay.** `ctrl+]` `?`, then `esc`.
+
+  Expected: an overlay lists every prefix command above; `esc` closes it
+  and nothing was sent to the remote. — Pass [ ] Fail [ ]
+
+- [ ] **M2.2.9 Unknown prefix key.** In tab 3 press `ctrl+]` `z`, then
+  type `echo ok` and `enter`.
+
+  Expected: `z` cancels the prefix and is not sent; the shell prints `ok`.
   — Pass [ ] Fail [ ]
 
-## M2.5 Ending, reconnecting, quitting
+## M2.3 Shell, colours and keys (tab 3, real host)
 
-- [ ] **M2.5.1 Ended tab.** In tab 1 (sshtestd) type `exit 3`.
+- [ ] **M2.3.1 TERM and size.** In tab 3:
 
-  Expected: the last screen stays; the status bar shows `✕ exited (3) · r
-  reconnect · x close`; the tab shows `✕`. Typing letters does nothing.
+  ```sh
+  echo "$TERM"; tput cols; tput lines
+  ```
+
+  Expected: `xterm-256color`, your window's width, and its height minus 2
+  (the header and the status bar). — Pass [ ] Fail [ ]
+
+- [ ] **M2.3.2 Colours.** In tab 3:
+
+  ```sh
+  printf '\033[31mred\033[0m \033[1;32mbold-green\033[0m \033[38;5;208morange-256\033[0m \033[38;2;0;128;255mtruecolor-blue\033[0m \033[7mreverse\033[0m\n'
+  ```
+
+  Expected: each word in its colour or style; the rest of the line and
+  the next prompt are not coloured. — Pass [ ] Fail [ ]
+
+- [ ] **M2.3.3 Wide characters.** In tab 3:
+
+  ```sh
+  echo 'wide: 日本語 テスト 👍 end'
+  printf '%*s日本\n' $(( $(tput cols) - 1 )) ''
+  ```
+
+  Expected: the first line is aligned (each wide character takes two
+  columns, `end` is not overwritten); in the second, `日` does not fit in
+  the last column, so `日本` starts at the start of the next line and no
+  character is lost (D-015). — Pass [ ] Fail [ ]
+
+- [ ] **M2.3.4 Line editing and modified keys.** Type
+  `echo one two three` (do not press `enter`), then `ctrl+←` twice,
+  `alt+b`, `ctrl+a`, `ctrl+e`, `ctrl+w`, then `ctrl+c`.
+
+  Expected: word movement and deletion act as in your terminal without
+  sshelf; `ctrl+c` interrupts only the remote line (sshelf keeps
+  running). If `ctrl+←` or `alt+b` print `;5D` or `b`, set your terminal
+  to send Option as Meta and note it. — Pass [ ] Fail [ ]
+
+- [ ] **M2.3.5 sshelf's own keys go to the remote.** In tab 3 type
+  `cat -v`, `enter`, then `q`, `x`, `r`, `ctrl+]` `ctrl+]`, `enter`, and
+  finally `ctrl+d`.
+
+  Expected: `cat` echoes `qxr^]`; none of them quits, closes or
+  reconnects anything. — Pass [ ] Fail [ ]
+
+- [ ] **M2.3.6 Paste.** In **side**, `printf 'line one\n    indented\nline three\n' | pbcopy`.
+  In tab 3 run `cat`, paste with ⌘V, then `ctrl+d`.
+
+  Expected: the three lines arrive intact, indentation kept.
   — Pass [ ] Fail [ ]
 
-- [ ] **M2.5.2 Reconnect.** Press `r`.
+## M2.4 vim, htop, less and tmux inside the frame (tab 3)
 
-  Expected: a new session to `acc-password` opens in the same tab 1.
+- [ ] **M2.4.1 vim: colours, alternate screen, keys.** In tab 3:
+
+  ```sh
+  printf 'first\nsecond\nthird\n' > /tmp/sshelf-acc.txt; vim -c 'syntax on' -c 'set number' /tmp/sshelf-acc.txt
+  ```
+
+  Then `j`, `j`, `A`, type ` line`, `esc`, `:wq`.
+
+  Expected: vim fills the area between the header and the status bar
+  (both stay in place), line numbers and colours show, the cursor is on
+  the right cell, `esc` acts at once, and after `:wq` the shell screen from
+  before vim is back with no vim leftovers (alternate screen).
   — Pass [ ] Fail [ ]
 
-- [ ] **M2.5.3 Drop in the background.** Focus tab 2, then stop sshtestd
-  target A with `ctrl+c` in its terminal and restart it with the same
-  command.
+- [ ] **M2.4.2 vim: resize.** Open `vim /tmp/sshelf-acc.txt` again, make
+  the window narrower and shorter by dragging its corner, then wider again.
 
-  Expected: tabs 1 and 3 show `✕` without stealing focus; focusing one
-  shows `✕ connection lost: …`; `r` reconnects. — Pass [ ] Fail [ ]
+  Expected: vim redraws to the new size each time; the header and status
+  bar stay one line each; nothing is drawn outside the frame.
+  — Pass [ ] Fail [ ]
 
-- [ ] **M2.5.4 Disconnect.** In tab 3 press `ctrl+]` `q`, then `n`; then
-  `ctrl+]` `q`, `y`.
+- [ ] **M2.4.3 vim: mouse.** In the same vim: `:set mouse=a`, `enter`.
+  Click on the `t` of `third`; scroll the wheel; drag to select a few
+  characters (vim shows `-- VISUAL --`); `esc`; click the header row;
+  `:q!`.
 
-  Expected: `n` keeps the session; `y` closes tab 3 and focuses the tab to
-  its left. — Pass [ ] Fail [ ]
+  Expected: the cursor lands exactly on the clicked character (not one
+  row off); the wheel scrolls; dragging selects in vim's visual mode;
+  clicking the header does nothing (it is neither a vim click nor a tab
+  switch while vim has the mouse). — Pass [ ] Fail [ ]
 
-- [ ] **M2.5.5 Close.** End tab 1 with `exit`, press `x`.
+- [ ] **M2.4.4 htop: colours, resize, mouse.** Run `htop`. Resize the
+  window once. Click a process row, then click the `CPU%` column header,
+  then `q`.
 
-  Expected: the tab closes. When the Hosts tab is focused as a result, the
-  host is selected in the list. — Pass [ ] Fail [ ]
+  Expected: meters and colours render; htop redraws after the resize; the
+  click selects the clicked row and the header click sorts by CPU%; `q`
+  returns to a clean shell screen. — Pass [ ] Fail [ ]
 
-- [ ] **M2.5.6 Quit with sessions.** On the Hosts tab press `q`, then
-  `esc`; then `q`, `y`.
+- [ ] **M2.4.5 less.** `less /etc/services`, then `/tcp`, `enter`, `n`,
+  `G`, `q`.
 
-  Expected: "Quit and close 1 session?" (or the current count); `esc`
-  keeps everything; `y` quits. — Pass [ ] Fail [ ]
+  Expected: the search highlight and less's status line render; `q`
+  returns to a clean prompt. — Pass [ ] Fail [ ]
 
-- [ ] **M2.5.7 Terminal state.** After quitting:
+- [ ] **M2.4.6 tmux: prefix, panes, resize.** Run
+  `tmux new -s acc`, then `ctrl+b` `%`, type `echo left` in one pane,
+  `ctrl+b` `→`, `echo right`, and resize the window once.
+
+  Expected: tmux's `ctrl+b` works and does not clash with sshelf's
+  `ctrl+]`; both panes and tmux's green status line render and follow the
+  resize. — Pass [ ] Fail [ ]
+
+- [ ] **M2.4.7 tmux: mouse.** `ctrl+b` `:`, type `set -g mouse on`,
+  `enter`. Click the other pane; scroll the wheel up in it; press `q`;
+  then `exit` in both panes.
+
+  Expected: the click focuses the clicked pane; the wheel enters tmux's
+  copy mode and scrolls; after the last `exit` the shell prompt is clean.
+  — Pass [ ] Fail [ ]
+
+- [ ] **M2.4.8 Mouse is native again.** At the plain prompt of tab 3,
+  drag over some text.
+
+  Expected: your terminal selects the text itself (highlight from your
+  terminal emulator, no clicks reach the remote). — Pass [ ] Fail [ ]
+
+## M2.5 Text selection and copy in a plain shell (no mouse capture)
+
+- [ ] **M2.5.1 Select and copy.** In tab 3 run `echo copy-me-12345`.
+  Double-click `copy-me-12345` (or drag over it) and copy with ⌘C. In
+  **side**: `pbpaste; echo`.
+
+  Expected: `copy-me-12345`. — Pass [ ] Fail [ ]
+
+- [ ] **M2.5.2 Same in an sshtestd tab.** `ctrl+]` `1`, type
+  `echo stub-copy-678`, `enter`, select and copy `stub-copy-678`, then
+  `pbpaste; echo` in **side**.
+
+  Expected: `stub-copy-678`. — Pass [ ] Fail [ ]
+
+- [ ] **M2.5.3 Mouse clicks do not reach sshelf in a plain shell.** In
+  tab 1, click on the header and on the status bar.
+
+  Expected: nothing changes in sshelf (tabs are switched with the
+  keyboard while a session is focused, D-012); your terminal may start a
+  selection. — Pass [ ] Fail [ ]
+
+## M2.6 Resize with background tabs
+
+- [ ] **M2.6.1 Every session gets the new size.** Focus tab 3. Resize
+  the window to a clearly different size. Run `tput cols; tput lines` in
+  tab 3; then `ctrl+]` `1` and type `size`, `enter`; then `ctrl+]` `2`,
+  `size`, `enter`.
+
+  Expected: all three report the same new session area: the window's
+  width, and its height minus 2 (sshtestd prints `<cols>x<rows>`), even
+  though tabs 1 and 2 were in the background during the resize.
+  — Pass [ ] Fail [ ]
+
+## M2.7 Scrollback mode
+
+- [ ] **M2.7.1 Scroll back and return.** In tab 3 run `seq 1 3000`, then
+  `ctrl+]` `[`. Press `↑`, `PgUp` three times, `g`, `G`, `PgUp`, `esc`.
+
+  Expected: the status bar shows `scrollback <line>/<total>` with the key
+  hints; `↑`/`PgUp` move up; `g` reaches the oldest kept line (a number
+  around 1000: only the last 2,000 lines plus the screen are kept, D-013);
+  `G` the end; `esc` returns to the live prompt. — Pass [ ] Fail [ ]
+
+- [ ] **M2.7.2 The view stays put while output arrives.** In tab 3 run:
+
+  ```sh
+  for i in $(seq 1 6000); do echo "line $i"; sleep 0.002; done
+  ```
+
+  While it runs, `ctrl+]` `[`, `PgUp` twice, and watch for 5 seconds;
+  then `esc`.
+
+  Expected: in scrollback mode the visible lines do not move while new
+  lines arrive and old ones are dropped at the 2,000-line cap (the
+  `<line>/<total>` numbers may change, the text on screen does not);
+  `esc` shows the live end of the output. — Pass [ ] Fail [ ]
+
+- [ ] **M2.7.3 Copy from scrollback.** `ctrl+]` `[`, `PgUp`, select a
+  few lines with the mouse, ⌘C, `esc`; in **side** `pbpaste`.
+
+  Expected: your terminal selects normally (sshelf turns the mouse off in
+  scrollback mode); the pasted text is those lines. — Pass [ ] Fail [ ]
+
+## M2.8 Hostile output does not reach your terminal
+
+- [ ] **M2.8.1 Clipboard write (OSC 52).** In **side**:
+  `printf 'clipboard-before-osc52' | pbcopy`. In tab 3:
+
+  ```sh
+  printf '\033]52;c;SGVsbG8=\007'; echo osc52-sent
+  ```
+
+  Then in **side**: `pbpaste; echo`.
+
+  Expected: tab 3 shows `osc52-sent`; `pbpaste` prints
+  `clipboard-before-osc52`, **not** `Hello`. — Pass [ ] Fail [ ]
+
+- [ ] **M2.8.2 Title, link and reset.** In tab 3:
+
+  ```sh
+  printf '\033]0;HACKED-TITLE\007\033]8;;https://example.invalid\007link\033]8;;\007 \033[21t\033c'; echo after-reset
+  ```
+
+  Expected: your window and tab titles do not change to `HACKED-TITLE`;
+  `link` is plain text, not clickable; the remote screen may clear (the
+  emulator's own reset) but sshelf's header and status bar stay and your
+  terminal is not reset; `after-reset` is shown. The tab still reads
+  `3 acc-real`. — Pass [ ] Fail [ ]
+
+## M2.9 Disconnect, ended tabs and reconnect
+
+- [ ] **M2.9.1 Remote exit.** `ctrl+]` `1` and type `exit 3`.
+
+  Expected: the last screen stays; the status bar reads
+  `✕ exited (3) · r reconnect · x close`; the tab reads `1 acc-a ✕`;
+  typing letters other than `r` and `x` does nothing. — Pass [ ] Fail [ ]
+
+- [ ] **M2.9.2 Reconnect.** Press `r`.
+
+  Expected: a new session to `acc-a` opens in the same tab 1 with no
+  prompts. — Pass [ ] Fail [ ]
+
+- [ ] **M2.9.3 Server dropped while in the background.** Focus tab 3.
+  In **A**, stop sshtestd with `ctrl+c`.
+
+  Expected: tabs 1 and 4 (both `acc-a`) show `✕` in the header without
+  taking the focus; tab 3 is unaffected. `ctrl+]` `1` shows
+  `✕ connection lost: …` with a one-line reason. — Pass [ ] Fail [ ]
+
+- [ ] **M2.9.4 Reconnect fails, then works.** In tab 1 press `r` while
+  A is still down.
+
+  Expected: the tab stays ended and the status bar shows the failure
+  (connection refused). Now restart A in **A** with the M2.0.2 command
+  and press `r` again: tab 1 reconnects. — Pass [ ] Fail [ ]
+
+- [ ] **M2.9.5 Disconnect with the prefix.** `ctrl+]` `2`, then
+  `ctrl+]` `q`, then `n`; then `ctrl+]` `q`, `y`.
+
+  Expected: "Disconnect acc-c?"; `n` keeps the session; `y` closes tab 2
+  and focuses the tab to its left. — Pass [ ] Fail [ ]
+
+- [ ] **M2.9.6 Close an ended tab.** `ctrl+]` `4`, press `x`.
+
+  Expected: tab 4 (ended in M2.9.3) closes and the focus moves to the
+  tab on its left. — Pass [ ] Fail [ ]
+
+- [ ] **M2.9.7 Close back to the list.** `ctrl+]` `1`, `exit`, `x`.
+
+  Expected: if the Hosts tab is focused as a result, `acc-a` is the
+  selected host. — Pass [ ] Fail [ ]
+
+## M2.10 Modals and search with the mouse
+
+- [ ] **M2.10.1 Delete prompt buttons.** On the Hosts tab select `acc-c`,
+  press `d`, click `[n] No`; press `d` again and click outside the box.
+
+  Expected: `[n] No` closes the box and keeps the host; a click outside
+  the box does nothing. Press `esc` to close it. — Pass [ ] Fail [ ]
+
+- [ ] **M2.10.2 Search and wheel.** Click the search field, type `acc`,
+  then click a host in the list; scroll the wheel over the list.
+
+  Expected: the click focuses search and the list filters; clicking the
+  list leaves search; the wheel moves the selection. — Pass [ ] Fail [ ]
+
+## M2.11 Quit confirmation and terminal state
+
+- [ ] **M2.11.1 Quit with live sessions.** With at least tab 3 still
+  live, focus the Hosts tab and press `q`, then `esc`; press `q`, then
+  `y`.
+
+  Expected: "Quit and close N sessions?" with the number of live tabs
+  (ended tabs do not count); `esc` keeps everything; `y` quits.
+  — Pass [ ] Fail [ ]
+
+- [ ] **M2.11.2 Terminal restored.** In **main**:
 
   ```sh
   stty -a | diff - "$SSHELF_ACC/stty-before" && echo "terminal restored"
   ```
 
-  Expected: `terminal restored` (the file is from MVP step 3.1; run 3.1
-  first if this is a fresh directory); typing and mouse selection in
-  your shell behave normally; no mouse escape codes appear when you click.
+  Expected: `terminal restored`; clicking and dragging in this shell
+  selects text normally and prints no escape codes such as `[<0;12;5M`.
   — Pass [ ] Fail [ ]
 
-## M2.6 Other terminals
+- [ ] **M2.11.3 Quit with no live session.** Start sshelf again, press
+  `q`.
 
-- [ ] **M2.6.1 Named terminals.** Repeat M2.1.2, M2.2.2, M2.2.6, M2.4.1 and
-  M2.4.6 in each terminal you have (iTerm2, Terminal.app, kitty, WezTerm,
-  Alacritty, Ghostty, GNOME Terminal, Konsole, xterm, and inside tmux).
+  Expected: sshelf quits at once, no question. — Pass [ ] Fail [ ]
 
-  Expected: the same results. Note which were tried: ______________
-  — Pass [ ] Fail [ ]
+## M2.12 Other terminals
+
+- [ ] **M2.12.1 Named terminals.** Repeat M2.2.1, M2.3.3, M2.3.4, M2.4.3,
+  M2.4.4, M2.5.1 and M2.8.1 in each terminal you have: Terminal.app,
+  iTerm2, kitty, WezTerm, Alacritty, Ghostty, and inside a local tmux.
+
+  Expected: the same results. Note which were tried and any difference:
+  ______________ — Pass [ ] Fail [ ]
+
+## M2.13 Linux run
+
+Repeat M2.0 to M2.11 on Linux with these changes: replace `pbcopy` with
+`xclip -sel clip` (or `wl-copy`) and `pbpaste` with `xclip -sel clip -o`
+(or `wl-paste`); start the real `sshd` with `sudo systemctl start ssh`;
+copy with ctrl+shift+C. Repeat M2.12 in GNOME Terminal, Konsole and xterm.
+
+- [ ] **M2.13.1 Linux run done.** — Pass [ ] Fail [ ] — N/A [ ]
+
+## M2.14 Teardown
+
+- [ ] **M2.14.1 Delete the test hosts and their Keychain items.** In
+  **side**, record the IDs this run created:
+
+  ```sh
+  grep -o '"id": "[^"]*"' "$CFG/config.json" | cut -d'"' -f4 > "$SSHELF_ACC/ids"; wc -l < "$SSHELF_ACC/ids"
+  ```
+
+  In **main**, `"$SSHELF_ACC/sshelf"`; for each of `acc-a`, `acc-c` and
+  `acc-real` select it, press `d`, then `y`; then `q`. In **side**:
+
+  ```sh
+  for id in $(cat "$SSHELF_ACC/ids"); do for f in password private-key key-passphrase; do security find-generic-password -s sshelf -a "$id/$f" >/dev/null 2>&1 && echo "left: $id/$f"; done; done; echo checked
+  ```
+
+  Expected: each delete reports `<label>: deleted`; the loop prints only
+  `checked` (no `left:` line). — Pass [ ] Fail [ ]
+
+- [ ] **M2.14.2 Remove the scratch files.** Stop A and C with `ctrl+c`.
+  In **side**:
+
+  ```sh
+  rm -rf "$SSHELF_ACC" /tmp/sshelf-acc.txt; echo removed
+  ```
+
+  Then turn Remote Login off again if you turned it on in M2.0.4.
+
+  Expected: `removed`. — Pass [ ] Fail [ ]
 
 ## M2 sign-off
 

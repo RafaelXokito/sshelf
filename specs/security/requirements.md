@@ -409,6 +409,23 @@ Priority: M2 · Status: Implemented · Threats: T-15 · Source: D-009, ADR-012
 - AC3: Tab labels and the status bar show the host label and address only, never a remote-set title, and never a
   secret (canary harness, SEC-LOG-001).
 
+**SEC-SESSION-006: Session end reasons are safe to show and log.**
+When a session ends with a reason that carries server-supplied text (the exit-signal name, the disconnect message),
+the system shall sanitise that text (SEC-SESSION-003), fold every run of whitespace, including newlines, to one
+space, and cut the reason to 80 columns with `…`, before it is shown in the ended tab's status bar or written to
+the debug log.
+Priority: M2 · Status: Implemented · Threats: T-15, T-17 · Source: FR-CONN-005, ARCH-SESS-008
+- AC1: Unit test: an `ExitError` whose signal name, and a `DisconnectError` whose message, hold an OSC 52 write, an
+  OSC 0 title, a CSI, a C1 control, a newline, a tab and 200 extra columns render as one line of at most 80 columns
+  ending in `…`, with no control rune and none of the escapes' payloads; the debug log's `session: ended` record
+  holds the same safe text.
+- AC2: sshtest ends a session with that hostile `exit-signal` name; `Err()` is an `*ExitError` with the safe reason.
+- AC3: An ended tab on a 200-column terminal whose server sent that hostile disconnect message keeps a frame of
+  exactly the terminal's height, and its status bar reason is at most 80 columns (a newline in the reason used to
+  push the frame one row down).
+- AC4: The reason never holds a secret: `TestSEC_LOG_001_CanaryHarnessM2` (an ended tab, a reconnect and a
+  disconnect, with `SSHELF_DEBUG=1`) finds no canary on the screen or in the debug log (SEC-LOG-001).
+
 ---
 
 ## 5. Requirement count
@@ -416,10 +433,10 @@ Priority: M2 · Status: Implemented · Threats: T-15 · Source: D-009, ADR-012
 | Priority | Count |
 |----------|-------|
 | MVP | 31 |
-| M2 | 1 |
+| M2 | 2 |
 | v1 | 4 |
 | Later | 2 |
-| **Total** | **38** |
+| **Total** | **39** |
 
 ## 6. Resolved decisions
 

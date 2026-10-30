@@ -9,13 +9,16 @@ import (
 	"log/slog"
 	"maps"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	uv "github.com/charmbracelet/ultraviolet"
+	"github.com/charmbracelet/x/ansi"
 	"golang.org/x/crypto/ssh"
 
+	"github.com/RafaelXokito/sshelf/internal/domain"
 	"github.com/RafaelXokito/sshelf/internal/term"
 )
 
@@ -54,9 +57,11 @@ type ExitError struct {
 	Signal string // e.g. "KILL"; "" when the remote exited normally
 }
 
+// Error is the end reason. The signal name comes from the server and is
+// made safe by reason.
 func (e *ExitError) Error() string {
 	if e.Signal != "" {
-		return "killed by signal " + e.Signal
+		return reason("killed by signal " + e.Signal)
 	}
 	return fmt.Sprintf("exited (%d)", e.Status)
 }
@@ -67,12 +72,28 @@ type DisconnectError struct {
 	Err error
 }
 
+// Error is the end reason. The connection's error may carry the server's
+// disconnect message and is made safe by reason.
 func (e *DisconnectError) Error() string {
-	reason := "connection closed"
+	why := "connection closed"
 	if e.Err != nil && !errors.Is(e.Err, io.EOF) {
-		reason = e.Err.Error()
+		why = e.Err.Error()
 	}
-	return "connection lost: " + reason
+	return reason("connection lost: " + why)
+}
+
+// MaxReasonWidth is the most columns a session's end reason takes. The
+// reason is shown in the ended tab's status bar and written to the debug
+// log (SEC-SESSION-006).
+const MaxReasonWidth = 80
+
+// reason makes text that may come from the server (a signal name, a
+// disconnect message) safe to show and log: sanitised (SEC-SESSION-003),
+// on one line with each run of whitespace folded to one space, and cut to
+// MaxReasonWidth columns (SEC-SESSION-006).
+func reason(s string) string {
+	s = strings.Join(strings.Fields(domain.Sanitize(s)), " ")
+	return ansi.Truncate(s, MaxReasonWidth, "…")
 }
 
 func (e *DisconnectError) Unwrap() error { return e.Err }

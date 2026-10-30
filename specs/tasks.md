@@ -505,7 +505,8 @@ them in dependency order and rebase rather than resolve by hand.
   - Every M2 requirement set to `Implemented`; the requirement counts in each spec file updated.
   - The M2 section of [`acceptance.md`](acceptance.md) run and signed off on macOS and Linux; `docs/release-checklist.md` gains its manual items (vim, htop, less and tmux in the frame against a real `sshd`; mouse in vim and htop; native selection in a plain shell; the named terminals of NFR-PORT-002 with tabs).
   - ADR-013's limitation list and the open questions in `product/requirements.md` §22 updated with the product owner's answers and the upstream status of limitations 1 and 2.
-- **Satisfies:** NFR-QUAL-001 (M2 extension), ARCH-UI-001 (M2 revision complete), FR-CONN-001 (manual: real `sshd`)
+  - Session end reasons (signal name, disconnect message) are sanitised, folded to one line and cut to 80 columns before they are shown or logged (SEC-SESSION-006).
+- **Satisfies:** NFR-QUAL-001 (M2 extension), ARCH-UI-001 (M2 revision complete), FR-CONN-001 (manual: real `sshd`), SEC-SESSION-006
 - **Depends on:** T-031 … T-042
 - **Tests:** `TestNFR_QUAL_001_EveryMVPAndM2IDTraced`, `TestNFR_QUAL_001_RevisionBlockFails` (tracecheck fixture), `TestNFR_QUAL_001_M2MatrixRead` (fixture), and the existing tracecheck tests.
 - **Done when:** `go run ./scripts/tracecheck` reports zero problems over MVP and M2, no `M2 revision` block remains, coverage still meets NFR-QUAL-003, and the M2 checklist is signed off.
@@ -626,18 +627,22 @@ None at the MVP gate: every MVP requirement has at least one automated test.
 These acceptance criteria are still checked by hand, in addition to their
 tests:
 
-- FR-CONN-001: `vim`, `htop` and `tmux` against a real `sshd`.
-- FR-CONN-004: `tput cols; tput lines` on a real host after a resize.
-- FR-CONN-005: no remote screen remnants after a full-screen program.
 - SEC-CRED-009 AC1: no Keychain dialog after installing an unsigned new build.
 - FR-CRED-001: the OS unlock prompt (macOS Keychain, Linux keyring).
 - NFR-PORT-002: the named terminal emulators.
 - ADR-007 (T-000): the keys-on-the-wire and `stty` round trip (acceptance §10; the `devcheck` program was removed in T-037).
 
+FR-CONN-001, FR-CONN-004 and FR-CONN-005 had hand checks here at the MVP
+gate; the M2 gate (T-043) revised them to `M2`, and their hand checks are
+listed under [M2 manual-only requirements](#m2-manual-only-requirements).
+
 ## Traceability matrix
 
 Every `MVP` requirement and the tasks that cover it. The task that completes an
-ID is listed last.
+ID is listed last. The nine requirements that M2 revised (FR-CONN-001,
+FR-CONN-004, FR-CONN-005, ARCH-SESS-002 … ARCH-SESS-005, ARCH-UI-001,
+NFR-UX-001) are now `M2` and are listed, with their MVP tasks, in the
+[M2 traceability matrix](#m2-traceability-matrix).
 
 ### Functional (`FR-*`)
 
@@ -653,11 +658,8 @@ ID is listed last.
 | FR-IDENT-002 | T-012 |
 | FR-IDENT-003 | T-002, T-021 |
 | FR-IDENT-004 | T-019, T-028 |
-| FR-CONN-001 | T-003, T-004, T-030 |
 | FR-CONN-002 | T-012 |
 | FR-CONN-003 | T-013 |
-| FR-CONN-004 | T-003 |
-| FR-CONN-005 | T-004 |
 | FR-CONN-006 | T-014 |
 | FR-CONN-008 | T-013 |
 | FR-KH-001 | T-007 |
@@ -718,10 +720,6 @@ ID is listed last.
 | ID | Tasks |
 |---|---|
 | ARCH-SESS-001 | T-000, T-002 |
-| ARCH-SESS-002 | T-004, T-013 |
-| ARCH-SESS-003 | T-003 |
-| ARCH-SESS-004 | T-003 |
-| ARCH-SESS-005 | T-003, T-027 |
 | ARCH-CONN-001 | T-012 |
 | ARCH-CONN-002 | T-013 |
 | ARCH-CONN-003 | T-007 |
@@ -735,7 +733,6 @@ ID is listed last.
 | ARCH-PKG-002 | T-005 |
 | ARCH-DATA-001 | T-000, T-015, T-020 |
 | ARCH-DATA-004 | T-020 |
-| ARCH-UI-001 | T-004, T-030 |
 | ARCH-UI-002 | T-004 |
 | ARCH-UI-004 | T-016 |
 | ARCH-TEST-001 | T-001 |
@@ -751,7 +748,6 @@ ID is listed last.
 | NFR-BUILD-001 | T-000 |
 | NFR-PORT-001 | T-000 |
 | NFR-PORT-002 | T-029 |
-| NFR-UX-001 | T-016, T-029 |
 | NFR-UX-002 | T-016 |
 | NFR-UX-003 | T-016 |
 | NFR-PRIV-001 | T-029 |
@@ -760,34 +756,41 @@ ID is listed last.
 | NFR-QUAL-002 | T-000 |
 | NFR-QUAL-003 | T-000, T-030 |
 
-Totals: 33 FR + 31 SEC + 22 ARCH + 15 NFR = **101 MVP requirements**, all
-covered by T-000 … T-030.
+Totals: 30 FR + 31 SEC + 17 ARCH + 14 NFR = **92 MVP requirements**, all
+covered by T-000 … T-030 (101 at the MVP gate; 9 were revised to `M2`).
 
 ## M2 manual-only requirements
 
-None: every M2 requirement has at least one automated test. These M2
-acceptance criteria are also checked by hand in the M2 section of
-[`acceptance.md`](acceptance.md):
+An `M2` requirement listed here needs no automated test, under the same
+rules as the MVP table above.
 
-- FR-CONN-001 (M2 revision): `vim`, `htop`, `less` and `tmux` inside the frame against a real `sshd`.
-- FR-CONN-004 (M2 revision): `tput cols; tput lines` on a real host after a resize, with two tabs open.
-- FR-TAB-011 and NFR-UX-001 (M2 revision): mouse in `vim` and `htop`; native selection in a plain shell.
+| ID | Why it cannot be automated | Steps |
+|---|---|---|
+
+None at the M2 gate: every M2 requirement has at least one automated test.
+These M2 acceptance criteria are also checked by hand in the M2 section of
+[`acceptance.md`](acceptance.md), because they need a real `sshd`, real
+full-screen programs or the user's own terminal emulator:
+
+- FR-CONN-001: `vim`, `htop`, `less` and `tmux` inside the frame against a real `sshd` (colours, alternate screen, resize).
+- FR-CONN-004: `tput cols; tput lines` on a real host after a resize, with two tabs open.
+- FR-TAB-011 and NFR-UX-001: mouse in `vim`, `htop` and `tmux`; native selection and copy in a plain shell.
 - FR-TAB-006: Ctrl+arrow word movement in `bash`/`zsh` and Alt shortcuts in the user's real terminal emulators.
+- SEC-SESSION-005: an OSC 52 write from a real remote shell leaves the local clipboard unchanged.
 
 ## M2 traceability matrix
 
-Every `M2` requirement, including the revision blocks (marked "rev"), and the
-tasks that cover it; the task that completes an ID is listed last. Until the
-M2 gate (T-043), `scripts/tracecheck` reads only the MVP matrix above, so this
-heading is deliberately different; T-043 extends the tool to read it.
+Every `M2` requirement and the tasks that cover it; the task that completes
+an ID is listed last. The nine MVP requirements that M2 revised keep their
+MVP tasks first.
 
 ### Functional (`FR-*`)
 
 | ID | Tasks |
 |---|---|
-| FR-CONN-001 (rev) | T-034, T-037, T-043 |
-| FR-CONN-004 (rev) | T-037 |
-| FR-CONN-005 (rev) | T-036 |
+| FR-CONN-001 | T-003, T-004, T-030, T-034, T-037, T-043 |
+| FR-CONN-004 | T-003, T-037 |
+| FR-CONN-005 | T-004, T-036 |
 | FR-CONN-010 | T-036 |
 | FR-CONN-014 | T-035, T-037 |
 | FR-NAV-012 | T-038 |
@@ -812,15 +815,16 @@ heading is deliberately different; T-043 extends the tool to read it.
 | ID | Tasks |
 |---|---|
 | SEC-SESSION-005 | T-031, T-032, T-042 |
+| SEC-SESSION-006 | T-043 |
 
 ### Architecture (`ARCH-*`)
 
 | ID | Tasks |
 |---|---|
-| ARCH-SESS-002 (rev) | T-034, T-037 |
-| ARCH-SESS-003 (rev) | T-032 |
-| ARCH-SESS-004 (rev) | T-032, T-037 |
-| ARCH-SESS-005 (rev) | T-032, T-037 |
+| ARCH-SESS-002 | T-004, T-013, T-034, T-037 |
+| ARCH-SESS-003 | T-003, T-032 |
+| ARCH-SESS-004 | T-003, T-032, T-037 |
+| ARCH-SESS-005 | T-003, T-027, T-032, T-037 |
 | ARCH-SESS-006 | T-035 |
 | ARCH-SESS-008 | T-032, T-036 |
 | ARCH-SESS-010 | T-032, T-037 |
@@ -829,7 +833,7 @@ heading is deliberately different; T-043 extends the tool to read it.
 | ARCH-SESS-015 | T-032 |
 | ARCH-SESS-016 | T-031, T-032, T-037 |
 | ARCH-SESS-017 | T-031 |
-| ARCH-UI-001 (rev) | T-034, T-037, T-043 |
+| ARCH-UI-001 | T-004, T-030, T-034, T-037, T-043 |
 | ARCH-UI-005 | T-034 |
 | ARCH-UI-006 | T-038, T-041 |
 | ARCH-UI-007 | T-038, T-040 |
@@ -844,8 +848,8 @@ heading is deliberately different; T-043 extends the tool to read it.
 | NFR-PERF-005 | T-033 |
 | NFR-PERF-006 | T-037 |
 | NFR-SIZE-003 | T-033 |
-| NFR-UX-001 (rev) | T-038, T-041 |
+| NFR-UX-001 | T-016, T-029, T-038, T-041 |
 
-Totals: 21 FR + 1 SEC + 18 ARCH + 5 NFR = **45 M2 entries**: 36 new or
-promoted requirements and 9 revisions of MVP requirements, all covered by
-T-031 … T-043.
+Totals: 21 FR + 2 SEC + 18 ARCH + 5 NFR = **46 M2 requirements**: 36 new
+or promoted, 9 revised from the MVP (folded in by T-043) and SEC-SESSION-006
+(added by T-043), all covered by T-031 … T-043.

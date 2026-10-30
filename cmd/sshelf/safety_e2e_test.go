@@ -75,8 +75,9 @@ func forbiddenIn(b []byte) []string {
 // (HostileCorpus) in a framed session, then has sshelf repaint the whole
 // frame by going to the Hosts tab and back. sshelf's PTY output over that
 // time holds none of the forbidden sequences or C1 controls; the
-// emulator's answers to the queries reached the remote, not the terminal;
-// and the tab still shows the host label.
+// emulator's answers to the queries reached the remote, not the terminal
+// (also ARCH-SESS-016's PTY output scan); and the tab still shows the
+// host label.
 func TestSEC_SESSION_005_HostileOutputPTYScan(t *testing.T) {
 	s := startSlice(t)
 	off := s.waitText(0, "web-prod demo@127.0.0.1")

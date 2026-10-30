@@ -1,12 +1,20 @@
-// Command tracecheck is the NFR-QUAL-001 gate. It reads every MVP
+// Command tracecheck is the NFR-QUAL-001 gate. It reads every MVP and M2
 // requirement (FR-*, SEC-*, ARCH-*, NFR-*) from the spec files and fails
 // when one of them
 //
 //   - is not Implemented (or Verified),
-//   - is missing from the traceability matrix in specs/tasks.md, or
+//   - is missing from its milestone's traceability matrix in
+//     specs/tasks.md ("Traceability matrix" for MVP, "M2 traceability
+//     matrix" for M2), or
 //   - is referenced by no *_test.go file (as FR-X-NNN or FR_X_NNN, the
-//     form test names use), unless specs/tasks.md lists it under
-//     "Manual-only requirements".
+//     form test names use), unless specs/tasks.md lists it under its
+//     milestone's manual-only table ("Manual-only requirements" or "M2
+//     manual-only requirements").
+//
+// It also fails when a matrix or manual-only table lists an ID that is not
+// a requirement of that milestone, and when a spec file still holds an
+// "M2 revision" block (specs/README.md, "Revisions": the M2 gate folds
+// every revision into its requirement).
 //
 // Run it from the module root: go run ./scripts/tracecheck
 package main
@@ -34,6 +42,16 @@ var specFiles = []string{
 
 const tasksFile = "specs/tasks.md"
 
+// milestones are the priorities the gate checks, and the specs/tasks.md
+// sections (level-2 headings) that hold each one's traceability matrix
+// and manual-only table.
+var milestones = []struct {
+	Priority, Matrix, Manual string
+}{
+	{"MVP", "Traceability matrix", "Manual-only requirements"},
+	{"M2", "M2 traceability matrix", "M2 manual-only requirements"},
+}
+
 var (
 	// idHeading matches the three heading styles the spec files use:
 	// "### FR-HOST-001 · …", "**SEC-CRED-001: …**" and "**ARCH-SEC-001**: …".
@@ -42,6 +60,9 @@ var (
 	status    = regexp.MustCompile(`Status:?\**:?\s*(\w+)`)
 	tableRow  = regexp.MustCompile(`^\|\s*((?:FR|SEC|ARCH|NFR)-[A-Z]+-\d{3})\s*\|`)
 	anyID     = regexp.MustCompile(`(?:FR|SEC|ARCH|NFR)[-_][A-Z]+[-_]\d{3}`)
+	// revision matches the first line of a revision block
+	// ("- **M2 revision** · Priority: M2 · …").
+	revision = regexp.MustCompile(`^\s*-\s+\*\*M2 revision\*\*`)
 )
 
 // Requirement is one requirement as the spec files define it.
@@ -55,7 +76,8 @@ type Requirement struct {
 // Result is what Check found.
 type Result struct {
 	MVP      []Requirement
-	Manual   []string // MVP IDs listed as manual-only
+	M2       []Requirement
+	Manual   []string // MVP and M2 IDs listed as manual-only
 	Problems []string
 }
 
@@ -64,9 +86,12 @@ func Check(fsys fs.FS) (Result, error) {
 	var res Result
 	reqs := map[string]Requirement{}
 	for _, f := range specFiles {
-		found, err := parseSpec(fsys, f)
+		found, revs, err := parseSpec(fsys, f)
 		if err != nil {
 			return res, err
+		}
+		for _, line := range revs {
+			res.Problems = append(res.Problems, fmt.Sprintf("%s:%d holds an M2 revision block; fold it into its requirement", f, line))
 		}
 		for _, r := range found {
 			if prev, dup := reqs[r.ID]; dup {
@@ -77,7 +102,7 @@ func Check(fsys fs.FS) (Result, error) {
 		}
 	}
 
-	matrix, manual, err := parseTasks(fsys)
+	sections, err := parseTasks(fsys)
 	if err != nil {
 		return res, err
 	}
@@ -86,58 +111,69 @@ func Check(fsys fs.FS) (Result, error) {
 		return res, err
 	}
 
-	for _, id := range sortedKeys(reqs) {
-		r := reqs[id]
-		if r.Priority != "MVP" {
-			continue
+	for _, ms := range milestones {
+		matrix, manual := sections[ms.Matrix], sections[ms.Manual]
+		for _, id := range sortedKeys(reqs) {
+			r := reqs[id]
+			if r.Priority != ms.Priority {
+				continue
+			}
+			if ms.Priority == "MVP" {
+				res.MVP = append(res.MVP, r)
+			} else {
+				res.M2 = append(res.M2, r)
+			}
+			switch r.Status {
+			case "Implemented", "Verified":
+			case "":
+				res.Problems = append(res.Problems, fmt.Sprintf("%s (%s) has no Status", id, r.File))
+			default:
+				res.Problems = append(res.Problems, fmt.Sprintf("%s (%s) is %s, not Implemented", id, r.File, r.Status))
+			}
+			if !matrix[id] {
+				res.Problems = append(res.Problems, fmt.Sprintf("%s is missing from the %q section of %s", id, ms.Matrix, tasksFile))
+			}
+			switch {
+			case manual[id]:
+				res.Manual = append(res.Manual, id)
+			case !refs[id]:
+				res.Problems = append(res.Problems, fmt.Sprintf("%s is referenced by no *_test.go file and is not manual-only", id))
+			}
 		}
-		res.MVP = append(res.MVP, r)
-		switch r.Status {
-		case "Implemented", "Verified":
-		case "":
-			res.Problems = append(res.Problems, fmt.Sprintf("%s (%s) has no Status", id, r.File))
-		default:
-			res.Problems = append(res.Problems, fmt.Sprintf("%s (%s) is %s, not Implemented", id, r.File, r.Status))
+		for _, id := range sortedKeys(matrix) {
+			if r, ok := reqs[id]; !ok || r.Priority != ms.Priority {
+				res.Problems = append(res.Problems, fmt.Sprintf("%s is in the %q section but is not an %s requirement", id, ms.Matrix, ms.Priority))
+			}
 		}
-		if !matrix[id] {
-			res.Problems = append(res.Problems, fmt.Sprintf("%s is missing from the traceability matrix in %s", id, tasksFile))
-		}
-		switch {
-		case manual[id]:
-			res.Manual = append(res.Manual, id)
-		case !refs[id]:
-			res.Problems = append(res.Problems, fmt.Sprintf("%s is referenced by no *_test.go file and is not manual-only", id))
+		for _, id := range sortedKeys(manual) {
+			if r, ok := reqs[id]; !ok || r.Priority != ms.Priority {
+				res.Problems = append(res.Problems, fmt.Sprintf("%s is listed in %q but is not an %s requirement", id, ms.Manual, ms.Priority))
+			}
 		}
 	}
-	for _, id := range sortedKeys(matrix) {
-		if r, ok := reqs[id]; !ok || r.Priority != "MVP" {
-			res.Problems = append(res.Problems, fmt.Sprintf("%s is in the traceability matrix but is not an MVP requirement", id))
-		}
-	}
-	for _, id := range sortedKeys(manual) {
-		if r, ok := reqs[id]; !ok || r.Priority != "MVP" {
-			res.Problems = append(res.Problems, fmt.Sprintf("%s is listed as manual-only but is not an MVP requirement", id))
-		}
-	}
+	slices.Sort(res.Manual)
 	return res, nil
 }
 
-// parseSpec returns the requirements defined in name. A requirement's
-// priority and status are on the first line after its heading that
-// names a priority.
-func parseSpec(fsys fs.FS, name string) ([]Requirement, error) {
+// parseSpec returns the requirements defined in name, and the line
+// numbers of any M2 revision blocks. A requirement's priority and status
+// are on the first line after its heading that names a priority.
+func parseSpec(fsys fs.FS, name string) (reqs []Requirement, revisions []int, err error) {
 	b, err := fs.ReadFile(fsys, name)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	var out []Requirement
 	var cur *Requirement
 	sc := bufio.NewScanner(strings.NewReader(string(b)))
-	for sc.Scan() {
+	for n := 1; sc.Scan(); n++ {
 		line := sc.Text()
+		if revision.MatchString(line) {
+			revisions = append(revisions, n)
+			continue
+		}
 		if m := idHeading.FindStringSubmatch(line); m != nil {
-			out = append(out, Requirement{ID: m[1], File: name})
-			cur = &out[len(out)-1]
+			reqs = append(reqs, Requirement{ID: m[1], File: name})
+			cur = &reqs[len(reqs)-1]
 			continue
 		}
 		if cur == nil || cur.Priority != "" || !strings.Contains(line, "Priority") {
@@ -150,35 +186,31 @@ func parseSpec(fsys fs.FS, name string) ([]Requirement, error) {
 			cur.Status = m[1]
 		}
 	}
-	return out, sc.Err()
+	return reqs, revisions, sc.Err()
 }
 
-// parseTasks returns the IDs in the traceability matrix and in the
-// "Manual-only requirements" table of specs/tasks.md.
-func parseTasks(fsys fs.FS) (matrix, manual map[string]bool, err error) {
+// parseTasks returns, for each level-2 section of specs/tasks.md that
+// a milestone names, the IDs in the first column of its tables.
+func parseTasks(fsys fs.FS) (map[string]map[string]bool, error) {
 	b, err := fs.ReadFile(fsys, tasksFile)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	matrix, manual = map[string]bool{}, map[string]bool{}
-	var section string
+	sections := map[string]map[string]bool{}
+	for _, ms := range milestones {
+		sections[ms.Matrix], sections[ms.Manual] = map[string]bool{}, map[string]bool{}
+	}
+	var ids map[string]bool
 	for line := range strings.SplitSeq(string(b), "\n") {
 		if strings.HasPrefix(line, "## ") {
-			section = strings.TrimSpace(strings.TrimPrefix(line, "## "))
+			ids = sections[strings.TrimSpace(strings.TrimPrefix(line, "## "))]
 			continue
 		}
-		m := tableRow.FindStringSubmatch(line)
-		if m == nil {
-			continue
-		}
-		switch section {
-		case "Traceability matrix":
-			matrix[m[1]] = true
-		case "Manual-only requirements":
-			manual[m[1]] = true
+		if m := tableRow.FindStringSubmatch(line); m != nil && ids != nil {
+			ids[m[1]] = true
 		}
 	}
-	return matrix, manual, nil
+	return sections, nil
 }
 
 // testRefs returns every requirement ID that a *_test.go file mentions,
@@ -233,7 +265,7 @@ func main() {
 	for _, p := range res.Problems {
 		fmt.Println("FAIL", p)
 	}
-	fmt.Printf("tracecheck: %d MVP requirements, %d manual-only, %d problems\n", len(res.MVP), len(res.Manual), len(res.Problems))
+	fmt.Printf("tracecheck: %d MVP and %d M2 requirements, %d manual-only, %d problems\n", len(res.MVP), len(res.M2), len(res.Manual), len(res.Problems))
 	if len(res.Problems) > 0 {
 		os.Exit(1)
 	}

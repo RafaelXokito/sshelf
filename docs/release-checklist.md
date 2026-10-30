@@ -8,14 +8,27 @@ run that whole checklist on macOS and Linux before a release.
 ## Automated gates (must be green on the release commit)
 
 - [ ] CI: lint, `go test -race` on Linux and macOS, cross-compile, keyring jobs.
-- [ ] `go run ./scripts/tracecheck` reports 0 problems (NFR-QUAL-001).
+- [ ] `go run ./scripts/tracecheck` reports 0 problems over MVP and M2 (NFR-QUAL-001).
 - [ ] `go run ./scripts/covercheck coverage.out` passes (NFR-QUAL-003).
 
 ## Sessions and terminals
 
-- [ ] **FR-CONN-001: `vim`, `htop` and `tmux` against a real `sshd`**
-  render and accept input, including after a window resize
-  (acceptance §6).
+- [ ] **FR-CONN-001: `vim`, `htop`, `less` and `tmux` inside the frame
+  against a real `sshd`** render colours, the alternate screen and the
+  cursor correctly and accept input, including after a window resize with
+  two tabs open (acceptance M2.4, M2.6).
+- [ ] **FR-TAB-011: mouse in `vim`, `htop` and `tmux`** lands on the
+  clicked cell; header clicks are ignored while the remote has the mouse
+  (acceptance M2.4.3, M2.4.4, M2.4.7).
+- [ ] **NFR-UX-001 / D-012: native selection in a plain shell.** Select
+  and copy with the terminal's own selection in a session tab and in
+  scrollback mode (acceptance M2.5, M2.7.3).
+- [ ] **SEC-SESSION-005: hostile output.** A remote OSC 52 write and OSC 0
+  title do not change the local clipboard or window title
+  (acceptance M2.8).
+- [ ] **NFR-PORT-002 with tabs:** two tabs, prefix switching, a
+  double-click connect and mouse in `vim` in each named terminal
+  (acceptance M2.12).
 - [ ] **NFR-PORT-002: named terminals.** Start, list, connect, exit and
   `stty -a` round trip in iTerm2, Terminal.app, kitty, WezTerm, Alacritty,
   Ghostty, GNOME Terminal, Konsole, xterm, tmux and screen, as available
