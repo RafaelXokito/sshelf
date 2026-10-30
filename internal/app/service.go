@@ -216,7 +216,8 @@ func (a *App) Connect(ctx context.Context, hostID domain.ID, size Size) (Session
 		slog.Debug("connect: failed", "host", h.Label, "err", err)
 		return nil, err
 	}
-	s, err := session.New(client, session.Options{
+	_, lease := sshclient.NewConn(client)
+	s, err := session.New(lease, session.Options{
 		Term:    h.Options.Term,
 		Env:     h.Options.SetEnv,
 		Command: h.Options.RemoteCommand,

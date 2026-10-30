@@ -627,6 +627,7 @@ func (c *Conn) Err() error                   // after Done: nil after the last R
 
 // Lease is one holder's reference.
 func (l *Lease) Client() *ssh.Client
+func (l *Lease) Conn() *Conn               // the connection, for Session.Conn and further leases
 func (l *Lease) Release()                    // idempotent; the last release closes the client
 ```
 
@@ -850,7 +851,7 @@ removed in revision 2.
 **ARCH-SESS-008**: When a session ends, the system shall report the cause to the UI exactly once, as `nil` (exit 0), `*ExitError`, `*DisconnectError` or `ErrInternal`, after its connection is closed.
 - Priority: M2 · Status: Implemented · Source: FR-CONN-005 revision, FR-CONN-010 (replaces the v1 "Disconnected" modal: the ended tab shows the cause and offers `r`)
 - Acceptance: Table test over sshtest's `exit 0`, `exit 3`, signal, dropped connection and a forced panic: `Err()` returns the right type, `Updates()` is closed exactly once after `Done()`, and sshtest has seen the connection close. Pressing `r` on the ended tab produces a `ConnectRequestMsg` with the same host ID and the tab's number.
-- **M3 revision** · Priority: M3 · Status: Draft · Source: D-018, ADR-017
+- **M3 revision** · Priority: M3 · Status: Implemented · Source: D-018, ADR-017
   - *Revised:* When a session ends, the system shall report the cause to the UI exactly once, as `nil` (exit 0), `*ExitError`, `*DisconnectError` or `ErrInternal`, after its channel is closed and its connection lease is released.
   - *Acceptance:* The M2 table test, with "sshtest has seen the connection close" replaced by: sshtest has seen the session channel close, and the connection close too when the session held the only lease. With a second lease held by an SFTP browser, `exit 0` ends the session with `nil` and sshtest records no connection close; a dropped connection ends it with `*DisconnectError`. Pressing `r` on the ended tab produces a `ConnectRequestMsg` with the same host ID and the tab's number.
 
@@ -914,7 +915,7 @@ removed in revision 2.
 - Acceptance: Cancelling during dial and during auth returns to the host list within 200 ms. `goleak` passes.
 
 **ARCH-CONN-006**: The system shall share an authenticated connection between the tabs that use it through `sshclient.Conn` leases, and shall close the `*ssh.Client` exactly once, when the last lease is released or the connection fails.
-- Priority: M3 · Status: Draft · Source: D-018, ADR-017
+- Priority: M3 · Status: Implemented · Source: D-018, ADR-017
 - Acceptance: Unit tests over sshtest: two leases, release in either order, the client closes after the second only (sshtest counts one connection close); `Release` twice on one lease is a no-op; `Lease()` after the last release or after a drop returns `ErrConnClosed`; `Done()` closes once on a drop and after the last release, and `Err()` tells them apart. A session and a browser on one `Conn`: closing either leaves the other working. `goleak` passes, including the `Conn` waiter goroutine.
 
 ### 4.3 Secrets and safety (`ARCH-SEC`)
@@ -1160,6 +1161,7 @@ flowchart TD
     store --> domain
     secrets --> term
     sshclient --> domain
+    sshclient --> term
     session --> sshclient
     session --> domain
     session --> term
@@ -1172,7 +1174,7 @@ flowchart TD
 | `domain` | none (external: stdlib and `google/uuid` only) | any other `internal/` package, `x/crypto/ssh` |
 | `store` | `domain` | `ui`, `app`, `sshclient`, `session` |
 | `secrets` | `domain`, `term` | `ui`, `app`, `sshclient`, `session` |
-| `sshclient` | `domain` | `secrets`, `store`, `ui`, `app`, Bubble Tea |
+| `sshclient` | `domain`, `term` (the `Conn` waiter, ADR-017) | `secrets`, `store`, `ui`, `app`, Bubble Tea |
 | `session` | `sshclient`, `term`, `domain` (`Sanitize` for end reasons, SEC-SESSION-006) | `secrets`, `store`, `ui`, `app`, Bubble Tea, `golang.org/x/term`. It imports `github.com/charmbracelet/x/vt` (in `emulator.go` only) and `github.com/charmbracelet/ultraviolet` (key and mouse event types), and has no raw-mode code (ARCH-SESS-003). |
 | `files` (M3) | `sshclient`, `domain`, `term` | `secrets`, `store`, `ui`, `app`, `session`, Bubble Tea, `os/exec`. Only `remote.go` imports `github.com/pkg/sftp`. |
 | `ui/...` | `app` (interfaces), `domain`, `search`, `session` (the handle type only), `ui/*` | `secrets`, `store`, `sshclient`, `files`, `x/crypto/ssh`, `github.com/pkg/sftp` |
@@ -1184,7 +1186,8 @@ flowchart TD
 
 Implemented with `secrets` allowed to import `term`, because the OS store
 runs each keyring call in a goroutine bounded by a timeout, and every goroutine
-sshelf starts must go through `term.SafeGo` (ARCH-SEC-004). `term` imports no
+sshelf starts must go through `term.SafeGo` (ARCH-SEC-004). M3 gives
+`sshclient` the same edge for the `Conn` waiter goroutine (ADR-017). `term` imports no
 other `internal/` package, so the edge cannot create a cycle. `main` wires
 `store` through `app`, so it no longer imports `store` directly. `ui` may
 import `session` but currently does not: it receives the session handle as
@@ -1499,7 +1502,7 @@ output:  stdout and stderr (one goroutine each) --read 32 KiB--> lock; emu.Write
 replies: emu.Read (pipe: encoded keys, pastes, mouse, query answers) --> input queue (≤ 1 MiB, never blocks)
 writer:  input queue --> channel stdin (may block on the SSH window; nothing else waits for it)
 resize:  latest size (cap-1 channel) --> one window-change per 30 ms burst (ARCH-SESS-004)
-waiter:  session.Wait | client.Wait | panic | Close --> classify (exit / drop / ErrInternal) --> close conn, stop goroutines, close done, close Updates
+waiter:  session.Wait | Conn.Done | panic | Close --> classify (exit / drop / ErrInternal) --> close channel, release lease, stop goroutines, close done, close Updates
 ```
 
 **The emulator wrapper** (`internal/session/emulator.go`, the only file that
@@ -1552,7 +1555,7 @@ type Options struct {
 	Scrollback int               // lines kept; 0 = DefaultScrollback, 2000 (D-013, NFR-SIZE-003)
 }
 
-func New(client *ssh.Client, opts Options) (*Session, error)
+func New(lease *sshclient.Lease, opts Options) (*Session, error) // M3: owns the lease (ADR-017)
 
 // Input: never blocks; ErrInputFull when the queue holds 1 MiB (ARCH-SESS-014).
 func (s *Session) SendKey(k uv.KeyPressEvent) error // shim for modified keys (ARCH-SESS-017)

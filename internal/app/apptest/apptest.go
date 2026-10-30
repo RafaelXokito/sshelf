@@ -7,6 +7,7 @@ import (
 	"image/color"
 	"slices"
 	"sync"
+	"sync/atomic"
 
 	uv "github.com/charmbracelet/ultraviolet"
 
@@ -29,18 +30,39 @@ type FakeSession struct {
 	err        error
 	closes     int
 	ended      bool
+	connID     uint64
 
 	updates chan struct{}
 	done    chan struct{}
 }
 
-// NewFakeSession returns a live session showing lines.
+// fakeConnIDs gives each fake session its own connection by default.
+var fakeConnIDs atomic.Uint64
+
+// NewFakeSession returns a live session showing lines, on a connection of
+// its own (see SetConnID).
 func NewFakeSession(lines ...string) *FakeSession {
 	return &FakeSession{
 		snap:    app.Snapshot{Lines: slices.Clone(lines), Seq: 1},
 		updates: make(chan struct{}, 1),
 		done:    make(chan struct{}),
+		connID:  1<<32 + fakeConnIDs.Add(1),
 	}
+}
+
+// SetConnID puts the session on connection id, as if it shared that
+// connection with another tab.
+func (f *FakeSession) SetConnID(id uint64) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.connID = id
+}
+
+// ConnID implements app.Session.
+func (f *FakeSession) ConnID() uint64 {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.connID
 }
 
 // Output replaces the screen with lines, as remote output would, bumps

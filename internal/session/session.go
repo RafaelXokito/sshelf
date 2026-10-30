@@ -19,6 +19,7 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	"github.com/RafaelXokito/sshelf/internal/domain"
+	"github.com/RafaelXokito/sshelf/internal/sshclient"
 	"github.com/RafaelXokito/sshelf/internal/term"
 )
 
@@ -119,11 +120,12 @@ type Options struct {
 // window-changes, independently of the UI; no method blocks on the
 // network.
 type Session struct {
-	client *ssh.Client
-	sess   *ssh.Session
-	scr    emulator
-	in     *inputQueue
-	stdin  io.WriteCloser
+	lease *sshclient.Lease
+	conn  *sshclient.Conn
+	sess  *ssh.Session
+	scr   emulator
+	in    *inputQueue
+	stdin io.WriteCloser
 
 	updates chan struct{} // capacity 1, closed after done
 	done    chan struct{}
@@ -159,22 +161,23 @@ type emulator interface {
 	setDefaultColors(fg, bg color.Color)
 }
 
-// New opens a session channel on client, requests a PTY of opts.Size with
-// TERM xterm-256color (or opts.Term), sends the environment, starts the
-// shell or command and the session's goroutines. The session owns client
-// from now on and closes it when it ends. New is only called with a client
-// sshclient.Connect returned, so the host is verified and authenticated
-// (ARCH-SESS-002).
-func New(client *ssh.Client, opts Options) (*Session, error) {
-	return newSession(client, opts, func(sz Size, scrollback int) emulator {
+// New opens a session channel on the lease's connection, requests a PTY
+// of opts.Size with TERM xterm-256color (or opts.Term), sends the
+// environment, starts the shell or command and the session's goroutines.
+// The session owns lease from now on, also when New fails, and releases it
+// when it ends (ADR-017); the connection itself closes only with its last
+// lease. New is only called with a connection sshclient.Connect returned,
+// so the host is verified and authenticated (ARCH-SESS-002).
+func New(lease *sshclient.Lease, opts Options) (*Session, error) {
+	return newSession(lease, opts, func(sz Size, scrollback int) emulator {
 		return newScreen(sz.Cols, sz.Rows, scrollback)
 	})
 }
 
-func newSession(client *ssh.Client, opts Options, newEmulator func(Size, int) emulator) (*Session, error) {
-	sess, err := client.NewSession()
+func newSession(lease *sshclient.Lease, opts Options, newEmulator func(Size, int) emulator) (*Session, error) {
+	sess, err := lease.Client().NewSession()
 	if err != nil {
-		_ = client.Close()
+		lease.Release()
 		return nil, err
 	}
 	size := opts.Size
@@ -182,7 +185,8 @@ func newSession(client *ssh.Client, opts Options, newEmulator func(Size, int) em
 		size = Size{Cols: 80, Rows: 24}
 	}
 	s := &Session{
-		client:   client,
+		lease:    lease,
+		conn:     lease.Conn(),
 		sess:     sess,
 		scr:      newEmulator(size, opts.Scrollback),
 		in:       &inputQueue{limit: InputLimit, ready: make(chan struct{}, 1)},
@@ -196,7 +200,7 @@ func newSession(client *ssh.Client, opts Options, newEmulator func(Size, int) em
 	stdout, stderr, err := s.start(opts, size)
 	if err != nil {
 		_ = sess.Close()
-		_ = client.Close()
+		lease.Release()
 		return nil, err
 	}
 	s.run(stdout, stderr, size)
@@ -257,7 +261,13 @@ func (s *Session) run(stdout, stderr io.Reader, size Size) {
 	waitDone := make(chan error, 1)
 	connDone := make(chan error, 1)
 	goWG(func() { waitDone <- s.sess.Wait() }, &all)
-	goWG(func() { connDone <- s.client.Wait() }, &all)
+	goWG(func() {
+		select {
+		case <-s.conn.Done():
+			connDone <- s.conn.Err()
+		case <-s.stop:
+		}
+	}, &all)
 	term.SafeGo(func() { s.waitEnd(waitDone, connDone, &all, &out) }, func(any) {
 		s.panicked(nil)
 		s.finish(ErrInternal, &all)
@@ -405,8 +415,9 @@ func (s *Session) waitEnd(waitDone, connDone <-chan error, all, out *sync.WaitGr
 	s.finish(result, all)
 }
 
-// finish closes the connection, stops every goroutine, records the result
-// and closes Done and Updates, in that order (ARCH-SESS-008).
+// finish closes the channel and releases the lease, stops every
+// goroutine, records the result and closes Done and Updates, in that order
+// (ARCH-SESS-008 M3 revision).
 func (s *Session) finish(result error, all *sync.WaitGroup) {
 	s.finishOnce.Do(func() { s.finishNow(result, all) })
 }
@@ -427,11 +438,14 @@ func (s *Session) finishNow(result error, all *sync.WaitGroup) {
 	close(s.updates)
 }
 
-// closeConn closes the channel and the connection once.
+// closeConn closes the channel and releases the lease once. The
+// connection closes with its last lease.
 func (s *Session) closeConn() error {
 	s.closeOnce.Do(func() {
-		_ = s.sess.Close()
-		s.closeErr = s.client.Close()
+		if err := s.sess.Close(); err != nil && !errors.Is(err, io.EOF) {
+			s.closeErr = err
+		}
+		s.lease.Release()
 	})
 	return s.closeErr
 }
@@ -520,6 +534,13 @@ func (s *Session) Dropped() int { return s.scr.droppedLines() }
 // (ARCH-SESS-015).
 func (s *Session) Updates() <-chan struct{} { return s.updates }
 
+// Conn returns the shared connection the session runs on (ADR-017).
+func (s *Session) Conn() *sshclient.Conn { return s.conn }
+
+// ConnID identifies the session's connection, so the UI can find the SFTP
+// tab on the same connection (FR-SFTP-003).
+func (s *Session) ConnID() uint64 { return s.conn.ID() }
+
 // Done is closed when the session has ended and its goroutines stopped.
 func (s *Session) Done() <-chan struct{} { return s.done }
 
@@ -535,8 +556,9 @@ func (s *Session) Err() error {
 	}
 }
 
-// Close ends the session and closes the connection. It is idempotent and
-// does not wait for Done.
+// Close ends the session: it closes the channel and releases the lease,
+// which closes the connection unless another tab still holds it. It is
+// idempotent and does not wait for Done.
 func (s *Session) Close() error {
 	if s.closing.CompareAndSwap(false, true) {
 		close(s.closeReq)

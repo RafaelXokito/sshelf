@@ -55,7 +55,15 @@ type Session interface {
 	Updates() <-chan struct{}
 	Done() <-chan struct{}
 	Err() error
+	// Close closes the session's channel and releases its connection
+	// lease; the connection closes when no SFTP tab still uses it
+	// (ADR-017).
 	Close() error
+
+	// ConnID identifies the session's SSH connection, so the root model
+	// can find the SFTP tab that shares it (FR-SFTP-003) without seeing
+	// sshclient.
+	ConnID() uint64
 }
 
 // The emulator-backed session is a Session.

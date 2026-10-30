@@ -36,7 +36,8 @@ var rules = []rule{
 	{pkg: "internal/domain", allow: []string{}, forbid: []string{"golang.org/x/crypto/ssh/..."}},
 	{pkg: "internal/store", allow: []string{"internal/domain"}, forbid: []string{"internal/ui/...", "internal/app", "internal/sshclient", "internal/session"}},
 	{pkg: "internal/secrets", allow: []string{"internal/domain", "internal/term"}, forbid: []string{"internal/ui/...", "internal/app", "internal/sshclient", "internal/session"}},
-	{pkg: "internal/sshclient", allow: []string{"internal/domain"}, forbid: append([]string{"internal/secrets", "internal/store", "internal/ui/...", "internal/app"}, bubbleTea...)},
+	// sshclient starts the Conn waiter through term.SafeGo (ADR-017).
+	{pkg: "internal/sshclient", allow: []string{"internal/domain", "internal/term"}, forbid: append([]string{"internal/secrets", "internal/store", "internal/ui/...", "internal/app"}, bubbleTea...)},
 	// The session never touches the local terminal: no raw mode, no
 	// cancelable stdin (ARCH-SESS-003 revision).
 	{pkg: "internal/session", allow: []string{"internal/domain", "internal/sshclient", "internal/term"}, forbid: append([]string{"internal/secrets", "internal/store", "internal/ui/...", "internal/app", "golang.org/x/term", "github.com/muesli/cancelreader"}, bubbleTea...)},

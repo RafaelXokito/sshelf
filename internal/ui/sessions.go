@@ -394,6 +394,25 @@ func (m Model) updateSessions(msg tea.Msg) (Model, tea.Cmd, bool) {
 // delivers it on y (FR-CONN-014).
 type closeTabMsg struct{ Num int }
 
+// disconnectQuestion is the Ctrl+] q question (FR-CONN-014 M3 revision).
+// sftpTab is the number of the SFTP tab on the session's connection, or 0
+// when none uses it: then closing the session closes the connection too.
+func disconnectQuestion(label string, sftpTab int) string {
+	label = domain.Sanitize(label)
+	if sftpTab == 0 {
+		return "Disconnect " + label + "?"
+	}
+	return fmt.Sprintf("Close this %s session? SFTP tab %d stays connected.", label, sftpTab)
+}
+
+// sftpTabOn returns the number of the open SFTP tab on connection id, or
+// 0 (ADR-017). SFTP tabs join the tab list with T-049, which makes this
+// look them up by app.Browser.ConnID; until then there are none.
+func (m Model) sftpTabOn(id uint64) int {
+	_ = id
+	return 0
+}
+
 // prefixPending is the status text while the prefix key waits for its
 // command (FR-TAB-005).
 func prefixPending() string { return keys.Prefix.Help().Key + " …" }
@@ -418,7 +437,11 @@ func (m Model) runPrefix(r keys.PrefixResult) (tea.Model, tea.Cmd) {
 		}
 	case keys.PrefixDoDisconnect:
 		if t != nil {
-			q := "Disconnect " + domain.Sanitize(t.label) + "?"
+			sftp := 0
+			if !t.done {
+				sftp = m.sftpTabOn(t.sess.ConnID())
+			}
+			q := disconnectQuestion(t.label, sftp)
 			m.modals = append(m.modals, confirm.New(q, closeTabMsg{Num: t.num}))
 		}
 	case keys.PrefixDoHelp:
