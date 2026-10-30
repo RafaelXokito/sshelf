@@ -526,6 +526,28 @@ func (r *RemoteFS) finishUpload(part, final string, mode fs.FileMode, mtime time
 	return remoteErr(r.transfer.Rename(part, final))
 }
 
+// lostWait is how long a failed transfer waits for its connection to be
+// reported down before it counts as failed.
+const lostWait = time.Second
+
+// lost reports whether err, from an operation of the remote side, came
+// from the connection dropping rather than from the server's answer: it
+// is not a status, and the connection ends within lostWait.
+func (r *RemoteFS) lost(err error) bool {
+	var se *ServerError
+	if !errors.As(err, &se) || answered(se.Err) {
+		return false
+	}
+	t := time.NewTimer(lostWait)
+	defer t.Stop()
+	select {
+	case <-r.lease.Conn().Done():
+		return true
+	case <-t.C:
+		return false
+	}
+}
+
 // answered reports whether err is the server's answer to a request (a
 // status), so the connection was still up when it was sent.
 func answered(err error) bool {

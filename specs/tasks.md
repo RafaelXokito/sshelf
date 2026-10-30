@@ -635,7 +635,7 @@ order and rebase rather than resolve by hand.
 - **Satisfies:** FR-SFTP-017, FR-SFTP-018 (partial: back end), ARCH-SFTP-005, FR-SFTP-004 (partial: drop pauses)
 - **Depends on:** T-051
 - **Tests:** `TestARCH_SFTP_005_ResumeDecisionTable`, `TestFR_SFTP_017_DownloadResumes` (fault after 20 MiB of 64), `TestFR_SFTP_017_UploadResumesFromCheckpoint`, `TestFR_SFTP_017_RemoteChangedRestarts`, `TestFR_SFTP_017_LeftoverPartNotResumed`, `TestFR_SFTP_018_DropPausesAll`, `TestFR_SFTP_018_AttachResumesInOrder`, `TestFR_SFTP_004_DropPausesSftp`.
-- **Done when:** sshtest's byte counters prove less than 48 MiB re-sent in both directions, and every "restart" reason is reachable in the table test.
+- **Done when:** sshtest's byte counters prove at most 48 MiB re-sent in both directions (a drop at 20 MiB leaves the upload's last checkpoint at 16 MiB), and every "restart" reason is reachable in the table test.
 - **Estimate:** 2 d
 
 ### T-053 · Transfers UI (with a fake browser)

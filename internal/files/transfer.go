@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/RafaelXokito/sshelf/internal/term"
 )
@@ -39,6 +40,8 @@ type task struct {
 	dstRel []string
 	target string
 	kind   Kind
+	rec    *record
+	cp     *checkpoint
 }
 
 // task copies j's fields. The caller holds b.mu.
@@ -46,6 +49,7 @@ func (b *Browser) task(j *job) task {
 	return task{
 		j: j, remote: b.remote, from: j.from, srcDir: j.srcDir, name: j.name,
 		dstTop: j.dstTop, dstRel: slices.Clone(j.dstRel), target: j.target, kind: j.kind,
+		rec: j.rec, cp: j.cp,
 	}
 }
 
@@ -134,33 +138,46 @@ func (b *Browser) download(ctx context.Context, t task) error {
 	if !fi.Mode().IsRegular() {
 		return skipKind(kindOf(fi.Mode()))
 	}
-	src2 := FileInfo{Size: fi.Size(), ModTime: fi.ModTime()}
-	target, err := b.resolveTarget(t, src2, parent.Lstat)
+	srcInfo := FileInfo{Size: fi.Size(), ModTime: fi.ModTime()}
+	target, err := b.resolveTarget(t, srcInfo, parent.Lstat)
 	if err != nil {
 		return err
 	}
 	size := fi.Size()
-	if pfi, err := parent.Lstat(PartName(target)); err == nil {
-		if !pfi.Mode().IsRegular() {
-			return ErrUnsafePart // never written through (SEC-SFTP-002 AC3)
-		}
-		if err := parent.RemovePart(target); err != nil { // an earlier run's part is never resumed
-			return err
-		}
-	} else if !errors.Is(err, fs.ErrNotExist) {
-		return err
-	}
-	pf, err := parent.CreatePart(target)
+	part, err := partOf(parent.Lstat(PartName(target)))
 	if err != nil {
 		return err
 	}
-	b.setTotal(t.j, size, 0)
+	if part.exists && !part.regular {
+		return ErrUnsafePart // never written through (SEC-SFTP-002 AC3)
+	}
+	off, restarted := resumeDownload(t.rec, srcInfo, part)
+	var pf *os.File
+	if off > 0 {
+		pf, err = parent.OpenPart(target) // positioned at its end, off
+	} else {
+		if part.exists { // a part this run cannot resume, or an earlier run's
+			if err := parent.RemovePart(target); err != nil {
+				return err
+			}
+		}
+		pf, err = parent.CreatePart(target)
+	}
+	if err != nil {
+		return err
+	}
+	rec := t.rec
+	if off == 0 {
+		rec = &record{size: size, mtime: fi.ModTime()}
+	}
+	b.setRecord(t.j, rec, restarted)
+	b.setTotal(t.j, size, off)
 	if testHookOpened != nil {
 		testHookOpened(t.j.rel)
 	}
-	w := &limitWriter{ctx: ctx, w: pf, limit: size, add: func(n int64) { b.progress(t.j, n) }}
-	n, err := f.copyTo(0, w)
-	if err == nil && n != size {
+	w := &limitWriter{ctx: ctx, w: pf, n: off, limit: size, add: func(n int64) { b.progress(t.j, n) }}
+	n, err := f.copyTo(off, w)
+	if err == nil && off+n != size {
 		err = errSizeChanged
 	}
 	if err == nil {
@@ -259,15 +276,36 @@ func (b *Browser) upload(ctx context.Context, t task) error {
 		return err
 	}
 	part, final := path.Join(dir, PartName(target)), path.Join(dir, target)
-	rf, err := r.openPart(part, false)
+	pinfo, err := partOf(r.lstat(part))
 	if err != nil {
 		return err
 	}
-	b.setTotal(t.j, size, 0)
+	off, restarted := resumeUpload(t.rec, t.cp, FileInfo{Size: size, ModTime: ffi.ModTime()}, pinfo)
+	if pinfo.exists && !pinfo.regular { // never written through
+		if err := r.remove(part); err != nil {
+			return err
+		}
+	}
+	rf, err := r.openPart(part, off > 0)
+	if err != nil {
+		return err
+	}
+	if off > 0 { // anything past the checkpoint may have gaps (ADR-016 limitation 4)
+		if err := rf.Truncate(off); err != nil {
+			_ = rf.Close()
+			return err
+		}
+	}
+	rec := t.rec
+	if off == 0 {
+		rec = &record{size: size, mtime: ffi.ModTime()}
+	}
+	b.setRecord(t.j, rec, restarted)
+	b.setTotal(t.j, size, off)
 	if testHookOpened != nil {
 		testHookOpened(t.j.rel)
 	}
-	_, err = b.send(ctx, t.j, lf, rf, 0, size)
+	_, err = b.send(ctx, t.j, lf, rf, off, size)
 	if err == nil {
 		var st fs.FileInfo
 		if st, err = rf.Stat(); err == nil && st.Size() != size {
@@ -300,9 +338,15 @@ func (b *Browser) upload(ctx context.Context, t task) error {
 // with errSizeChanged.
 func (b *Browser) send(ctx context.Context, j *job, lf *os.File, rf *remoteFile, off, size int64) (int64, error) {
 	buf := make([]byte, uploadChunk)
+	last := off // the offset of the last checkpoint
 	for off < size {
 		if err := ctx.Err(); err != nil {
+			b.checkpoint(j, rf, off) // a clean pause or cancel
 			return off, err
+		}
+		if off-last >= checkpointEvery {
+			b.checkpoint(j, rf, off)
+			last = off
 		}
 		if testHookChunk != nil {
 			testHookChunk()
@@ -328,6 +372,86 @@ func (b *Browser) send(ctx context.Context, j *job, lf *os.File, rf *remoteFile,
 		return off, errSizeChanged
 	}
 	return off, nil
+}
+
+// checkpointEvery spaces an upload's checkpoints (ARCH-SFTP-005).
+const checkpointEvery = 8 << 20
+
+// checkpoint records the part file's state at the acknowledged offset
+// off, if the server can describe it.
+func (b *Browser) checkpoint(j *job, rf *remoteFile, off int64) {
+	if st, err := rf.Stat(); err == nil {
+		b.setCheckpoint(j, &checkpoint{off: off, size: st.Size(), mtime: st.ModTime()})
+	}
+}
+
+// partInfo is what a part file looks like before a transfer starts.
+type partInfo struct {
+	exists, regular bool
+	size            int64
+	mtime           time.Time
+}
+
+// partOf describes a part file from its Lstat; a missing one is not an
+// error.
+func partOf(fi fs.FileInfo, err error) (partInfo, error) {
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return partInfo{}, nil
+	case err != nil:
+		return partInfo{}, err
+	}
+	return partInfo{exists: true, regular: fi.Mode().IsRegular(), size: fi.Size(), mtime: fi.ModTime()}, nil
+}
+
+// resumeDownload decides where a download starts (FR-SFTP-017,
+// ARCH-SFTP-005): at the part's size when this run recorded the remote
+// file, the part is a regular file no larger than it, and the remote
+// file's size and time are unchanged; otherwise at 0, with the reason
+// when this run had started it before.
+func resumeDownload(rec *record, remote FileInfo, part partInfo) (off int64, restarted string) {
+	switch {
+	case rec == nil:
+		return 0, "" // a first start; a part left by an earlier run is never resumed
+	case !part.exists:
+		return 0, "part file missing"
+	case !part.regular:
+		return 0, ErrUnsafePart.Error()
+	case remote.Size != rec.size || !remote.ModTime.Equal(rec.mtime):
+		return 0, "remote file changed"
+	case part.size > remote.Size:
+		return 0, "part file larger than the remote file"
+	}
+	return part.size, ""
+}
+
+// resumeUpload decides where an upload starts (FR-SFTP-017,
+// ARCH-SFTP-005): at the last checkpoint when the local file is unchanged
+// since this run recorded it and the remote part is a regular file no
+// larger than the local file, no smaller than the checkpoint, and with
+// the checkpoint's time, or a time not older when it grew past it (writes
+// in flight when the connection dropped); otherwise at 0, with the
+// reason when this run had started it before.
+func resumeUpload(rec *record, cp *checkpoint, local FileInfo, part partInfo) (off int64, restarted string) {
+	switch {
+	case rec == nil:
+		return 0, ""
+	case local.Size != rec.size || !local.ModTime.Equal(rec.mtime):
+		return 0, "local file changed"
+	case cp == nil:
+		return 0, "no checkpoint"
+	case !part.exists:
+		return 0, "part file missing"
+	case !part.regular:
+		return 0, "part file is not a regular file"
+	case part.size > local.Size:
+		return 0, "part file larger than the local file"
+	case part.size < cp.size:
+		return 0, "part file shorter than the checkpoint"
+	case !part.mtime.Equal(cp.mtime) && (part.size == cp.size || part.mtime.Before(cp.mtime)):
+		return 0, "part file changed"
+	}
+	return cp.off, ""
 }
 
 // resolveTarget decides where a file goes when its target exists

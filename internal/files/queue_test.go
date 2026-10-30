@@ -37,7 +37,7 @@ func setHook[T any](t *testing.T, hook *T, v T) {
 
 func openBrowser(t *testing.T, srv *sshtest.Server) *Browser {
 	t.Helper()
-	b, err := Open(dialLease(t, srv))
+	b, err := Open(dialLease(t, srv), Options{})
 	if err != nil {
 		t.Fatal(err)
 	}

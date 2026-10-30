@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/RafaelXokito/sshelf/internal/domain"
 	"github.com/RafaelXokito/sshelf/internal/sshclient"
 	"github.com/RafaelXokito/sshelf/internal/term"
 )
@@ -35,6 +36,7 @@ const (
 // app.Browser wraps. Every method may block on I/O except Copy, Answer,
 // Cancel's bookkeeping, Retry, Clear, Transfers, Updates, State and Done.
 type Browser struct {
+	hostID     domain.ID
 	local      LocalFS
 	localStart string
 	updates    chan struct{}
@@ -45,6 +47,7 @@ type Browser struct {
 	mu        sync.Mutex
 	remote    *RemoteFS
 	state     ConnState
+	done      chan struct{} // closed when the connection drops or on Close; new on Attach
 	closed    bool
 	jobs      []*job // the rows, oldest first
 	pending   []*job // the run order
@@ -53,23 +56,118 @@ type Browser struct {
 	nextBatch BatchID
 }
 
+// Options describe the tab a browser serves.
+type Options struct {
+	// HostID is the host the tab connects to, so that a reconnect goes
+	// through the normal connect flow for it (FR-SFTP-018).
+	HostID domain.ID
+}
+
 // Open opens the remote side of an SFTP tab on lease, which it owns from
 // now on, also when it fails (ADR-017), and returns the tab's browser. It
 // fails with ErrNoSFTP when the server refuses the subsystem.
-func Open(lease *sshclient.Lease) (*Browser, error) {
+func Open(lease *sshclient.Lease, opts Options) (*Browser, error) {
 	r, err := OpenRemote(lease)
 	if err != nil {
 		return nil, err
 	}
 	ctx, stop := context.WithCancel(context.Background())
-	return &Browser{
+	b := &Browser{
+		hostID:     opts.HostID,
 		local:      LocalFS{},
 		localStart: LocalFS{}.Start(),
 		updates:    make(chan struct{}, 1),
 		ctx:        ctx,
 		stop:       stop,
 		remote:     r,
-	}, nil
+		done:       make(chan struct{}),
+	}
+	b.watch(r)
+	return b, nil
+}
+
+// HostID is the host the tab connects to.
+func (b *Browser) HostID() domain.ID { return b.hostID }
+
+// watch pauses the transfers when r's connection drops (FR-SFTP-018). Its
+// goroutine ends with the connection or with Close.
+func (b *Browser) watch(r *RemoteFS) {
+	done := r.lease.Conn().Done()
+	term.SafeGo(func() {
+		select {
+		case <-done:
+			b.lost(r)
+		case <-b.ctx.Done():
+		}
+	}, func(any) {})
+}
+
+// lost marks the browser disconnected when r was its remote side: queued
+// transfers become paused, and running ones become paused as they fail
+// (ARCH-SFTP-005: their records and part files are kept).
+func (b *Browser) lost(r *RemoteFS) {
+	b.mu.Lock()
+	if b.closed || b.remote != r || b.state == Disconnected {
+		b.mu.Unlock()
+		return
+	}
+	b.state = Disconnected
+	close(b.done)
+	for _, j := range b.pending {
+		if j.state == Queued {
+			j.state = Paused
+		}
+	}
+	b.mu.Unlock()
+	b.notify()
+}
+
+// ErrAttached means Attach was called while the connection is up.
+var ErrAttached = errors.New("already connected")
+
+// Attach gives a disconnected browser a new connection (FR-SFTP-018): it
+// opens both channels on lease, which it owns from now on, also when it
+// fails, and queues the paused transfers again in their original order;
+// each resumes where FR-SFTP-017 allows. It fails with ErrNoSFTP when the
+// server refuses the subsystem; the browser then stays disconnected.
+func (b *Browser) Attach(lease *sshclient.Lease) error {
+	b.mu.Lock()
+	switch {
+	case b.closed:
+		b.mu.Unlock()
+		lease.Release()
+		return ErrNotConnected
+	case b.state == Connected:
+		b.mu.Unlock()
+		lease.Release()
+		return ErrAttached
+	}
+	b.mu.Unlock()
+	r, err := OpenRemote(lease)
+	if err != nil {
+		return err
+	}
+	b.mu.Lock()
+	if b.closed || b.state == Connected { // closed or attached meanwhile
+		b.mu.Unlock()
+		_ = r.Close()
+		return ErrNotConnected
+	}
+	old := b.remote
+	b.remote, b.state, b.done = r, Connected, make(chan struct{})
+	b.pending = b.pending[:0]
+	for _, j := range b.jobs { // the rows are in the order the transfers were queued
+		if j.state == Paused || j.state == Queued {
+			j.state = Queued
+			b.pending = append(b.pending, j)
+		}
+	}
+	b.watch(r)
+	b.schedule()
+	b.mu.Unlock()
+	_ = old.Close() // its connection is gone; this releases its lease
+	b.notify()
+	return nil
 }
 
 // ConnID identifies the connection the browser runs on.
@@ -187,11 +285,12 @@ func (b *Browser) State() ConnState {
 	return b.state
 }
 
-// Done is closed when the browser's connection ends.
+// Done is closed when the connection drops, and on Close; after Attach it
+// is a new channel.
 func (b *Browser) Done() <-chan struct{} {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return b.remote.lease.Conn().Done()
+	return b.done
 }
 
 // closeGrace is how long Close lets cancelled transfers clean up before
@@ -209,6 +308,9 @@ func (b *Browser) Close() error {
 		return nil
 	}
 	b.closed = true
+	if b.state == Connected {
+		close(b.done)
+	}
 	var parts []task
 	for _, j := range b.jobs {
 		if j.state != Running {

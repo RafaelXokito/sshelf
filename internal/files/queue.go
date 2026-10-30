@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/RafaelXokito/sshelf/internal/term"
@@ -115,6 +116,7 @@ var (
 	ErrNotFile     = errors.New("exists and is not a file")
 	ErrInternal    = errors.New("internal error")
 	errSizeChanged = errors.New("size changed during transfer")
+	errLost        = errors.New("connection lost")
 )
 
 // kindUnknown marks a job named in Copy: its kind is read when it starts,
@@ -149,6 +151,24 @@ type job struct {
 	cancelReq bool
 	cancel    context.CancelFunc
 	samples   []sample
+	rec       *record     // the source when the transfer started (ARCH-SFTP-005)
+	cp        *checkpoint // an upload's last checkpoint
+}
+
+// record is the source's size and modification time when a transfer
+// started; a resume requires them unchanged (FR-SFTP-017).
+type record struct {
+	size  int64
+	mtime time.Time
+}
+
+// checkpoint is what an upload's part file looked like at an
+// acknowledged offset: the server had every byte before off
+// (ARCH-SFTP-005).
+type checkpoint struct {
+	off   int64
+	size  int64
+	mtime time.Time
 }
 
 // sample is the bytes done at one moment, for the rate.
@@ -202,6 +222,7 @@ func (b *Browser) Copy(from Side, srcDir string, names []string, dstDir string) 
 		if err := CheckName(name); err != nil {
 			j.state, j.reason = Failed, err.Error()
 		} else {
+			j.state = b.queued()
 			b.pending = append(b.pending, j)
 		}
 		b.jobs = append(b.jobs, j)
@@ -236,15 +257,7 @@ type child struct {
 // MaxDepth too (SEC-SFTP-004). unsafe counts names left out of the
 // listing (SEC-SFTP-001).
 func (b *Browser) addChildren(j *job, children []child, unsafe int, truncated bool) {
-	slices.SortFunc(children, func(a, c child) int {
-		switch {
-		case a.name < c.name:
-			return -1
-		case a.name > c.name:
-			return 1
-		}
-		return 0
-	})
+	slices.SortFunc(children, func(a, c child) int { return strings.Compare(a.name, c.name) })
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.closed || j.cancelReq {
@@ -311,6 +324,34 @@ func (b *Browser) trimHistory() {
 	})
 }
 
+// queued is the state of a job put in the queue: Paused while the
+// connection is lost. The caller holds b.mu.
+func (b *Browser) queued() TransferState {
+	if b.state == Disconnected {
+		return Paused
+	}
+	return Queued
+}
+
+// setRecord records what a transfer started from, and why it started
+// over when it could not resume.
+func (b *Browser) setRecord(j *job, rec *record, restarted string) {
+	b.mu.Lock()
+	j.rec = rec
+	if restarted != "" {
+		j.cp = nil
+		j.reason = "restarted: " + restarted
+	}
+	b.mu.Unlock()
+}
+
+// setCheckpoint records an upload's checkpoint.
+func (b *Browser) setCheckpoint(j *job, cp *checkpoint) {
+	b.mu.Lock()
+	j.cp = cp
+	b.mu.Unlock()
+}
+
 // schedule starts queued jobs while fewer than Workers run and the
 // connection is up. The caller holds b.mu.
 func (b *Browser) schedule() {
@@ -336,7 +377,11 @@ func (b *Browser) start(j *job) {
 		testHookStart(j.rel)
 	}
 	term.SafeGo(func() {
-		b.finish(j, b.run(ctx, t))
+		err := b.run(ctx, t)
+		if err != nil && ctx.Err() == nil && t.remote.lost(err) {
+			err = errLost
+		}
+		b.finish(j, err)
 	}, func(any) {
 		b.finish(j, ErrInternal)
 	})
@@ -363,6 +408,13 @@ func (b *Browser) finish(j *job, err error) {
 	case errors.As(err, &cf):
 		j.state, j.conflict = Waiting, &cf.c
 		if a := j.batch.all; a != nil && b.answer(j, *a) { // answered for all while it ran
+			b.pending = slices.Insert(b.pending, 0, j)
+		}
+	case errors.Is(err, errLost):
+		// Attach queues it again, unless Attach already ran while it failed.
+		j.state = Paused
+		if b.state == Connected {
+			j.state = Queued
 			b.pending = slices.Insert(b.pending, 0, j)
 		}
 	case errors.As(err, &sk):
@@ -538,9 +590,9 @@ func (b *Browser) answer(j *job, a Answer) bool {
 	j.conflict = nil
 	switch a {
 	case Overwrite:
-		j.state, j.overwrite = Queued, true
+		j.state, j.overwrite = b.queued(), true
 	case KeepBoth:
-		j.state, j.keepBoth = Queued, true
+		j.state, j.keepBoth = b.queued(), true
 	default:
 		j.state, j.reason = Skipped, ErrExists.Error()
 		return false
@@ -598,7 +650,7 @@ func (b *Browser) Retry(id TransferID) {
 		b.mu.Unlock()
 		return
 	}
-	j.state, j.reason = Queued, ""
+	j.state, j.reason = b.queued(), ""
 	b.pending = append(b.pending, j)
 	b.schedule()
 	b.mu.Unlock()

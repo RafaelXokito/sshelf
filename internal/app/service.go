@@ -192,31 +192,10 @@ func modesNotice(dir string, fixed []string) string {
 
 // Connect implements Service.
 func (a *App) Connect(ctx context.Context, hostID domain.ID, size Size) (Session, error) {
-	a.mu.Lock()
-	i := slices.IndexFunc(a.data.Hosts, func(h domain.Host) bool { return h.ID == hostID })
-	if i < 0 {
-		a.mu.Unlock()
-		return nil, ErrHostNotFound
-	}
-	h := a.data.Hosts[i]
-	target := domain.Resolve(h, a.data.Groups, a.data.Identities, a.data.Settings)
-	a.mu.Unlock()
-
-	slog.Debug("connect: start", "host", h.Label, "id", hostID)
-	a.mu.Lock()
-	send := a.send
-	a.mu.Unlock()
-	ssh := sshclient.Config{KnownHostsFiles: a.cfg.KnownHostsFiles}
-	if send != nil {
-		ssh.Progress = func(st sshclient.Stage) { send(ConnectProgressMsg{HostID: hostID, Stage: st}) }
-	}
-	creds := Credentials{Store: a.cfg.Secrets, Home: a.cfg.Home, Prompter: a, OnMissing: a.markMissing}
-	client, err := ssh.Connect(ctx, target, creds, a)
+	h, lease, err := a.dial(ctx, hostID)
 	if err != nil {
-		slog.Debug("connect: failed", "host", h.Label, "err", err)
 		return nil, err
 	}
-	_, lease := sshclient.NewConn(client)
 	s, err := session.New(lease, session.Options{
 		Term:    h.Options.Term,
 		Env:     h.Options.SetEnv,
@@ -232,6 +211,36 @@ func (a *App) Connect(ctx context.Context, hostID domain.ID, size Size) (Session
 		a.recordConnected(hostID)
 	}
 	return s, nil
+}
+
+// dial runs the normal connect flow for the host: dialling, host-key
+// checks, prompts and authentication, with progress sent to the UI. It
+// returns the host and the first lease of the new shared connection.
+func (a *App) dial(ctx context.Context, hostID domain.ID) (domain.Host, *sshclient.Lease, error) {
+	a.mu.Lock()
+	i := slices.IndexFunc(a.data.Hosts, func(h domain.Host) bool { return h.ID == hostID })
+	if i < 0 {
+		a.mu.Unlock()
+		return domain.Host{}, nil, ErrHostNotFound
+	}
+	h := a.data.Hosts[i]
+	target := domain.Resolve(h, a.data.Groups, a.data.Identities, a.data.Settings)
+	send := a.send
+	a.mu.Unlock()
+
+	slog.Debug("connect: start", "host", h.Label, "id", hostID)
+	ssh := sshclient.Config{KnownHostsFiles: a.cfg.KnownHostsFiles}
+	if send != nil {
+		ssh.Progress = func(st sshclient.Stage) { send(ConnectProgressMsg{HostID: hostID, Stage: st}) }
+	}
+	creds := Credentials{Store: a.cfg.Secrets, Home: a.cfg.Home, Prompter: a, OnMissing: a.markMissing}
+	client, err := ssh.Connect(ctx, target, creds, a)
+	if err != nil {
+		slog.Debug("connect: failed", "host", h.Label, "err", err)
+		return h, nil, err
+	}
+	_, lease := sshclient.NewConn(client)
+	return h, lease, nil
 }
 
 // recordConnected stamps the host's last connection with the current

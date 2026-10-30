@@ -1201,12 +1201,12 @@ If a file to be copied already exists in the target directory, then the system s
 ### FR-SFTP-017 · Resume interrupted transfers
 When an interrupted transfer is started again in the same sshelf run, the system shall continue it from the bytes already transferred where it is safe to do so, and otherwise start it over and say so.
 
-- **Priority:** M3 · **Status:** Draft · **Source:** D-018, D-020
+- **Priority:** M3 · **Status:** Implemented · **Source:** D-018, D-020
 - **Acceptance:**
   - **Download.** It continues from the size of `<name>.sshelf-part` when the part is a regular file (not a symlink) no larger than the remote file, and the remote file's size and modification time still match what sshelf recorded when the download started.
   - **Upload.** Uploads also go to a part file, `<name>.sshelf-part` in the remote directory. Every 8 MiB sshelf records a checkpoint: the bytes the server has acknowledged and the part file's size and modification time as the server reports them. The upload continues from the last checkpoint when the remote part file exists, is a regular file, is no larger than the local file and no smaller than the checkpoint, its modification time matches the checkpoint's (or, if it is larger than the checkpoint because writes were in flight when the connection dropped, is not older), and the local file's size and modification time are unchanged since the upload started. sshelf first truncates the part file to the checkpoint (ARCH-SFTP-005).
   - Otherwise the transfer starts from 0 and the transfers view and the status line say "restarted: <reason>" (for example "remote file changed").
-  - Interrupt a 64 MiB download and a 64 MiB upload after about 20 MiB (sshtest fault injection, ARCH-TEST-004), retry: each finishes with the right SHA-256, and sshtest records that fewer than 48 MiB were read or written the second time.
+  - Interrupt a 64 MiB download and a 64 MiB upload after about 20 MiB (sshtest fault injection, ARCH-TEST-004), retry: each finishes with the right SHA-256, and sshtest records that at most 48 MiB were read or written the second time (the upload resumes from its last checkpoint, at 16 MiB).
   - Resume works within one sshelf run: the queue is kept in memory only. A `.sshelf-part` file left by an earlier run is never resumed; it is overwritten when that file is copied again.
 
 ### FR-SFTP-018 · Connection lost: pause and reconnect

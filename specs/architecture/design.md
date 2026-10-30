@@ -712,7 +712,8 @@ the contract; goleak and sshtest's connection-close count test it.
   a new sshelf run never resumes (D-007).
 - **Pause.** When `Conn.Done()` closes, running and queued jobs move to
   `paused`, keeping their records and part files. `app.Service.ReconnectSFTP`
-  makes a new `Conn` through the normal connect flow and `Browser.Attach`
+  makes a new `Conn` through the normal connect flow (for the host recorded by
+  `files.Open(lease, files.Options{HostID})`) and `Browser.Attach`
   reopens both channels and requeues the paused jobs in their old order.
 - **Cancel.** Stops the job, deletes its part file (local; remote best
   effort) and, for a directory job, removes its queued children.
@@ -1048,8 +1049,8 @@ removed in revision 2.
 - Acceptance: A 64 MiB transfer in each direction is cancelled at about 50 %: the job is `cancelled` within 1 s and its part file is gone. The download writer stops at the size from `Fstat` (SEC-SFTP-004 AC3). The heap check of NFR-SIZE-004 passes.
 
 **ARCH-SFTP-005**: The system shall record, for each transfer, the source's size and modification time when it starts and, for uploads, a checkpoint {acknowledged offset, part size, part mtime} every 8 MiB and on every clean pause or cancel, and shall resume only under the conditions of FR-SFTP-017.
-- Priority: M3 · Status: Draft · Source: ADR-018, FR-SFTP-017
-- Acceptance: Table test over the resume decision: each condition of FR-SFTP-017 false in turn gives "restart" with its reason, all true gives "resume at N". Fault-injection tests (ARCH-TEST-004) drop the connection after 20 MiB of a 64 MiB upload and of a download; after reconnecting, the upload truncates the remote part to its last checkpoint, both finish with the right SHA-256, and sshtest's byte counts show less than 48 MiB sent the second time.
+- Priority: M3 · Status: Implemented · Source: ADR-018, FR-SFTP-017
+- Acceptance: Table test over the resume decision: each condition of FR-SFTP-017 false in turn gives "restart" with its reason, all true gives "resume at N". Fault-injection tests (ARCH-TEST-004) drop the connection after 20 MiB of a 64 MiB upload and of a download; after reconnecting, the upload truncates the remote part to its last checkpoint, both finish with the right SHA-256, and sshtest's byte counts show at most 48 MiB sent the second time (the upload resumes from its 16 MiB checkpoint, so exactly 48 MiB; a restart would send 64).
 
 **ARCH-SFTP-006**: The system shall start the editor only through `tea.ExecProcess` in `internal/ui/editor`, shall keep sessions and transfers running while the editor holds the terminal, and when the editor exits, shall request the window size, resize every session if it changed, and redraw.
 - Priority: M3 · Status: Draft · Source: D-019, ADR-019
