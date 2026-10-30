@@ -1,13 +1,19 @@
 # sshelf implementation plan
 
-Status: Draft · Owner: delivery · Last updated: 2026-10-29
+Status: Draft · Owner: delivery · Last updated: 2026-10-30 (M2 added)
 
 This is the ordered plan for the MVP: every `MVP` requirement in
 `product/requirements.md` (`FR-*`), `security/requirements.md` (`SEC-*`),
 `architecture/design.md` (`ARCH-*`) and [`nfr.md`](nfr.md) (`NFR-*`) is mapped
 to at least one task in the [traceability matrix](#traceability-matrix).
-[`decisions.md`](decisions.md) wins any conflict. The v1 milestones are
+[`decisions.md`](decisions.md) wins any conflict. Milestone **M2** (framed
+sessions, tabs and mouse, D-009 to D-012) follows the MVP with tasks T-031 to
+T-043 and its own [matrix](#m2-traceability-matrix). The v1 milestones are
 outlined at the end without task detail.
+
+The MVP's internal milestones were first called M0 to M5. They are now
+**MVP-M0** to **MVP-M5**, so that "M2" means only the product milestone and
+the `M2` priority.
 
 ## How to read a task
 
@@ -35,17 +41,18 @@ outlined at the end without task detail.
 
 | Milestone | Tasks | Outcome | Days |
 |---|---|---|---|
-| **M0 Walking skeleton** | T-000 … T-004 | Bubble Tea v2, CI, and a **demoable vertical slice**: pick a host from a hand-written `config.json` and get a shell on the in-process test server with a key file, then return to the list | 9.5 |
-| **M1 Files and trust** | T-005 … T-008 | Durable `config.json`, file modes, TOFU, sshelf `known_hosts`, changed-key block | 6 |
-| **M2 Secrets and auth** | T-009 … T-014 | OS credential store, stored keys and passwords, keyboard-interactive, prompts, error reporting | 9 |
-| **M3 Managing hosts and identities** | T-015 … T-023 | Host form, full host list, Welcome, fuzzy search, identities, stored keys, hidden identities, no-store mode | 12 |
-| **M4 Import** | T-024 … T-025 | `~/.ssh/config` import with report | 3.5 |
-| **M5 Hardening and MVP gate** | T-026 … T-030 | CLI, crash safety, canary scan, NFR checks, traceability gate | 6 |
+| **MVP-M0 Walking skeleton** | T-000 … T-004 | Bubble Tea v2, CI, and a **demoable vertical slice**: pick a host from a hand-written `config.json` and get a shell on the in-process test server with a key file, then return to the list | 9.5 |
+| **MVP-M1 Files and trust** | T-005 … T-008 | Durable `config.json`, file modes, TOFU, sshelf `known_hosts`, changed-key block | 6 |
+| **MVP-M2 Secrets and auth** | T-009 … T-014 | OS credential store, stored keys and passwords, keyboard-interactive, prompts, error reporting | 9 |
+| **MVP-M3 Managing hosts and identities** | T-015 … T-023 | Host form, full host list, Welcome, fuzzy search, identities, stored keys, hidden identities, no-store mode | 12 |
+| **MVP-M4 Import** | T-024 … T-025 | `~/.ssh/config` import with report | 3.5 |
+| **MVP-M5 Hardening and MVP gate** | T-026 … T-030 | CLI, crash safety, canary scan, NFR checks, traceability gate | 6 |
 | **MVP total** | 31 tasks | | **46** |
+| **M2 Framed sessions, tabs and mouse** | T-031 … T-043 | Sessions rendered in sshelf's frame through `x/vt`, tabs with a prefix key, background sessions, scrollback, reconnect in the tab, mouse on sshelf screens and for remote apps that ask, form buttons | **25** (critical path 12.5) |
 
 ---
 
-## M0 Walking skeleton
+## MVP-M0 Walking skeleton
 
 ### T-000 · Foundation: Bubble Tea v2, package layout, CI, domain types
 
@@ -100,7 +107,7 @@ outlined at the end without task detail.
 
 ---
 
-## M1 Files and trust
+## MVP-M1 Files and trust
 
 ### T-005 · Paths, directory creation and file modes
 
@@ -140,7 +147,7 @@ outlined at the end without task detail.
 
 ---
 
-## M2 Secrets and auth
+## MVP-M2 Secrets and auth
 
 ### T-009 · Secrets core: `Secret`, `Ref`, `MemStore`
 
@@ -198,7 +205,7 @@ outlined at the end without task detail.
 
 ---
 
-## M3 Managing hosts and identities
+## MVP-M3 Managing hosts and identities
 
 ### T-015 · Host form: add, edit, validate
 
@@ -278,12 +285,12 @@ outlined at the end without task detail.
 - **Satisfies:** FR-CRED-002, SEC-CRED-005, ARCH-SEC-006
 - **Depends on:** T-022
 - **Tests:** `TestFR_CRED_002_SaveRefusedWithMessage`, `TestFR_CRED_002_KeyFileHostConnects`, `TestFR_CRED_002_UnreadableSecretFallsBackToPrompt`, `TestSEC_CRED_005_NoCanaryInAnyFile`, `TestARCH_SEC_006_DisabledFieldGolden`.
-- **Done when:** with `MemStore` returning `ErrUnavailable` for `Available`, every M3 screen renders and the key-file slice from T-004 still works.
+- **Done when:** with `MemStore` returning `ErrUnavailable` for `Available`, every MVP-M3 screen renders and the key-file slice from T-004 still works.
 - **Estimate:** 1 d
 
 ---
 
-## M4 Import
+## MVP-M4 Import
 
 ### T-024 · `~/.ssh/config` parser and import plan
 
@@ -305,7 +312,7 @@ outlined at the end without task detail.
 
 ---
 
-## M5 Hardening and MVP gate
+## MVP-M5 Hardening and MVP gate
 
 ### T-026 · Command line and process hardening
 
@@ -352,6 +359,175 @@ outlined at the end without task detail.
 - **Done when:** tracecheck reports zero untraced MVP IDs, coverage meets both thresholds, and the manual checklist is signed off on macOS and Linux.
 - **Estimate:** 1 d
 
+## M2 Framed sessions, tabs and mouse
+
+Milestone M2 implements D-009 to D-012: sessions inside sshelf's frame through
+an embedded emulator (ADR-012, ADR-013), tabs (ADR-015) and mouse (ADR-014).
+It starts after the MVP gate (T-030). Every `M2` requirement, including the
+**M2 revision** blocks of implemented requirements (README, "Revisions"), is
+mapped in the [M2 traceability matrix](#m2-traceability-matrix). The task
+conventions above apply unchanged; "fake session" means a test double of the
+M2 `app.Session` (design §8.4) that records what it is sent and serves canned
+snapshots.
+
+**Parallel lanes.** Three lanes start on day 1 and join in T-037:
+
+| Lane | Tasks | Needs from other lanes |
+|---|---|---|
+| A · emulator and session core | T-031 → T-032 → T-033 | none |
+| B · frame and tabs | T-034 → T-035 → T-036 | none (fake sessions) |
+| C · mouse on sshelf screens | T-038 → T-040 | T-034 (frame), T-039 (buttons) |
+| D · form buttons | T-039 | none |
+| Join | T-037 (A + B) → T-041 (+ T-038), T-042 → T-043 | |
+
+Critical path: T-034 → T-035 → T-036 → T-037 → T-041 → T-043, 12.5 days.
+T-034, T-035, T-036, T-038 and T-040 all edit `internal/ui/model.go`; merge
+them in dependency order and rebase rather than resolve by hand.
+
+### T-031 · Emulator adoption: `x/vt` wrapper, key shim, replay goldens
+
+- **Delivers:**
+  - `github.com/charmbracelet/x/vt v0.1.0` pinned in `go.mod` (ADR-013); `go mod tidy` keeps the `ultraviolet` and `x/ansi` versions Bubble Tea already uses, and the build is checked with `-race`.
+  - `internal/session/emulator.go`, the only file that imports `x/vt`: a private `screen` type over `vt.Emulator` with its own mutex (`write`, `resize`, `snapshot`, `scrollback`, `sendKey`, `sendMouse`, `paste`, `setDefaultColors`), mode tracking through `EnableMode`/`DisableMode` callbacks (mouse modes, bracketed paste, application cursor), a 2,000-line scrollback cap, and rendering of styled lines with SGR only (no OSC 8 links).
+  - The key-encoding shim for the modified special keys `vt` drops (ARCH-SESS-017, design §9.4 table).
+  - Replay fixtures and goldens in `internal/session/testdata/replay/` (`vim-edit`, `htop`, `less-search`, `tmux-split`, `utf8-wide`) recorded with `script -q` against a real `sshd` at 80×24 with `TERM=xterm-256color`, plus `testdata/replay/README` with the recording steps.
+  - An upstream issue (and a PR where practical) to `charmbracelet/x` for the dropped modified keys and the wide character at the right margin; the `utf8-wide` golden is skipped with a link to the issue until a fixed version is pinned.
+- **Satisfies:** ARCH-TEST-002, ARCH-SESS-017, ARCH-SESS-016 (partial: replies produced by the emulator), SEC-SESSION-005 (partial: AC2 render fuzz)
+- **Depends on:** none (starts on day 1)
+- **Tests:** `TestARCH_TEST_002_Replay` (each fixture in 1-, 7- and 4096-byte chunks), `TestARCH_SESS_017_KeyTable` (every row of design §9.4, normal and application cursor mode), `TestARCH_SESS_017_NoKeyEncodesToNothing`, `TestARCH_SESS_016_EmulatorAnswersDA1AndCPR`, `FuzzSEC_SESSION_005_RenderOnlySGR`, `TestARCH_SESS_011_NoLinksRendered`.
+- **Done when:** every replay golden passes except the documented `utf8-wide` skip; `go mod why github.com/charmbracelet/x/vt` shows only `internal/session`; the upstream issue links are in the PR.
+- **Estimate:** 2.5 d
+
+### T-032 · Session core on the emulator
+
+- **Delivers:** the M2 `session.Session` API of design §8.4 (`New` with `Options.Size`, `SendKey`, `SendMouse`, `Paste`, `SendBytes`, `Resize`, `SetDefaultColors`, `Snapshot`, `Scrollback`, `Updates`, `Done`, `Err`, `Close`) with the output, reply, writer and waiter goroutines through `term.SafeGo`; the 1 MiB input queue with `ErrInputFull`; reads paced by emulator processing; coalesced `Updates()`; `window-change` debounced 30 ms; `TERM` `xterm-256color` by default; the end classification of the MVP kept (`ExitError`, `DisconnectError`, `ErrInternal`). sshtest gains `flood`, `stream`, `replay`, `modes`, `query`, `hostile` and `echo-hex` and records channel closes (ARCH-TEST-003). The MVP `Run()` path stays, untouched, until T-037 removes it, so `main` keeps working. archtest: `session` may import `x/vt` and `ultraviolet`, still not Bubble Tea.
+- **Satisfies:** ARCH-SESS-003 (M2 revision), ARCH-SESS-004 (M2 revision, partial: session level), ARCH-SESS-005 (M2 revision, partial: unit), ARCH-SESS-008, ARCH-SESS-010 (partial: session level), ARCH-SESS-011, ARCH-SESS-014, ARCH-SESS-015, ARCH-SESS-016, ARCH-TEST-003, SEC-SESSION-005 (partial: AC1 at session level)
+- **Depends on:** T-031
+- **Tests:** `TestARCH_SESS_003_M2_RandomBytesUnchanged`, `TestARCH_SESS_003_M2_OutputOnlyToEmulator`, `TestARCH_SESS_004_M2_DebouncedWindowChange`, `TestARCH_SESS_005_M2_EachEndStopsGoroutines` (goleak), `TestARCH_SESS_005_M2_PanicEndsOnlyThisSession` (`sshelf_faultinject`), `TestARCH_SESS_008_CauseReportedOnce`, `TestARCH_SESS_010_ThreeSessionsReadIndependently`, `TestARCH_SESS_011_HostileCorpusStaysInEmulator`, `TestARCH_SESS_014_StalledRemoteNeverBlocks`, `TestARCH_SESS_014_InputFull`, `TestARCH_SESS_015_UpdatesCoalesce`, `TestARCH_SESS_016_QueryRepliesReachRemote`, `TestARCH_SESS_016_DefaultColorsAnswerOSC11`, `TestARCH_TEST_003_Commands`.
+- **Done when:** a test program can connect two sessions to sshtest, type into each, read their snapshots and close them with `goleak` clean, on Linux and macOS with `-race`.
+- **Estimate:** 3 d
+
+### T-033 · Session throughput and memory checks
+
+- **Delivers:** the CI checks for output throughput and per-session memory, a separate perf job (as for NFR-PERF-001) that can be re-run without blocking unrelated PRs, and an `emulator` row in the PR template's perf section recording MB/s and MiB per session.
+- **Satisfies:** NFR-PERF-005, NFR-SIZE-003
+- **Depends on:** T-032
+- **Tests:** `TestNFR_PERF_005_TenMegabytes`, `BenchmarkNFR_PERF_005_EmulatorWrite`, `TestNFR_SIZE_003_SessionHeap`, `TestNFR_SIZE_003_HeapReleasedOnClose`.
+- **Done when:** both checks pass 5 consecutive CI runs; the measured values are recorded in the PR and in ADR-013 if they differ from the M1 Pro figures by more than 2×.
+- **Estimate:** 1.5 d
+
+### T-034 · Frame and tabs (with fake sessions)
+
+- **Delivers:** the root model of design §9.4 with a Hosts tab (the MVP screen, modals and status line, unchanged) and `[]*sessionTab`; the header with `tabs.Layout` (sanitised labels cut to 20 columns, focus brackets and reverse video, `‹+N`/`+N›` overflow, `●` and `✕`); the session view from `Snapshot()` with the cursor in `tea.View.Cursor`; the session status bar with a 1 s tick and an injectable clock; `ConnectedMsg` opens a numbered tab and focuses it (numbers never reused); `SessionUpdateMsg` listeners and `SessionEndedMsg`; focus switching as model methods (keys come in T-035). The M2 `app.Session` shape (design §8.4) is added as `app.FramedSession` with a fake in `internal/app/apptest`; the real wiring is T-037. The MVP goldens are updated for the header line.
+- **Satisfies:** ARCH-UI-005, ARCH-UI-001 (M2 revision, partial: model and goldens), ARCH-SESS-002 (M2 revision), FR-TAB-002 (partial: with fakes), FR-TAB-003, FR-TAB-004, FR-TAB-007 (partial: no canary yet), FR-TAB-001 (partial: switching and screen state), FR-CONN-001 (M2 revision, partial: tab opens with the session area)
+- **Depends on:** none (starts on day 1; uses fake sessions)
+- **Tests:** `TestARCH_UI_005_FrameGoldens` (host list without and with 3 tabs, live session, modal over a session, ended session, 10-tab overflow; 80×24 and 120×40), `TestARCH_UI_005_CursorShifted`, `TestFR_TAB_002_SameHostTwice`, `TestFR_TAB_002_NumbersNotReused`, `TestFR_TAB_002_FailedConnectOpensNoTab`, `TestARCH_SESS_002_M2_PromptsOverCurrentTab`, `TestFR_TAB_003_FocusBracketsInASCIIProfile`, `TestFR_TAB_003_LabelSanitisedAndCut`, `TestFR_TAB_003_OverflowKeepsFocusVisible`, `TestFR_TAB_004_ActivityOnlyInBackground`, `TestFR_TAB_004_EndedMarker`, `TestFR_TAB_007_StatusBarDurationTicks`, `TestFR_TAB_007_DropsHintsFirst`, `TestFR_TAB_001_ScreenStateKeptAcrossSwitch`.
+- **Done when:** the M2 goldens are reviewed in the PR as rendered text, and the MVP walkthrough still passes with only the header line changed.
+- **Estimate:** 3 d
+
+### T-035 · Prefix key, input routing and the help overlay
+
+- **Delivers:** the prefix keymap and state machine in `ui/keys` (§8.5) with help text; the key routing order of design §9.4; `tea.KeyPressMsg` and `tea.PasteMsg` converted to ultraviolet events and sent to the focused live session; `Ctrl+]` `1`–`9`, `h`, `0`, `n`, `p`; `Ctrl+]` `Ctrl+]` as `SendBytes(0x1d)`; `Ctrl+]` `q` with the "Disconnect <label>?" confirmation; the prefix help overlay in `modals/help`; the `Ctrl+] …` status-bar hint. The v1 escape-parser placeholders are deleted.
+- **Satisfies:** ARCH-SESS-006, FR-TAB-005, FR-TAB-001, FR-TAB-006 (partial: routing and conversion; bytes on the wire in T-037), FR-CONN-014 (partial: with a fake session)
+- **Depends on:** T-034
+- **Tests:** `TestARCH_SESS_006_PrefixStateMachine` (table), `TestARCH_SESS_006_PrefixSendsNoBytes`, `TestFR_TAB_005_LiteralCtrlBracket`, `TestFR_TAB_005_UnknownKeyCancels`, `TestFR_TAB_005_HelpOverlayGolden`, `TestFR_TAB_005_WorksInTextField`, `TestFR_TAB_001_NumberNextPrevHosts`, `TestFR_TAB_006_SshelfKeysGoToRemote`, `TestFR_TAB_006_PasteForwarded`, `TestFR_CONN_014_ConfirmDefaultsNo`, `TestFR_CONN_014_TildeDotIsText`, `TestARCH_UI_004_PrefixBindingsHaveHelp`.
+- **Done when:** every prefix command and Esc have a root-model test with a recording fake session.
+- **Estimate:** 2 d
+
+### T-036 · Ended tabs, reconnect, quit confirmation and scrollback mode
+
+- **Delivers:** the ended-tab state (last screen kept, `✕ <reason> · r reconnect · x close`, only `r`, `x` and the prefix accepted); `r` reconnects into the same tab through the normal connect flow (modals over the tab; failure keeps the ended state); `x` and a confirmed disconnect close the tab and focus left, selecting the host on the Hosts tab; "Quit and close N sessions?" for `q` and `Ctrl+C` on the Hosts tab when sessions are live; scrollback mode (`Ctrl+]` `[`, ↑/↓, PgUp/PgDn, `g`/`G`, Esc, the view anchored while output arrives, its status-bar hints).
+- **Satisfies:** FR-CONN-005 (M2 revision), FR-CONN-010, FR-TAB-009, FR-TAB-010, ARCH-SESS-008 (partial: `r` produces the reconnect request)
+- **Depends on:** T-035
+- **Tests:** `TestFR_CONN_005_M2_EndedTabGolden`, `TestFR_CONN_005_M2_BackgroundEndKeepsFocus`, `TestFR_CONN_005_M2_CloseSelectsHost`, `TestFR_CONN_005_M2_OnlyRXAndPrefix`, `TestFR_CONN_010_ReconnectSameTab`, `TestFR_CONN_010_FailureKeepsEndedTab`, `TestARCH_SESS_008_RReconnectRequest`, `TestFR_TAB_009_ConfirmWithLiveSessions`, `TestFR_TAB_009_NoConfirmWhenAllEnded`, `TestFR_TAB_010_ScrollbackKeys`, `TestFR_TAB_010_AnchoredWhileOutputArrives`, `TestFR_TAB_010_Golden`.
+- **Done when:** the end-of-session, reconnect and quit flows are covered with fake sessions, including a reconnect cancelled with Esc.
+- **Estimate:** 2 d
+
+### T-037 · Wire real sessions and remove the terminal handover
+
+- **Delivers:** `app.Service.Connect(ctx, hostID, size)` returning the T-032 session as `app.Session` (the M2 shape; `FramedSession` renamed); `main` wiring; the UI passes the session area and the terminal's colours (`tea.RequestBackgroundColor`/foreground in `Init`); `tea.WindowSizeMsg` resizes every session; quitting closes every session; SIGTERM/SIGHUP quit cleanly. Removed (D-007, one path): `tea.Exec`, `execFunc`, `Session.Run`, `SetStdin/SetStdout/SetStderr`, raw mode, `cancelreader` in `session`, the `session.Terminal` interface and its SIGWINCH implementation, `term.ResizeEvents` if unused, and the `SessionEndedMsg` handover path. PTY E2E tests with several sessions against sshtest. The M2 walkthrough goldens.
+- **Satisfies:** FR-CONN-001 (M2 revision), FR-CONN-004 (M2 revision), ARCH-SESS-002 (M2 revision), ARCH-SESS-004 (M2 revision), ARCH-SESS-005 (M2 revision), ARCH-SESS-010, ARCH-SESS-016 (UI colours), ARCH-UI-001 (M2 revision), FR-TAB-002, FR-TAB-006, FR-TAB-008, FR-CONN-014, NFR-PERF-004, NFR-PERF-006
+- **Depends on:** T-032, T-036
+- **Tests:** `TestFR_CONN_001_M2_TermIsXterm256color`, `TestFR_CONN_001_M2_PtySizeIsSessionArea`, `TestFR_CONN_004_M2_ResizeReachesAllSessions` (PTY E2E, 3 sessions), `TestARCH_SESS_004_M2_BurstPerSession`, `TestARCH_SESS_005_M2_OtherSessionSurvivesPanic` (PTY), `TestARCH_SESS_005_M2_SttyRestoredOnExit` (PTY), `TestARCH_SESS_010_QuitClosesAll`, `TestARCH_UI_001_M2_Walkthrough`, `TestFR_TAB_002_E2ETwoSessionsSameHost`, `TestFR_TAB_006_KeyBytesOnTheWire` (`echo-hex`), `TestFR_TAB_008_BackgroundTenThousandLines`, `TestFR_CONN_014_E2EChannelClosed`, `TestNFR_PERF_004_KeystrokeOverhead`, `TestNFR_PERF_006_TenSessions` (PTY, Linux). The MVP tests of the handover (`TestARCH_SESS_003_*`, `TestARCH_SESS_005_Restore*`, `TestFR_CONN_005_TerminalRestored`, `TestNFR_PORT_002_TermMatrix`) are rewritten for the frame, keeping their IDs.
+- **Done when:** `grep -r "tea.Exec\|MakeRaw" internal cmd` finds nothing; the PTY suite passes on Linux and macOS; the T-000 `devcheck` program is deleted or documented as MVP-only.
+- **Estimate:** 2.5 d
+
+### T-038 · Mouse core, host list and Welcome screen
+
+- **Delivers:** `components.ClickMsg`, `components.WheelMsg` and `components.ClickTracker` (400 ms, same row, injectable clock); the root model's translation of `tea.MouseClickMsg`/`tea.MouseWheelMsg` into component coordinates (header row, blank row, modal offsets, ADR-014); the `MouseMode` policy function (ARCH-UI-006) with cell motion on the Hosts tab; host list clicks, double-click to connect, wheel ±3, click on the search field; Welcome choices. `TestNFR_UX_001_NoMouseTracking` is replaced by the revision's tests.
+- **Satisfies:** ARCH-UI-006 (partial: sshelf screens), ARCH-UI-007, FR-NAV-012, FR-NAV-014, NFR-UX-001 (M2 revision, partial: policy and keyboard parity)
+- **Depends on:** T-034
+- **Tests:** `TestARCH_UI_006_MouseModePolicy` (table), `TestARCH_UI_007_DoubleClickThreshold`, `TestARCH_UI_007_LayoutMatchesView`, `TestARCH_UI_007_ReleaseAndMotionIgnored`, `TestFR_NAV_012_ClickSelects`, `TestFR_NAV_012_DoubleClickConnects`, `TestFR_NAV_012_WheelMovesThree`, `TestFR_NAV_012_ClickSearchFocuses`, `TestFR_NAV_012_ClickListLeavesSearch`, `TestFR_NAV_014_ClickChoices`, `TestNFR_UX_001_MouseModePolicy`, `TestNFR_UX_001_EveryActionBound` (extended to mouse actions).
+- **Done when:** every host-list and Welcome interaction is covered with synthetic messages through the root model, including coordinates on the header and footer rows (ignored).
+- **Estimate:** 2 d
+
+### T-039 · Form buttons
+
+- **Delivers:** `components.Form` renders `[ Save ]` and `[ Cancel ]` on one row after the last field; Tab and Shift+Tab include them; Enter or Space on a focused button returns `FormSubmit` or `FormCancel`; focus is shown with the focus glyph and not by colour alone (NFR-UX-003); the host form and identity form goldens updated; `Form` exposes its row layout (field rows, button spans) for T-040.
+- **Satisfies:** FR-NAV-015 (partial: buttons and keyboard)
+- **Depends on:** none (starts on day 1)
+- **Tests:** `TestFR_NAV_015_ButtonsRendered` (goldens at 80×24 and 120×40), `TestFR_NAV_015_TabReachesButtons`, `TestFR_NAV_015_EnterOnSaveSubmits`, `TestFR_NAV_015_SpaceOnCancelCancels`, `TestFR_NAV_015_LayoutMatchesView`.
+- **Done when:** both forms behave as before for every key except Tab order, and the dirty-form confirmation still appears from `[ Cancel ]`.
+- **Estimate:** 1 d
+
+### T-040 · Mouse on forms, modals and the tab bar
+
+- **Delivers:** click to focus a form field (cursor at the end), click `‹`/`›` on choice fields, click `[ Save ]`/`[ Cancel ]`; every modal (confirm, TOFU, prompt, key changed, help, disconnect and quit confirmations) renders bracketed buttons and handles clicks on them, with clicks outside the top modal dropped; tab-bar clicks on the Hosts tab through `tabs.Layout`.
+- **Satisfies:** FR-NAV-015, FR-NAV-016, FR-NAV-017, ARCH-UI-007 (modals and tab bar)
+- **Depends on:** T-038, T-039
+- **Tests:** `TestFR_NAV_015_ClickFocusesField`, `TestFR_NAV_015_ClickChoiceArrows`, `TestFR_NAV_015_ClickSaveValidates`, `TestFR_NAV_015_ClickCancelConfirmsDirty`, `TestFR_NAV_015_ReadOnlyFieldNotChanged`, `TestFR_NAV_016_ClickButtons` (one case per modal), `TestFR_NAV_016_ClickOutsideIgnored`, `TestFR_NAV_016_TofuTrustsOnlyOnButton`, `TestFR_NAV_017_ClickTabFocuses`, `TestFR_NAV_017_ClickSeparatorIgnored`.
+- **Done when:** every bracketed button in every modal golden has a click test.
+- **Estimate:** 1.5 d
+
+### T-041 · Mouse for remote apps (D-012)
+
+- **Delivers:** the session rows of the `MouseMode` policy (the remote's requested mode; none in scrollback mode and on ended tabs); forwarding of presses, releases, wheel and (when requested) motion inside the session area with the header row removed, through `Session.SendMouse`; header and status-bar events dropped while a session is focused.
+- **Satisfies:** FR-TAB-011, ARCH-UI-006, NFR-UX-001 (M2 revision)
+- **Depends on:** T-037, T-038
+- **Tests:** `TestFR_TAB_011_NoTrackingUntilRequested` (PTY output scan), `TestFR_TAB_011_SGRClickEncoding` (`modes 1000,1006` + `echo-hex`), `TestFR_TAB_011_MotionOnlyWhenRequested`, `TestFR_TAB_011_TrackingOffAfterDisable`, `TestFR_TAB_011_FrameRowsNotForwarded`, `TestNFR_UX_001_NoMouseTrackingInPlainSession` (PTY E2E), `TestARCH_UI_006_SwitchAppliesNextFrame`.
+- **Done when:** the PTY scan proves that a focused plain shell never enables tracking, on Linux and macOS.
+- **Estimate:** 1.5 d
+
+### T-042 · Session output safety and canary extension
+
+- **Delivers:** the end-to-end check that hostile session output never reaches the terminal (SEC-SESSION-005 AC1) in the PTY suite; the T-028 canary harness extended with M2 flows (two sessions, tab switching, an ended tab, reconnect, the quit confirmation) and with the rendered tab bar and status bar of every frame added to what it scans; a canary host label check (a label is not a secret, but the canary password typed into a prompt must never appear in a tab title or status bar).
+- **Satisfies:** SEC-SESSION-005, FR-TAB-003 (no remote titles), FR-TAB-007 (canary), SEC-LOG-001 (M2 flows)
+- **Depends on:** T-037
+- **Tests:** `TestSEC_SESSION_005_HostileOutputPTYScan`, `TestSEC_SESSION_005_TitleIgnored`, `TestSEC_SESSION_005_NoRemoteTitleInTab`, `TestFR_TAB_007_CanaryNotInStatusBar`, `TestFR_TAB_003_CanaryNotInTabBar`, `TestSEC_LOG_001_CanaryHarnessM2`.
+- **Done when:** zero canary hits and zero forbidden sequences across all M2 flows on both OSes.
+- **Estimate:** 1 d
+
+### T-043 · M2 acceptance gate
+
+- **Delivers:**
+  - Each **M2 revision** block is folded into its requirement (new sentence and criteria, `Priority: M2`, `Status: Implemented`) and removed: FR-CONN-001, FR-CONN-004, FR-CONN-005, ARCH-SESS-002, ARCH-SESS-003, ARCH-SESS-004, ARCH-SESS-005, ARCH-UI-001, NFR-UX-001. Their rows move from the MVP matrix to the M2 matrix.
+  - `scripts/tracecheck` covers M2: it reads requirements with priority `MVP` or `M2`; it reads the [M2 traceability matrix](#m2-traceability-matrix) and the "M2 manual-only requirements" table as well as the MVP ones (the "in the matrix but not an MVP requirement" rule becomes "not an MVP or M2 requirement"); and it fails if any `M2 revision` block is left in a spec file. Its own tests get fixtures for each new rule. `TestNFR_QUAL_001_EveryMVPIDTraced` is renamed `TestNFR_QUAL_001_EveryMVPAndM2IDTraced` and the CI step message says "MVP and M2". `CONTRIBUTING.md` step 4 says "every MVP and M2 ID".
+  - Every M2 requirement set to `Implemented`; the requirement counts in each spec file updated.
+  - The M2 section of [`acceptance.md`](acceptance.md) run and signed off on macOS and Linux; `docs/release-checklist.md` gains its manual items (vim, htop, less and tmux in the frame against a real `sshd`; mouse in vim and htop; native selection in a plain shell; the named terminals of NFR-PORT-002 with tabs).
+  - ADR-013's limitation list and the open questions in `product/requirements.md` §22 updated with the product owner's answers and the upstream status of limitations 1 and 2.
+- **Satisfies:** NFR-QUAL-001 (M2 extension), ARCH-UI-001 (M2 revision complete), FR-CONN-001 (manual: real `sshd`)
+- **Depends on:** T-031 … T-042
+- **Tests:** `TestNFR_QUAL_001_EveryMVPAndM2IDTraced`, `TestNFR_QUAL_001_RevisionBlockFails` (tracecheck fixture), `TestNFR_QUAL_001_M2MatrixRead` (fixture), and the existing tracecheck tests.
+- **Done when:** `go run ./scripts/tracecheck` reports zero problems over MVP and M2, no `M2 revision` block remains, coverage still meets NFR-QUAL-003, and the M2 checklist is signed off.
+- **Estimate:** 1.5 d
+
+| Task | Title | Estimate | Depends on |
+|---|---|---|---|
+| T-031 | Emulator adoption | 2.5 d | none |
+| T-032 | Session core on the emulator | 3 d | T-031 |
+| T-033 | Session throughput and memory checks | 1.5 d | T-032 |
+| T-034 | Frame and tabs (fake sessions) | 3 d | none |
+| T-035 | Prefix key, routing, help | 2 d | T-034 |
+| T-036 | Ended tabs, reconnect, quit, scrollback | 2 d | T-035 |
+| T-037 | Wire real sessions, remove handover | 2.5 d | T-032, T-036 |
+| T-038 | Mouse core, host list, Welcome | 2 d | T-034 |
+| T-039 | Form buttons | 1 d | none |
+| T-040 | Mouse on forms, modals, tab bar | 1.5 d | T-038, T-039 |
+| T-041 | Mouse for remote apps | 1.5 d | T-037, T-038 |
+| T-042 | Output safety and canary | 1 d | T-037 |
+| T-043 | M2 acceptance gate | 1.5 d | T-031 … T-042 |
+| **M2 total** | 13 tasks | **25 d** | critical path 12.5 d |
+
 ---
 
 ## v1 milestones (outline)
@@ -362,16 +538,16 @@ passes.
 | Milestone | Scope (requirement IDs) |
 |---|---|
 | **v1-A Organise** | Groups, nesting, collapse and inheritance (FR-GROUP-001 … FR-GROUP-005); tags and tag filter (FR-TAG-001, FR-TAG-002); clone, notes, favourites, reachability, details pane (FR-HOST-004 … FR-HOST-009); history (FR-HIST-001); highlighting, help, too-small, recent, sort, group filter, multi-select (FR-NAV-005 … FR-NAV-011); wider search (ARCH-UI-003) |
-| **v1-B Connection extras** | ssh-agent (FR-CONN-007, SEC-AGENT-001); keepalive and reconnect (FR-CONN-009, FR-CONN-010, ARCH-SESS-007, ARCH-SESS-008); agent forwarding (FR-CONN-011, SEC-AGENT-002, ARCH-SESS-009); startup command (FR-CONN-012); quick connect (FR-CONN-013); `~.` escape (FR-CONN-014, ARCH-SESS-006) |
+| **v1-B Connection extras** | ssh-agent (FR-CONN-007, SEC-AGENT-001); keepalive (FR-CONN-009, ARCH-SESS-007); agent forwarding (FR-CONN-011, SEC-AGENT-002, ARCH-SESS-009); startup command (FR-CONN-012); quick connect (FR-CONN-013). Reconnect and disconnect moved to M2 (FR-CONN-010, FR-CONN-014, ARCH-SESS-006, ARCH-SESS-008). |
 | **v1-C Jump hosts and forwarding** | FR-JUMP-001 … FR-JUMP-004, SEC-HOSTKEY-010, ARCH-SESS-012; forwarding rules, tunnels view and safety (FR-FWD-001 … FR-FWD-007, ARCH-SESS-013) |
 | **v1-D Snippets** | FR-SNIP-001 … FR-SNIP-006 |
 | **v1-E Identities, trust and import** | Save typed password, key generation, deploy key (FR-IDENT-005 … FR-IDENT-007); known-hosts view and trust once (FR-KH-005, FR-KH-007); import preview, jumps and forwards on import, export, CSV (FR-IMPORT-004 … FR-IMPORT-007, ARCH-DATA-003); copy command adds a canary test under SEC-CLIP-005 |
 | **v1-F Settings** | External-change guard (FR-CFG-004, SEC-FILE-005, ARCH-DATA-005); `NO_COLOR`, themes, key bindings, defaults, settings view (FR-CFG-005 … FR-CFG-009); `--config` (FR-CLI-002) |
-| **v1-G Release** | NFR-PERF-004, NFR-SIZE-001, NFR-BUILD-002, NFR-PORT-003; goreleaser pipeline and first tagged release |
+| **v1-G Release** | NFR-SIZE-001, NFR-BUILD-002, NFR-PORT-003; goreleaser pipeline and first tagged release (NFR-PERF-004 moved to M2) |
 
 `Later` items (FR-CRED-003, FR-CONN-015 … FR-CONN-017, FR-KH-006, SEC-HOSTKEY-011, FR-SFTP-*,
-FR-TAB-001, ARCH-SESS-010, ARCH-SESS-011, SEC-CRED-008 and the rest) are not
-planned.
+SEC-CRED-008 and the rest) are not planned. FR-TAB-001, ARCH-SESS-010 and
+ARCH-SESS-011 were `Later` and are now M2.
 
 ---
 
@@ -412,6 +588,23 @@ and written into the specs:
   Mitigation: medians of 5 to 10 runs, and a separate perf job that can be
   re-run without blocking unrelated PRs; persistent flakes reopen the
   threshold with the product owner, not the test.
+- **M2: emulator maturity (main M2 risk).** `x/vt` v0.1.0 is the module's
+  first tag. Known gaps (ADR-013): modified special keys dropped, wide
+  characters lost at the right margin, 2–5 MB/s throughput, about 130 bytes
+  per scrollback cell. Mitigation: wrapper in one file, key shim, replay
+  goldens and NFR-PERF-005/NFR-SIZE-003 as gates on every upgrade, fixes
+  upstream; the product owner decides the scrollback cap and whether the
+  margin bug may ship (open questions in `product/requirements.md` §22).
+- **M2: `ultraviolet` is unversioned.** Bubble Tea and `x/vt` both depend on
+  pseudo-versions of it; a Bubble Tea upgrade can change the version `x/vt`
+  builds against. Mitigation: upgrade them together, with the replay goldens
+  and the key-table test as the gate.
+- **M2: one hot file.** Lanes B and C both change `internal/ui/model.go`.
+  Mitigation: merge in dependency order (T-034 first) and keep the tab,
+  frame and mouse code in `ui/tabs` and `ui/components`, out of `model.go`.
+- **M2: fidelity is only partly testable.** Recorded replays cannot prove
+  that `vim`, `htop` and `tmux` feel right. Mitigation: the M2 section of
+  `acceptance.md` against a real `sshd`, in several terminals.
 - **go-keyring error mapping.** `ErrDenied` versus `ErrUnavailable` depends on
   parsing `security` exit codes and D-Bus errors, which vary by OS version and
   provider (GNOME Keyring, KWallet). Mitigation: a table of observed errors in
@@ -569,3 +762,90 @@ ID is listed last.
 
 Totals: 33 FR + 31 SEC + 22 ARCH + 15 NFR = **101 MVP requirements**, all
 covered by T-000 … T-030.
+
+## M2 manual-only requirements
+
+None: every M2 requirement has at least one automated test. These M2
+acceptance criteria are also checked by hand in the M2 section of
+[`acceptance.md`](acceptance.md):
+
+- FR-CONN-001 (M2 revision): `vim`, `htop`, `less` and `tmux` inside the frame against a real `sshd`.
+- FR-CONN-004 (M2 revision): `tput cols; tput lines` on a real host after a resize, with two tabs open.
+- FR-TAB-011 and NFR-UX-001 (M2 revision): mouse in `vim` and `htop`; native selection in a plain shell.
+- FR-TAB-006: Ctrl+arrow word movement in `bash`/`zsh` and Alt shortcuts in the user's real terminal emulators.
+
+## M2 traceability matrix
+
+Every `M2` requirement, including the revision blocks (marked "rev"), and the
+tasks that cover it; the task that completes an ID is listed last. Until the
+M2 gate (T-043), `scripts/tracecheck` reads only the MVP matrix above, so this
+heading is deliberately different; T-043 extends the tool to read it.
+
+### Functional (`FR-*`)
+
+| ID | Tasks |
+|---|---|
+| FR-CONN-001 (rev) | T-034, T-037, T-043 |
+| FR-CONN-004 (rev) | T-037 |
+| FR-CONN-005 (rev) | T-036 |
+| FR-CONN-010 | T-036 |
+| FR-CONN-014 | T-035, T-037 |
+| FR-NAV-012 | T-038 |
+| FR-NAV-014 | T-038 |
+| FR-NAV-015 | T-039, T-040 |
+| FR-NAV-016 | T-040 |
+| FR-NAV-017 | T-040 |
+| FR-TAB-001 | T-034, T-035 |
+| FR-TAB-002 | T-034, T-037 |
+| FR-TAB-003 | T-034, T-042 |
+| FR-TAB-004 | T-034 |
+| FR-TAB-005 | T-035 |
+| FR-TAB-006 | T-035, T-037 |
+| FR-TAB-007 | T-034, T-042 |
+| FR-TAB-008 | T-037 |
+| FR-TAB-009 | T-036 |
+| FR-TAB-010 | T-036 |
+| FR-TAB-011 | T-041 |
+
+### Security (`SEC-*`)
+
+| ID | Tasks |
+|---|---|
+| SEC-SESSION-005 | T-031, T-032, T-042 |
+
+### Architecture (`ARCH-*`)
+
+| ID | Tasks |
+|---|---|
+| ARCH-SESS-002 (rev) | T-034, T-037 |
+| ARCH-SESS-003 (rev) | T-032 |
+| ARCH-SESS-004 (rev) | T-032, T-037 |
+| ARCH-SESS-005 (rev) | T-032, T-037 |
+| ARCH-SESS-006 | T-035 |
+| ARCH-SESS-008 | T-032, T-036 |
+| ARCH-SESS-010 | T-032, T-037 |
+| ARCH-SESS-011 | T-031, T-032 |
+| ARCH-SESS-014 | T-032 |
+| ARCH-SESS-015 | T-032 |
+| ARCH-SESS-016 | T-031, T-032, T-037 |
+| ARCH-SESS-017 | T-031 |
+| ARCH-UI-001 (rev) | T-034, T-037, T-043 |
+| ARCH-UI-005 | T-034 |
+| ARCH-UI-006 | T-038, T-041 |
+| ARCH-UI-007 | T-038, T-040 |
+| ARCH-TEST-002 | T-031 |
+| ARCH-TEST-003 | T-032 |
+
+### Non-functional (`NFR-*`)
+
+| ID | Tasks |
+|---|---|
+| NFR-PERF-004 | T-037 |
+| NFR-PERF-005 | T-033 |
+| NFR-PERF-006 | T-037 |
+| NFR-SIZE-003 | T-033 |
+| NFR-UX-001 (rev) | T-038, T-041 |
+
+Totals: 21 FR + 1 SEC + 18 ARCH + 5 NFR = **45 M2 entries**: 36 new or
+promoted requirements and 9 revisions of MVP requirements, all covered by
+T-031 … T-043.

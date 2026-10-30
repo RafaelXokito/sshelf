@@ -1,10 +1,10 @@
 # sshelf functional requirements
 
-Status: Draft · Owner: product · Last updated: 2026-10-29
+Status: Draft · Owner: product · Last updated: 2026-10-30 (M2: D-009 to D-012)
 
 This file is the catalogue of functional requirements (`FR-*`). It follows the
 conventions in [`../README.md`](../README.md): EARS syntax, one testable
-sentence per requirement, and a priority of `MVP`, `v1` or `Later`. The product
+sentence per requirement, and a priority of `MVP`, `M2`, `v1` or `Later`. The product
 owner decisions in [`../decisions.md`](../decisions.md) are binding and win any
 conflict with this file. Background is in [`research.md`](research.md). Terms
 are defined in [`../glossary.md`](../glossary.md).
@@ -32,8 +32,11 @@ port-forwarding rules.
   account or cloud.
 - **OpenSSH compatibility.** sshelf imports `~/.ssh/config` and trusts
   `~/.ssh/known_hosts`.
-- **Simplicity.** sshelf is TUI-only and deliberately small. Panes and tabs are
-  left to tmux and the terminal emulator.
+- **Simplicity.** sshelf is TUI-only and deliberately small. From milestone M2,
+  sessions run inside sshelf's frame as tabs, so several hosts can be open at
+  once and the host list stays one key away (D-009, D-010). Split panes, file
+  transfer and sessions that survive a restart of sshelf are left to tmux and
+  other tools (D-007).
 
 ## 2. Target personas
 
@@ -62,6 +65,24 @@ verification.** It has 33 requirements.
 | Storage and settings (`FR-CFG`) | Config directory, durable writes, safe handling of a broken file | External-change guard, `NO_COLOR`, themes, key bindings, defaults, settings view |
 | Command line (`FR-CLI`) | `--help`/`--version`, otherwise start the TUI | `--config <dir>` |
 | Groups, tags, snippets, forwarding, jump hosts, SFTP, history, tabs | None | v1 / Later |
+
+### 3.1 Milestone M2: framed sessions, tabs and mouse
+
+M2 follows the MVP and comes before v1 (D-009 to D-012). It replaces the
+MVP's "hand the whole terminal to the session" model with sessions rendered
+inside sshelf's frame by an embedded terminal emulator.
+
+| Area | M2 | Not in M2 |
+|------|----|-----------|
+| Frame (D-009) | One-line header with the tab bar, the session area, one-line status bar (FR-TAB-003, FR-TAB-007); `vim`, `htop`, `less` and `tmux` render inside the frame (FR-CONN-001 revision) | Themes, configurable layout |
+| Tabs (D-010) | A new tab per connection, the same host twice, switching with a prefix key, activity marker, background sessions keep running, ended tabs with reconnect and close, confirm on quit, scrollback mode (FR-TAB-001 … FR-TAB-010, FR-CONN-005 revision, FR-CONN-010, FR-CONN-014) | Split panes, detaching to the shell, sessions that survive an sshelf restart, renaming or reordering tabs, SFTP |
+| Mouse on sshelf screens (D-011) | Host list, Welcome screen, forms with `[ Save ]` and `[ Cancel ]` buttons, modal buttons, tab bar (FR-NAV-012, FR-NAV-014 … FR-NAV-017) | Drag, right-click menus, hover effects |
+| Mouse in sessions (D-012) | Forwarded only while the remote app asks for it (FR-TAB-011) | sshelf's own selection or copy |
+
+M2 has 18 new or promoted functional requirements, plus revisions of
+FR-CONN-001, FR-CONN-004 and FR-CONN-005. The non-functional and
+architecture changes are in [`../nfr.md`](../nfr.md) and
+[`../architecture/design.md`](../architecture/design.md) (ADR-012 to ADR-015).
 
 ## 4. Requirement format
 
@@ -333,10 +354,14 @@ When the user triggers deploy-key for a host, the system shall append the identi
 
 ## 10. Connecting and sessions (`FR-CONN`)
 
-sshelf opens SSH sessions with its own SSH client and hands the whole terminal
-to the session while it runs. The TUI resumes when the session ends. The flow
-is described in `ARCH-*`. There is no fallback to the system `ssh` binary
-(D-104). sshelf never closes open sessions for security reasons (D-006).
+sshelf opens SSH sessions with its own SSH client. In the MVP it hands the
+whole terminal to the session while it runs, and the TUI resumes when the
+session ends. From M2 (D-009) every session runs in its own tab inside
+sshelf's frame: the remote output goes into an embedded terminal emulator,
+and sshelf draws that emulator's screen between its header and status bar
+(ADR-012). The flow is described in `ARCH-*`. There is no fallback to the
+system `ssh` binary (D-104). sshelf never closes open sessions for security
+reasons (D-006).
 
 ### FR-CONN-001 · Open an interactive session
 When the user presses Enter on a host, the system shall open an interactive SSH shell session to that host in the current terminal, with the full screen given to the session until it ends.
@@ -346,6 +371,13 @@ When the user presses Enter on a host, the system shall open an interactive SSH 
   - `vim`, `htop` and `tmux` render and accept input correctly.
   - The remote PTY uses the local `TERM` value and the current window size.
 - **Note:** the first criterion needs a person at a real terminal and a real `sshd` (the test server has only a scripted shell). It is a manual step in [`specs/acceptance.md`](../acceptance.md) and the release checklist. The PTY request, `TERM`, size and full-screen handover are automated (`TestFR_CONN_001_*`, `TestNFR_PORT_002_TermMatrix`).
+- **M2 revision** · Priority: M2 · Status: Draft · Source: D-009, D-010, ADR-012
+  - *Revised:* When the user presses Enter on a host, the system shall open an interactive SSH shell session to that host in a new tab and render the remote screen inside sshelf's frame through its terminal emulator.
+  - *Acceptance:*
+    - Replaying the recorded output of `vim`, `htop` and `less` (ARCH-TEST-002) into a session produces the expected screen golden, including colours, the alternate screen and the cursor position.
+    - The remote PTY's `TERM` is `xterm-256color`, the terminal sshelf's emulator implements, whatever the local `TERM` is; a host's own `Term` option still wins. Its size is the session area: the terminal width by the terminal height minus 2 rows.
+    - `vim`, `htop`, `less` and `tmux` against a real `sshd` render and accept input correctly inside the frame (manual, M2 section of [`acceptance.md`](../acceptance.md)).
+    - No byte of remote output is written to the local terminal except through sshelf's renderer (SEC-SESSION-005).
 
 ### FR-CONN-002 · Authenticate with stored credentials
 Where the effective identity has a private key or a password, the system shall authenticate with it without prompting, trying the key (stored or file) first and then password or keyboard-interactive (FR-CONN-008).
@@ -370,6 +402,12 @@ While an interactive session is active, when the local terminal is resized, the 
 - **Priority:** MVP · **Status:** Implemented
 - **Acceptance:**
   - After a resize, `tput cols; tput lines` on the remote host prints the new size.
+- **M2 revision** · Priority: M2 · Status: Draft · Source: D-009, D-010
+  - *Revised:* When the local terminal is resized, the system shall resize every open session's emulator to the new session area and send each session's remote PTY the new size.
+  - *Acceptance:*
+    - With 3 sessions open (one focused, two in the background), resizing from 120×40 to 100×30 makes `size` on each sshtest shell print `100 28`.
+    - A burst of resizes within 50 ms sends each session at most 2 `window-change` requests (ARCH-SESS-004).
+    - After a resize, `tput cols; tput lines` on a real host prints the session area, not the full terminal size (manual).
 
 ### FR-CONN-005 · Return to the list on exit
 When an interactive session ends, the system shall restore the host list with the same host selected and show either the remote exit status or the disconnect reason in the status bar.
@@ -378,6 +416,14 @@ When an interactive session ends, the system shall restore the host list with th
 - **Acceptance:**
   - `exit 3` shows "web-prod: exited (3)". A server shutdown shows "web-prod: connection lost: <reason>".
   - The terminal is fully restored, with no raw mode and no remote screen remnants.
+- **M2 revision** · Priority: M2 · Status: Draft · Source: D-010
+  - *Revised:* When a session ends, the system shall keep its tab open with the last remote screen, show the remote exit status or the disconnect reason in that tab's status bar together with `r` reconnect and `x` close, and, when the user presses `x`, close the tab.
+  - *Acceptance:*
+    - `exit 3` shows `✕ exited (3) · r reconnect · x close` in that tab's status bar; a server shutdown shows `✕ connection lost: <reason> · r reconnect · x close`. The last remote screen stays visible above it.
+    - A session that ends in a background tab marks that tab `✕` (FR-TAB-004) and does not take the focus.
+    - `x` closes the tab and focuses the tab to its left; when that is the Hosts tab, the session's host is selected in the host list.
+    - While the tab shows an ended session, keys other than `r`, `x` and the prefix key (FR-TAB-005) are ignored. Scrollback mode still works.
+    - Nothing is written to the local terminal when a session ends: the frame is simply redrawn (ARCH-SESS-005 revision).
 
 ### FR-CONN-006 · Connection failure reporting
 If a connection cannot be established within the connect timeout, then the system shall abort it and report one of: name resolution failed, connection refused, timed out, host key rejected, or authentication failed.
@@ -412,12 +458,15 @@ While a session is active, the system shall send a keepalive request at the effe
 - **Acceptance:**
   - The default interval is 30 s. `0` disables keepalives.
 
-### FR-CONN-010 · Reconnect after a drop
-When a session ends because the connection was lost, not because the remote shell exited, the system shall offer to reconnect to the same host with a single key.
+### FR-CONN-010 · Reconnect from an ended tab
+While a tab shows an ended session, when the user presses `r`, the system shall connect to the same host again and run the new session in the same tab.
 
-- **Priority:** v1 · **Status:** Draft · **Source:** Tabby, Termius
+- **Priority:** M2 · **Status:** Draft · **Source:** Tabby, Termius, D-010 (was v1 "Reconnect after a drop")
 - **Acceptance:**
-  - After a drop, the status bar shows "connection lost: press r to reconnect". After a normal `exit`, no reconnect is offered.
+  - `r` is offered after a drop and after a normal `exit` alike (FR-CONN-005 revision). The host is connected exactly as from the host list, with the same modals, shown over the ended tab.
+  - The new session keeps the tab's number and position; the old screen and scrollback are discarded once the new session is established.
+  - If the reconnect fails or is cancelled, the tab keeps the ended session and its status bar shows the failure (FR-CONN-006 messages), still offering `r` and `x`.
+  - sshelf never reconnects on its own (design §8.7).
 
 ### FR-CONN-011 · Agent forwarding
 Where agent forwarding is enabled for a host, the system shall forward the local ssh-agent to that host.
@@ -440,12 +489,14 @@ When the user enters `[user@]host[:port]` in the quick-connect prompt, the syste
 - **Acceptance:**
   - `root@10.0.0.5:2222` connects as `root` on port 2222 and creates no host until the user accepts the save offer.
 
-### FR-CONN-014 · Disconnect escape
-While an interactive session is active, when the user types `~.` at the start of a line, the system shall close the session.
+### FR-CONN-014 · Disconnect with the prefix key
+While a session tab is focused, when the user presses the prefix key followed by `q` and confirms, the system shall close that session and its tab.
 
-- **Priority:** v1 · **Status:** Draft · **Source:** OpenSSH escape characters
+- **Priority:** M2 · **Status:** Draft · **Source:** D-009 (replaces the v1 `~.` escape; one way to do it, D-007)
 - **Acceptance:**
-  - `~~` sends a literal `~`.
+  - `Ctrl+]` `q` opens "Disconnect web-prod?" defaulting to No. `y` closes the SSH connection and the tab and focuses the tab to its left; `n`, Enter and Esc keep the session.
+  - sshtest records the channel close within 1 s.
+  - Typing `~.` at the start of a line is sent to the remote like any other text.
 
 ### FR-CONN-015 · Connection hooks
 Where a host defines an on-connect or on-disconnect local command, the system shall run it when the session starts or ends, with the host label in the environment variable `SSHELF_HOST`.
@@ -622,12 +673,16 @@ When the user presses Space on a host, the system shall toggle its selection and
 - **Acceptance:**
   - The selection drives multi-host snippet runs (FR-SNIP-004). Esc clears it.
 
-### FR-NAV-012 · Mouse support
-Where mouse support is enabled, the system shall select a host on click, connect on double-click and scroll the list with the wheel.
+### FR-NAV-012 · Mouse on the host list
+While the host list is shown, the system shall select a host on a left click, connect to it on a double-click, move the selection with the wheel, and focus the search field on a click in it.
 
-- **Priority:** Later · **Status:** Draft
+- **Priority:** M2 · **Status:** Draft · **Source:** D-011 (was `Later` behind a setting; M2 has no setting)
 - **Acceptance:**
-  - With mouse support off (the default), clicks are ignored.
+  - A click on a host row selects it; a click on a blank row below the last host does nothing.
+  - A double-click is two left presses on the same row within 400 ms (ARCH-UI-007) and connects exactly like Enter. Two presses on different rows, or more than 400 ms apart, only select.
+  - Each wheel notch moves the selection 3 rows, clamped to the first and last host, scrolling the list as needed.
+  - A click on the search field focuses it as `/` does. A click on a host row while search is focused moves focus back to the list and selects that host, keeping the query.
+  - Tests send synthetic `tea.MouseClickMsg` and `tea.MouseWheelMsg` through the root model, with coordinates that include the header row.
 
 ### FR-NAV-013 · Welcome screen
 While `config.json` contains no hosts, the system shall show a Welcome screen offering "Import from ~/.ssh/config" and "Add host" instead of the host list.
@@ -637,6 +692,42 @@ While `config.json` contains no hosts, the system shall show a Welcome screen of
   - The first launch with no config directory shows the Welcome screen.
   - `I` starts the import (FR-IMPORT-001) and `a` opens the host form. `q` quits.
   - After the first host is saved or imported, the host list is shown. Deleting the last host shows the Welcome screen again.
+
+### FR-NAV-014 · Mouse on the Welcome screen
+When the user clicks one of the Welcome screen's choices, the system shall act as if that choice's key had been pressed.
+
+- **Priority:** M2 · **Status:** Draft · **Source:** D-011
+- **Acceptance:**
+  - A click anywhere on the `[I] Import from ~/.ssh/config` line starts the import; a click on the `[a] Add host` line opens the host form. Clicks elsewhere do nothing.
+
+### FR-NAV-015 · Buttons and mouse in forms
+The system shall show `[ Save ]` and `[ Cancel ]` buttons after every form's fields, and, when the user clicks a field, a choice arrow or a button, shall focus that field, change that choice, or act as `ctrl+s` or `esc`.
+
+- **Priority:** M2 · **Status:** Draft · **Source:** D-011
+- **Acceptance:**
+  - The host form and the identity form show both buttons on one row after the last field, at 80×24 and 120×40 (goldens).
+  - The buttons follow the last field in the Tab order; Enter or Space on a focused button presses it, so the buttons are keyboard-reachable too (NFR-UX-001).
+  - A click on a field's label or value focuses that field, with the text cursor at the end of its value.
+  - A click on `‹` or `›` of a choice field selects the previous or next option; a click elsewhere on it only focuses it.
+  - A click on `[ Save ]` validates and saves exactly like `ctrl+s`, with errors next to the fields; a click on `[ Cancel ]` behaves exactly like `esc`, including the unsaved-changes confirmation.
+  - A read-only field (no credential store, FR-CRED-002) can be focused by a click but not changed.
+
+### FR-NAV-016 · Mouse in modals
+When the user clicks a button shown in the top modal, the system shall act as if that button's key had been pressed.
+
+- **Priority:** M2 · **Status:** Draft · **Source:** D-011
+- **Acceptance:**
+  - Every modal shows its actions as bracketed buttons, for example `[y] Trust and save` and `[enter/esc] Cancel` in the TOFU modal and `[y] Yes` and `[n] No` in confirmations, and each is clickable. The prompt modal's fields are clickable as in FR-NAV-015.
+  - A click outside the top modal does nothing: it neither closes the modal nor reaches the screen below.
+  - In the TOFU modal, only `y` or a click on `[y] Trust and save` trusts a key (SEC-HOSTKEY-004).
+
+### FR-NAV-017 · Mouse on the tab bar
+While the Hosts tab is focused and no modal is open, when the user clicks a tab in the tab bar, the system shall focus that tab.
+
+- **Priority:** M2 · **Status:** Draft · **Source:** D-011, D-012
+- **Acceptance:**
+  - A click on `2 web-prod` focuses that session tab; a click on `sshelf` or a separator does nothing.
+  - While a session tab is focused, tabs are switched with the keyboard (FR-TAB-005, D-012): header clicks are either not reported (mouse tracking off) or ignored (FR-TAB-011).
 
 ---
 
@@ -899,16 +990,127 @@ When the user opens the file browser for a host, the system shall show a two-pan
 
 ## 18. Multiple sessions (`FR-TAB`)
 
-sshelf has no tabs or split panes (see `research.md` §5). Without a
-non-interactive CLI (D-001), there is also no simple way to open hosts in new
-tmux windows (D-107).
+From M2, every session runs in its own tab inside sshelf's frame (D-009,
+D-010). The frame is one header line holding the tab bar, the session area,
+and one status line. The **Hosts tab** is always the first tab and holds every
+sshelf screen (host list, Welcome, forms, identities, import). Session tabs
+are numbered from 1 in the order they were opened. The **prefix key**,
+`Ctrl+]`, followed by one more key, drives the tabs; every other key goes to
+the focused session. There are no split panes, no detaching to the shell and
+no sessions that survive an sshelf restart (D-007).
 
-### FR-TAB-001 · In-app session switcher
-While several sessions are open in the same sshelf process, the system shall let the user switch between them with a key binding and keep each session's screen state.
+The header looks like this (tab 2 focused, tab 1 has new output):
 
-- **Priority:** Later · **Status:** Draft · **Rationale:** needs an embedded terminal emulator. Re-evaluate after v1.
+```
+sshelf │ Hosts │ 1 raspberrypi4 ● │[2 web-prod]│
+```
+
+### FR-TAB-001 · Switch between tabs
+While several tabs are open, when the user presses the prefix key followed by a tab number, `n`, `p`, `h` or `0`, the system shall focus that session tab, the next tab, the previous tab or the Hosts tab, and show the focused session's current screen.
+
+- **Priority:** M2 · **Status:** Draft · **Source:** D-010 (was `Later` "In-app session switcher")
 - **Acceptance:**
-  - With 2 sessions open, switching away and back shows the same screen content in each.
+  - With 2 sessions open, switching away and back shows the same screen content in each, plus any output that arrived while the tab was in the background.
+  - `Ctrl+]` `1` to `9` focus session tabs 1 to 9 by number; a number with no tab does nothing. `Ctrl+]` `h` and `Ctrl+]` `0` focus the Hosts tab while the sessions keep running.
+  - `Ctrl+]` `n` and `Ctrl+]` `p` cycle through all tabs, the Hosts tab included, wrapping at both ends.
+  - With 10 sessions open, the first frame of the newly focused tab is rendered within 50 ms (NFR-PERF-006).
+
+### FR-TAB-002 · Open a session in a new tab
+When a connection started from the host list succeeds, the system shall open a new session tab after the last tab, give it the next unused number, and focus it.
+
+- **Priority:** M2 · **Status:** Draft · **Source:** D-010
+- **Acceptance:**
+  - Dialling, host-key checks, prompts and authentication still happen over the Hosts tab (Connecting, TOFU and prompt modals); the tab opens only when the session is established (ARCH-SESS-002 revision). A failed or cancelled connection opens no tab.
+  - Connecting to `web-prod` twice opens two tabs, `1 web-prod` and `2 web-prod`, each with its own SSH connection.
+  - Numbers are not reused while sshelf runs: after closing tab 1 of tabs 1 to 3, the next session gets number 4. `Ctrl+]` `1`–`9` address these numbers.
+  - The host list stays fully usable while sessions run: the user can add, edit, delete or connect to hosts.
+
+### FR-TAB-003 · Tab bar
+The system shall show a one-line header that starts with `sshelf`, then the `Hosts` tab, then one entry `<number> <host label>` per session tab, separated by `│`, with the focused tab highlighted.
+
+- **Priority:** M2 · **Status:** Draft · **Source:** D-009, D-010
+- **Acceptance:**
+  - The focused tab is shown in reverse video, and its padding spaces are replaced by `[` and `]` (`│[2 web-prod]│`), so focus is not shown by colour alone (NFR-UX-003).
+  - Labels are sanitised (SEC-SESSION-003) and cut to 20 columns with `…`. A tab shows the host label only; a window title set by the remote (OSC 0 or 2) is never shown (SEC-SESSION-005).
+  - If the tabs do not fit, the bar keeps the focused tab visible and replaces the hidden tabs with `‹+N` on the left and `+N›` on the right. At 80 columns, 10 tabs with 12-character labels fit on one line (golden).
+  - The header is shown on every screen, the Hosts tab and the Welcome screen included, and replaces the MVP's `sshelf` title line.
+
+### FR-TAB-004 · Activity and end markers
+While a session tab is not focused, when its session receives output, the system shall mark that tab with `●` until it is focused; and when a session ends, the system shall mark its tab with `✕` until it is reconnected or closed.
+
+- **Priority:** M2 · **Status:** Draft · **Source:** D-010
+- **Acceptance:**
+  - Output in a background tab shows `1 raspberrypi4 ●`; focusing the tab removes the marker. Output in the focused tab never sets it.
+  - An ended session shows `✕` instead of `●`, focused or not.
+  - Replies the emulator itself sends to the remote (ARCH-SESS-016) do not set the marker; only bytes received from the remote do.
+
+### FR-TAB-005 · Prefix key
+While any tab is focused and no modal is open, when the user presses `Ctrl+]`, the system shall treat the next key as a tab command (`q` disconnect, `?` help, `h` or `0` Hosts tab, `1`–`9` tab, `n` next tab, `p` previous tab, `[` scrollback mode, `Ctrl+]` send a literal `Ctrl+]`) and shall send neither key to the remote.
+
+- **Priority:** M2 · **Status:** Draft · **Source:** D-009, D-010 (the preview approved by the product owner)
+- **Acceptance:**
+  - Each command has a unit test on the prefix state machine and a test through the root model.
+  - `Ctrl+]` `Ctrl+]` sends exactly one byte, `0x1d`, to the remote.
+  - After `Ctrl+]`, the status bar shows `Ctrl+] …` until the next key. Esc, or any key that is not a command, cancels the prefix and is not sent to the remote. There is no timeout.
+  - `Ctrl+]` `?` opens a help overlay listing every prefix command, generated from `ui/keys` (ARCH-UI-004); `?` or Esc closes it.
+  - On the Hosts tab the prefix key works on every screen, including while a text field is focused; `q` and `[` do nothing there.
+
+### FR-TAB-006 · Keys and paste go to the focused session
+While a live session tab is focused and neither the prefix key, an overlay nor scrollback mode is active, the system shall send every key press and paste to that session's remote, encoded according to the emulator's current modes.
+
+- **Priority:** M2 · **Status:** Draft · **Source:** D-009
+- **Acceptance:**
+  - Arrow keys send `ESC [ A` in normal cursor mode and `ESC O A` after the remote enables application cursor keys (`ESC [ ? 1 h`).
+  - Ctrl+C sends `0x03`, Ctrl+Z `0x1a`, Esc `0x1b`, Alt+x `ESC x`, Ctrl+Left `ESC [ 1 ; 5 D`, Shift+Up `ESC [ 1 ; 2 A` and F5 `ESC [ 1 5 ~`. Every row of the key table in design §9.4 has a test.
+  - A paste is sent as `ESC [ 200 ~` … `ESC [ 201 ~` while the remote has bracketed paste on (`ESC [ ? 2004 h`), and as plain text otherwise. Pasted text reaches the remote unchanged.
+  - `q`, `Ctrl+C`, `?`, `/` and every other sshelf binding reach the remote unchanged and do nothing in sshelf.
+
+### FR-TAB-007 · Session status bar
+While a session tab is focused, the system shall show a one-line status bar with the session state, `user@host:port`, the connected duration and the main prefix-key hints.
+
+- **Priority:** M2 · **Status:** Draft · **Source:** D-009
+- **Acceptance:**
+  - A live session shows `● connected · ubuntu@10.0.0.10:22 · 01:02:03 · Ctrl+] ? help · Ctrl+] h hosts`. The duration updates once a second. When the line does not fit, the hints are dropped first, then the duration.
+  - An ended session shows its reason instead (FR-CONN-005 revision); scrollback mode shows its own hints (FR-TAB-010).
+  - The status bar and tab bar never show a secret; the canary harness checks both (SEC-LOG-001, T-042).
+
+### FR-TAB-008 · Background sessions keep running
+While a session tab is not focused, the system shall keep reading that session's output into its emulator and keep its connection open.
+
+- **Priority:** M2 · **Status:** Draft · **Source:** D-010
+- **Acceptance:**
+  - A remote command that prints 10,000 lines while its tab is in the background completes (sshtest records its exit), and focusing the tab shows the end of the output.
+  - The remote is slowed down only when the emulator cannot keep up, never because its tab is in the background (ARCH-SESS-014).
+
+### FR-TAB-009 · Quit with open sessions
+When the user quits sshelf (`q` on the host list or the Welcome screen, or Ctrl+C on the Hosts tab) while at least one session is live, the system shall ask "Quit and close N sessions?" and quit only on `y`.
+
+- **Priority:** M2 · **Status:** Draft · **Source:** D-010
+- **Acceptance:**
+  - The confirmation defaults to No: `n`, Enter and Esc keep sshelf running with every session intact.
+  - Ended tabs do not count. With no live session, `q` quits at once as in the MVP.
+  - SIGTERM and SIGHUP close every session without asking, restore the terminal and exit 0.
+
+### FR-TAB-010 · Scrollback mode
+While a session tab is focused, when the user presses the prefix key followed by `[`, the system shall show the session's scrollback and screen as one view that PgUp, PgDn, the arrow keys, `g` and `G` move, until the user presses Esc.
+
+- **Priority:** M2 · **Status:** Draft · **Source:** D-010, tmux copy mode
+- **Acceptance:**
+  - The scrollback keeps the last 2,000 lines that scrolled off the main screen (NFR-SIZE-003). The alternate screen used by `vim` or `htop` adds nothing to it.
+  - The status bar shows `scrollback 120/2000 · ↑↓ PgUp PgDn g G · esc back`. Keys are not sent to the remote; output keeps arriving, and the view stays on the same lines until the user moves it or those lines leave the scrollback.
+  - Mouse tracking is off in scrollback mode, so the terminal's own selection can copy what is shown (D-012).
+  - Esc returns to the live screen, with the remote's cursor shown again.
+
+### FR-TAB-011 · Mouse in a session only on request
+While a session tab is focused, the system shall enable mouse tracking only while that session's remote app has mouse reporting on, and shall then forward each mouse event inside the session area to the remote, with coordinates relative to the session area and encoded as the app requested.
+
+- **Priority:** M2 · **Status:** Draft · **Source:** D-012
+- **Acceptance:**
+  - Until the remote enables mouse reporting, sshelf writes no mouse-tracking sequence while the session is focused, so the terminal's own selection works (PTY output scan, NFR-UX-001 revision).
+  - After the remote sends `ESC [ ? 1000 h ESC [ ? 1006 h`, a left press at terminal cell x=10, y=5 (zero-based, header on row 0) reaches the remote as `ESC [ < 0 ; 11 ; 5 M`. After `ESC [ ? 1000 l`, tracking is off again in the next frame.
+  - Motion events are forwarded only when the app asked for them (`?1002` or `?1003`).
+  - Events on the header or status bar are neither forwarded nor acted on.
+  - Focusing the Hosts tab, or a session that has not requested mouse reporting, applies that tab's rule in the next frame (ARCH-UI-006).
 
 ---
 
@@ -1031,9 +1233,23 @@ When `sshelf` is run with `--config <dir>`, the system shall use `<dir>` as its 
 
 ## 22. Open questions for the product owner
 
-None. The earlier questions are answered by D-001 to D-008 and D-101 to
-D-109: encryption of host data, locking, label completion, a system-ssh
-backend, ssh-agent priority, stored keys, the label grammar, a `--host` launch
-flag for tmux users (D-107: not for now, revisit `Later`) and secrets on a
-second machine (D-108: re-enter them; shown as "not set on this device").
+The MVP questions are answered by D-001 to D-008 and D-101 to D-109:
+encryption of host data, locking, label completion, a system-ssh backend,
+ssh-agent priority, stored keys, the label grammar, a `--host` launch flag for
+tmux users (D-107: not for now, revisit `Later`) and secrets on a second
+machine (D-108: re-enter them; shown as "not set on this device").
+
+Open for M2. The spec uses the default shown until the product owner rules:
+
+1. **Scrollback size.** 10,000 lines per session costs about 65 MB at 80×24
+   and 130 MB at 200×50 with the chosen emulator (measured, ADR-013), so 10
+   sessions could need more than 1 GB. Default: **2,000 lines**, about 30 MB
+   per session at 120×40 (NFR-SIZE-003). A setting for it is v1 (FR-CFG-009).
+2. **Wide characters at the right margin.** The emulator drops a
+   double-width character (CJK, emoji) that lands on the last one or two
+   columns of a line (ADR-013). Default: fix it upstream during T-031; if no
+   fixed release exists at the M2 gate, ship M2 with it as a known issue
+   rather than fork the library (D-007).
+3. **Remote window titles.** Default: tabs show the host label only, and a
+   title set by the remote is ignored (FR-TAB-003, SEC-SESSION-005).
 

@@ -24,7 +24,7 @@ implemented, and code changes reference the requirement IDs they satisfy.
 | `architecture/design.md` | Package layout, data model, UI state machine, SSH session flow (`ARCH-*`) |
 | `nfr.md` | Non-functional requirements (`NFR-*`): performance, portability, UX, quality |
 | `tasks.md` | Milestones and implementation tasks (`T-*`), traceability matrix, manual-only requirements |
-| `acceptance.md` | Manual MVP acceptance checklist (macOS and Linux) |
+| `acceptance.md` | Manual acceptance checklists (MVP, M2) for macOS and Linux |
 | `glossary.md` | Shared terms |
 | `decisions.md` | Binding product-owner decisions (`D-*`); wins any conflict |
 
@@ -44,12 +44,29 @@ marks it `Deprecated`; a `Draft` requirement is simply deleted.
 
 **Each requirement has:**
 
-- **Priority** – `MVP` (needed for first usable release), `v1` (first public
-  release), `Later` (backlog).
+- **Priority** – `MVP` (needed for first usable release), `M2` (milestone M2:
+  framed sessions, tabs and mouse, D-009 to D-012), `v1` (first public
+  release), `Later` (backlog). In order: `MVP` → `M2` → `v1` → `Later`.
 - **Acceptance criteria** – concrete, verifiable checks (Given/When/Then or bullets).
 - **Rationale / source** – optional; e.g. "Termius parity", "threat T-3".
 
 **Status values:** `Draft` → `Approved` → `Implemented` → `Verified`.
+
+**Revisions of implemented requirements.** When a later milestone changes the
+behaviour of a requirement that is already `Implemented`, the requirement keeps
+its ID, priority line and status, and gets a revision block right after its
+acceptance criteria:
+
+> - **M2 revision** · Priority: M2 · Status: Draft · Source: D-009
+>   - *Revised:* the new EARS sentence.
+>   - *Acceptance:* the new criteria, which replace the old ones.
+
+The original text stays authoritative for the shipped code until the
+milestone's tasks implement the revision; they set the revision's status to
+`Implemented`. The milestone's acceptance gate then folds each revision into
+the requirement (new sentence, new criteria, `Priority: M2`) and removes the
+block. This keeps `scripts/tracecheck` green on `main` while the spec runs
+ahead of the code.
 
 ## Scope boundaries
 
