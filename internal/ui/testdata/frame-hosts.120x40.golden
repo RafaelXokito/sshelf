@@ -1,0 +1,40 @@
+sshelf │[Hosts]│
+
+> db-staging           admin@10.0.1.20:2222
+  web-prod             ubuntu@10.0.0.10
+  zeta                 10.0.0.30
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+enter connect • / search • a add • e edit • d delete • I import • q quit

@@ -1,4 +1,4 @@
-sshelf
+sshelf │[Hosts]│
 
 Edit host web-prod
 
@@ -12,11 +12,11 @@ Edit host web-prod
   Stored key  (not set)
   Passphrase  (not set)
 
+              [ Save ]   [ Cancel ]
+
 ╭──────────────────────────╮
 │ Discard unsaved changes? │
 ╰──────────────────────────╯
-
-
 
 
 

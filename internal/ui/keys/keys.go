@@ -78,6 +78,9 @@ var (
 	Save       = key.NewBinding(key.WithKeys("ctrl+s"), key.WithHelp("ctrl+s", "save"))
 	ChoicePrev = key.NewBinding(key.WithKeys("left"), key.WithHelp("←", "previous choice"))
 	ChoiceNext = key.NewBinding(key.WithKeys("right", "space"), key.WithHelp("→", "next choice"))
+	// PressButton presses the focused [ Save ] or [ Cancel ] button of a
+	// form (FR-NAV-015).
+	PressButton = key.NewBinding(key.WithKeys("enter", "space"), key.WithHelp("enter/space", "press button"))
 )
 
 // Confirm modal: only y confirms; the default answer is No.
@@ -106,6 +109,7 @@ func Maps() []Map {
 		{Name: "form", Bindings: []key.Binding{NextField, PrevField, Save, Cancel, ForceQuit}},
 		{Name: "form text field", Bindings: textInput},
 		{Name: "form choice field", Bindings: []key.Binding{ChoicePrev, ChoiceNext}},
+		{Name: "form button", Bindings: []key.Binding{PressButton}},
 		{Name: "import report", Bindings: []key.Binding{Back, Up, Down, ForceQuit}},
 		{Name: "load error", Bindings: []key.Binding{Quit, ForceQuit}},
 		{Name: "confirm", Bindings: []key.Binding{ConfirmYes, ConfirmNo, ForceQuit}},
@@ -116,5 +120,9 @@ func Maps() []Map {
 		{Name: "identities", Bindings: []key.Binding{Up, Down, AddIdentity, EditIdentity, DeleteIdentity, BackToHosts, ForceQuit}},
 		{Name: "form secret field", Bindings: append([]key.Binding{ClearSecret}, textInput...)},
 		{Name: "form key file field", Bindings: append([]key.Binding{StoreKeyFile}, textInput...)},
+		{Name: "prefix", Bindings: PrefixCommands()},
+		{Name: "prefix help", Bindings: []key.Binding{CloseHelp, ForceQuit}},
+		{Name: "ended session", Bindings: []key.Binding{Reconnect, CloseTab, Prefix}},
+		{Name: "scrollback", Bindings: []key.Binding{ScrollUp, ScrollDown, ScrollPageUp, ScrollPageDown, ScrollTop, ScrollBottom, ScrollExit, Prefix}},
 	}
 }

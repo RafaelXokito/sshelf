@@ -1,4 +1,4 @@
-sshelf
+sshelf │[Hosts]│
 
 Edit host db-staging
 
@@ -12,7 +12,7 @@ Edit host db-staging
   Stored key  (not set)
   Passphrase  (not set)
 
-
+              [ Save ]   [ Cancel ]
 
 
 

@@ -1,4 +1,4 @@
-sshelf
+sshelf │[Hosts]│
 
 Edit identity ops
 
@@ -9,7 +9,7 @@ Edit identity ops
   Stored key  (not set)
   Passphrase  (not set)
 
-
+              [ Save ]   [ Cancel ]
 
 
 

@@ -131,6 +131,7 @@ type emulator interface {
 	snapshot() Snapshot
 	scrollback(top, rows int) ([]string, int)
 	scrollbackLen() int
+	droppedLines() int
 	sendKey(k uv.KeyPressEvent)
 	sendMouse(m uv.MouseEvent)
 	paste(text string)
@@ -486,6 +487,13 @@ func (s *Session) Scrollback(top, rows int) (lines []string, total int) {
 // ScrollbackLen returns the number of lines in the scrollback buffer, at
 // most Options.Scrollback.
 func (s *Session) ScrollbackLen() int { return s.scr.scrollbackLen() }
+
+// Dropped returns how many lines have left the front of the history
+// (the scrollback cap, or a remote clearing the scrollback) since the
+// session started. Line top of Scrollback is line top+Dropped() counted
+// from the session's start, so a scrollback view that stores that number
+// keeps its place while old lines are dropped.
+func (s *Session) Dropped() int { return s.scr.droppedLines() }
 
 // Updates delivers a notification after output was processed; several
 // chunks coalesce into one. It is closed after the session ended

@@ -33,10 +33,13 @@ var (
 	searchStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("212"))
 )
 
-// ConnectRequestMsg asks the root model to connect to a host.
+// ConnectRequestMsg asks the root model to connect to a host. Tab is the
+// number of the ended session tab to reconnect in, or 0 for a new tab
+// (FR-CONN-010).
 type ConnectRequestMsg struct {
 	HostID domain.ID
 	Label  string
+	Tab    int
 }
 
 // AddHostMsg asks the root model to open the host form for a new host.

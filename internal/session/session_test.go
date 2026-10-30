@@ -465,6 +465,12 @@ func TestARCH_SESS_014_InputFull(t *testing.T) {
 	if p := s.inputPeak(); p > InputLimit || p < InputLimit-len(chunk) {
 		t.Fatalf("queue peaked at %d bytes, want just under %d", p, InputLimit)
 	}
+	// Top it up in small pieces, so less room is left than a key needs.
+	for range InputLimit {
+		if err := s.SendBytes([]byte("z")); err != nil {
+			break
+		}
+	}
 	if err := s.SendKey(uv.KeyPressEvent{Code: uv.KeyEnter}); !errors.Is(err, ErrInputFull) {
 		t.Fatalf("SendKey on a full queue = %v", err)
 	}

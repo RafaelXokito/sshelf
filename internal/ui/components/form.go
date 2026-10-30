@@ -66,11 +66,71 @@ type formRow struct {
 	err   string
 }
 
-// Form lays out labelled fields one per row, moves focus with tab and
-// shift+tab (wrapping), and reports ctrl+s and esc as FormSubmit and
-// FormCancel; every other key and paste goes to the focused field. Each
-// row can show an error next to its field (FR-HOST-003). The form does not
-// validate or save: the screen that owns it does.
+// Button names one of the buttons every Form shows after its fields
+// (FR-NAV-015).
+type Button int
+
+const (
+	// ButtonNone means no button: a field has focus, or a point is not on
+	// a button.
+	ButtonNone Button = iota
+	// ButtonSave is "[ Save ]"; pressing it is FormSubmit, like ctrl+s.
+	ButtonSave
+	// ButtonCancel is "[ Cancel ]"; pressing it is FormCancel, like esc.
+	ButtonCancel
+)
+
+// Button labels, as rendered.
+const (
+	SaveButton   = "[ Save ]"
+	CancelButton = "[ Cancel ]"
+)
+
+// FocusGlyph marks the focused field or button, so focus does not rely on
+// colour alone (NFR-UX-003).
+const FocusGlyph = "> "
+
+// numButtons is the number of buttons after the fields; in the focus
+// order they follow the last field, Save first.
+const numButtons = 2
+
+// Rect is a rectangle of cells in a Form's View: X and Y are the column
+// and line of its top-left cell, counted from 0 at the top-left of the
+// View; W and H are its width and height in cells.
+type Rect struct{ X, Y, W, H int }
+
+// Contains reports whether the cell at column x, line y is inside r.
+func (r Rect) Contains(x, y int) bool {
+	return x >= r.X && x < r.X+r.W && y >= r.Y && y < r.Y+r.H
+}
+
+// FieldLayout is where one field's row sits in a Form's View.
+type FieldLayout struct {
+	// Label covers the focus marker and the padded label.
+	Label Rect
+	// Value covers the field's view, at least FieldWidth columns wide;
+	// the error after it is not included.
+	Value Rect
+}
+
+// FormLayout is where a Form's View puts its fields and buttons, for
+// mouse hit-testing (FR-NAV-015). It matches the View rendered in the
+// same state.
+type FormLayout struct {
+	Fields []FieldLayout // in the order the fields were added
+	Save   Rect          // "[ Save ]", without its focus marker
+	Cancel Rect          // "[ Cancel ]", without its focus marker
+	Height int           // lines in the View
+}
+
+// Form lays out labelled fields one per row, followed by a row with the
+// [ Save ] and [ Cancel ] buttons (FR-NAV-015). Tab and shift+tab move
+// focus through the fields and then the buttons, wrapping; enter or space
+// on a focused button reports FormSubmit or FormCancel, the same as ctrl+s
+// and esc, which work anywhere. Every other key and paste goes to the
+// focused field, and does nothing on a button. Each row can show an error
+// next to its field (FR-HOST-003). The form does not validate or save: the
+// screen that owns it does.
 //
 // Use it by pointer, built with NewForm and Add:
 //
@@ -85,7 +145,7 @@ type Form struct {
 	FieldWidth int
 
 	rows  []formRow
-	focus int
+	focus int // a field index; len(rows) is Save, len(rows)+1 Cancel
 	clean []string
 }
 
@@ -107,17 +167,73 @@ func (f *Form) Add(label string, field FormField) *Form {
 // Len returns the number of fields.
 func (f *Form) Len() int { return len(f.rows) }
 
-// Focused returns the index of the focused field.
-func (f *Form) Focused() int { return f.focus }
+// Focused returns the index of the focused field, or -1 when a button has
+// focus.
+func (f *Form) Focused() int {
+	if f.focus >= len(f.rows) {
+		return -1
+	}
+	return f.focus
+}
+
+// FocusedButton returns the focused button, or ButtonNone when a field
+// has focus.
+func (f *Form) FocusedButton() Button {
+	if len(f.rows) == 0 {
+		return ButtonNone
+	}
+	switch f.focus - len(f.rows) {
+	case 0:
+		return ButtonSave
+	case 1:
+		return ButtonCancel
+	}
+	return ButtonNone
+}
 
 // SetFocus focuses field i (ignored when out of range).
 func (f *Form) SetFocus(i int) {
 	if i < 0 || i >= len(f.rows) {
 		return
 	}
-	f.rows[f.focus].field.Blur()
+	f.moveFocus(i)
+}
+
+// FocusButton focuses button b (ignored for ButtonNone or an empty form).
+func (f *Form) FocusButton(b Button) {
+	if len(f.rows) == 0 {
+		return
+	}
+	switch b {
+	case ButtonSave:
+		f.moveFocus(len(f.rows))
+	case ButtonCancel:
+		f.moveFocus(len(f.rows) + 1)
+	}
+}
+
+// Press returns the event of pressing button b: FormSubmit for Save,
+// FormCancel for Cancel, FormNone otherwise. Focus does not move.
+func (f *Form) Press(b Button) FormEvent {
+	switch b {
+	case ButtonSave:
+		return FormSubmit
+	case ButtonCancel:
+		return FormCancel
+	}
+	return FormNone
+}
+
+// moveFocus moves focus to position i of the focus order: the fields,
+// then Save and Cancel.
+func (f *Form) moveFocus(i int) {
+	if f.focus < len(f.rows) {
+		f.rows[f.focus].field.Blur()
+	}
 	f.focus = i
-	f.rows[i].field.Focus()
+	if i < len(f.rows) {
+		f.rows[i].field.Focus()
+	}
 }
 
 // SetError shows msg next to field i; "" clears it.
@@ -177,37 +293,85 @@ func (f *Form) Update(msg tea.Msg) (FormEvent, tea.Cmd) {
 	if len(f.rows) == 0 {
 		return FormNone, nil
 	}
-	if k, ok := msg.(tea.KeyPressMsg); ok {
+	n := len(f.rows) + numButtons
+	k, isKey := msg.(tea.KeyPressMsg)
+	if isKey {
 		switch {
 		case key.Matches(k, keys.Save):
 			return FormSubmit, nil
 		case key.Matches(k, keys.Cancel):
 			return FormCancel, nil
 		case key.Matches(k, keys.NextField):
-			f.SetFocus((f.focus + 1) % len(f.rows))
+			f.moveFocus((f.focus + 1) % n)
 			return FormNone, nil
 		case key.Matches(k, keys.PrevField):
-			f.SetFocus((f.focus - 1 + len(f.rows)) % len(f.rows))
+			f.moveFocus((f.focus - 1 + n) % n)
 			return FormNone, nil
 		}
 	}
-	return FormNone, f.rows[f.focus].field.Update(msg)
+	b := f.FocusedButton()
+	if b == ButtonNone {
+		return FormNone, f.rows[f.focus].field.Update(msg)
+	}
+	if isKey && key.Matches(k, keys.PressButton) {
+		return f.Press(b), nil
+	}
+	return FormNone, nil
 }
 
 // View renders one row per field: a focus marker, the label padded to
-// the widest label, the field, and its error if any.
+// the widest label, the field, and its error if any. A blank line and the
+// button row follow, with the buttons starting in the field column.
 func (f *Form) View() string {
+	v, _ := f.render()
+	return v
+}
+
+// Layout returns where View puts each field and button in the form's
+// current state.
+func (f *Form) Layout() FormLayout {
+	_, l := f.render()
+	return l
+}
+
+// HitTest returns what is at column x, line y of View: a field index (or
+// -1) and a button (or ButtonNone); at most one is set. A point on a
+// field's error, a focus marker of a button or a blank cell hits nothing.
+func (f *Form) HitTest(x, y int) (field int, button Button) {
+	l := f.Layout()
+	for i, fl := range l.Fields {
+		if fl.Label.Contains(x, y) || fl.Value.Contains(x, y) {
+			return i, ButtonNone
+		}
+	}
+	switch {
+	case l.Save.Contains(x, y):
+		return -1, ButtonSave
+	case l.Cancel.Contains(x, y):
+		return -1, ButtonCancel
+	}
+	return -1, ButtonNone
+}
+
+// render builds the View and its layout together, so that they agree.
+func (f *Form) render() (string, FormLayout) {
 	lw := 0
 	for _, r := range f.rows {
 		lw = max(lw, lipgloss.Width(r.label))
 	}
+	marker := len(FocusGlyph)
+	blank := strings.Repeat(" ", marker)
+	labelW := marker + lw
+	valueX := labelW + 2
+	l := FormLayout{Fields: make([]FieldLayout, 0, len(f.rows))}
 	var b strings.Builder
+	y := 0
 	for i, r := range f.rows {
 		label := pad(r.label, lw)
 		if i == f.focus {
-			b.WriteString(formFocusStyle.Render("> " + label))
+			b.WriteString(formFocusStyle.Render(FocusGlyph + label))
 		} else {
-			b.WriteString("  " + formLabelStyle.Render(label))
+			b.WriteString(blank + formLabelStyle.Render(label))
 		}
 		b.WriteString("  ")
 		v := r.field.View()
@@ -218,8 +382,40 @@ func (f *Form) View() string {
 			b.WriteString(v)
 		}
 		b.WriteString("\n")
+		h := strings.Count(v, "\n") + 1
+		l.Fields = append(l.Fields, FieldLayout{
+			Label: Rect{X: 0, Y: y, W: labelW, H: h},
+			Value: Rect{X: valueX, Y: y, W: max(f.FieldWidth, lipgloss.Width(v)), H: h},
+		})
+		y += h
 	}
-	return b.String()
+
+	b.WriteString("\n")
+	y++
+	b.WriteString(strings.Repeat(" ", valueX-marker))
+	x := valueX
+	focused := f.FocusedButton()
+	for i, btn := range []struct {
+		which Button
+		text  string
+		rect  *Rect
+	}{{ButtonSave, SaveButton, &l.Save}, {ButtonCancel, CancelButton, &l.Cancel}} {
+		if i > 0 {
+			b.WriteString(" ")
+			x += 1 + marker
+		}
+		if btn.which == focused {
+			b.WriteString(formFocusStyle.Render(FocusGlyph + btn.text))
+		} else {
+			b.WriteString(blank + btn.text)
+		}
+		w := lipgloss.Width(btn.text)
+		*btn.rect = Rect{X: x, Y: y, W: w, H: 1}
+		x += w
+	}
+	b.WriteString("\n")
+	l.Height = y + 1
+	return b.String(), l
 }
 
 // pad right-pads s with spaces to w columns.

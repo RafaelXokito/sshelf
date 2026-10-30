@@ -304,4 +304,13 @@ func TestNFR_SIZE_003_ScrollbackCapped(t *testing.T) {
 	if total != DefaultScrollback+5 || plainLine(lines[0]) != "line 96" {
 		t.Fatalf("oldest line %q of %d", lines, total)
 	}
+	// Lines 0 to 95 were dropped: line top of the view is line top+96.
+	if n := s.droppedLines(); n != 96 {
+		t.Fatalf("dropped %d lines, want 96", n)
+	}
+	// A remote clearing the scrollback (ED 3) drops every line kept.
+	s.write([]byte("\x1b[3J"))
+	if n, k := s.droppedLines(), s.scrollbackLen(); n != 96+DefaultScrollback || k != 0 {
+		t.Fatalf("after ED 3: dropped %d, kept %d", n, k)
+	}
 }

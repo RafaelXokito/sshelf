@@ -20,6 +20,11 @@ import (
 // (D-013, NFR-SIZE-003).
 const DefaultScrollback = 2000
 
+// scrollbackSlack is how many lines beyond the cap the emulator may hold
+// during one write. sshelf trims them itself after every write, which is
+// how it counts the lines the cap drops (vt does not report them).
+const scrollbackSlack = writeChunk
+
 // screen wraps a vt.Emulator with sshelf's own mutex (ADR-013 limitation 5:
 // vt.SafeEmulator can block rendering on its reply pipe). Every method
 // takes the lock; none of them waits on the network. Bytes for the remote
@@ -33,6 +38,10 @@ type screen struct {
 	pipe *io.PipeWriter // the emulator's side of the reply pipe
 	pr   io.Reader      // the reading side, through the emulator
 	seq  uint64
+
+	sbCap   int // scrollback lines kept
+	sbLen   int // scrollback lines after the last write
+	dropped int // lines dropped from the front of the history so far
 
 	// Modes, tracked through the emulator's callbacks.
 	mouseX10, mouseNormal, mouseHighlight, mouseButton, mouseAny bool
@@ -60,8 +69,8 @@ func newScreen(cols, rows, scrollback int) *screen {
 	if scrollback <= 0 {
 		scrollback = DefaultScrollback
 	}
-	s := &screen{emu: vt.NewEmulator(cols, rows), autowrap: true}
-	s.emu.SetScrollbackSize(scrollback)
+	s := &screen{emu: vt.NewEmulator(cols, rows), autowrap: true, sbCap: scrollback}
+	s.emu.SetScrollbackSize(scrollback + scrollbackSlack)
 	if pw, ok := s.emu.InputPipe().(*io.PipeWriter); ok {
 		s.pipe = pw
 	}
@@ -173,9 +182,41 @@ func (s *screen) write(p []byte) {
 // feed writes s.buf[s.fed:end] to the emulator.
 func (s *screen) feed(end int) {
 	if end > s.fed {
-		_, _ = s.emu.Write(s.buf[s.fed:end])
+		s.emuWrite(s.buf[s.fed:end])
 		s.fed = end
 	}
+}
+
+// emuWrite writes b to the emulator and keeps the scrollback at its cap.
+func (s *screen) emuWrite(b []byte) {
+	_, _ = s.emu.Write(b)
+	s.trimScrollback()
+}
+
+// trimScrollback drops the lines beyond the cap and counts them, and
+// counts the lines a remote cleared (ED 3) as dropped too, so that a
+// position in the history stays valid (see Session.Dropped). A write
+// that pushes more than scrollbackSlack lines at once loses the excess
+// uncounted inside vt; feedEmulator keeps writes to writeChunk bytes.
+func (s *screen) trimScrollback() {
+	n := s.emu.ScrollbackLen()
+	if n < s.sbLen { // cleared
+		s.dropped += s.sbLen
+	}
+	if n > s.sbCap {
+		s.dropped += n - s.sbCap
+		s.emu.SetScrollbackSize(s.sbCap)
+		s.emu.SetScrollbackSize(s.sbCap + scrollbackSlack)
+		n = s.sbCap
+	}
+	s.sbLen = n
+}
+
+// droppedLines returns how many lines have left the front of the history.
+func (s *screen) droppedLines() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.dropped
 }
 
 // onOther handles every parser event other than a printed character.
@@ -234,7 +275,7 @@ func (s *screen) wrapIfPending(r rune, wide bool) {
 	default:
 		return
 	}
-	_, _ = s.emu.Write([]byte("\r\n"))
+	s.emuWrite([]byte("\r\n"))
 }
 
 func (s *screen) cellWidth(x, y int) int {
@@ -282,6 +323,7 @@ func (s *screen) resize(cols, rows int) {
 		return
 	}
 	s.emu.Resize(cols, rows)
+	s.trimScrollback()
 }
 
 // snapshot copies the visible screen.

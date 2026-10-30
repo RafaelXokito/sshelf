@@ -1,4 +1,4 @@
-sshelf
+sshelf │[Hosts]│
 
 ! No Secret Service found: install or start GNOME Keyring or KWallet
 
@@ -11,7 +11,7 @@ Edit identity ops
   Stored key  (disabled: no Secret Service)
   Passphrase  (disabled: no Secret Service)
 
-
+              [ Save ]   [ Cancel ]
 
 
 

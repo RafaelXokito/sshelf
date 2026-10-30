@@ -1,4 +1,4 @@
-sshelf
+sshelf │[Hosts]│
 
 > db-staging           admin@10.0.1.20:2222
   web-prod             ubuntu@10.0.0.10
