@@ -334,6 +334,30 @@ func TestFR_TAB_010_AnchoredWhileOutputArrives(t *testing.T) {
 	}
 }
 
+// The 2,000-line cap drops old lines while the view is open: the view
+// stays on the same lines (NFR-SIZE-003, Session.Dropped).
+func TestFR_TAB_010_AnchoredWhileCapDropsLines(t *testing.T) {
+	s := scrollSession()
+	d := framedDriver(t, testHosts, s)
+	d.send(tea.WindowSizeMsg{Width: 80, Height: 24})
+	connectHost(t, d, "h2")
+	d.prefix("[")
+	d.press(tea.KeyPgUp, "")
+	before := plain(d.view())
+
+	s.DropLines(10)
+	s.Output("new 1", "new 2", "prompt$ ")
+	d.pump(1)
+	after := strings.Split(plain(d.view()), "\n")
+	if want := strings.Split(before, "\n"); strings.Join(after[1:23], "\n") != strings.Join(want[1:23], "\n") {
+		t.Fatalf("the view moved when old lines were dropped:\n%s\n--- before ---\n%s", strings.Join(after, "\n"), before)
+	}
+	d.press(tea.KeyUp, "")
+	if lines := strings.Split(plain(d.view()), "\n"); lines[1] != "line 058" {
+		t.Fatalf("after ↑ the first line is %q, want line 058", lines[1])
+	}
+}
+
 func TestFR_TAB_010_Golden(t *testing.T) {
 	d := framedDriver(t, testHosts, scrollSession())
 	d.send(tea.WindowSizeMsg{Width: 80, Height: 24})

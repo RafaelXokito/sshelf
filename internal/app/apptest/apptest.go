@@ -19,6 +19,7 @@ type FakeSession struct {
 	mu         sync.Mutex
 	snap       app.Snapshot
 	scrollback []string // lines above the screen, oldest first
+	dropped    int      // scrollback lines removed by DropLines
 	keys       []uv.KeyPressEvent
 	mouse      []uv.MouseEvent
 	pastes     []string
@@ -202,6 +203,23 @@ func (f *FakeSession) Scrollback(top, rows int) ([]string, int) {
 	top = min(max(top, 0), len(all))
 	end := min(top+max(rows, 0), len(all))
 	return slices.Clone(all[top:end]), len(all)
+}
+
+// DropLines removes the n oldest scrollback lines and counts them in
+// Dropped, as the scrollback cap does.
+func (f *FakeSession) DropLines(n int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	n = min(max(n, 0), len(f.scrollback))
+	f.scrollback = slices.Clone(f.scrollback[n:])
+	f.dropped += n
+}
+
+// Dropped implements app.FramedSession.
+func (f *FakeSession) Dropped() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.dropped
 }
 
 // Updates implements app.FramedSession.

@@ -1,6 +1,7 @@
 package sshtest
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
 	"fmt"
@@ -148,6 +149,8 @@ type Server struct {
 	versions []string
 	attempts []AuthAttempt
 	requests []Request
+	closes   []Request
+	received map[[2]int][]byte
 }
 
 // New starts a server for a test and closes it when the test ends.
@@ -169,6 +172,7 @@ func Start(opts ...Option) (*Server, error) {
 		kbd:       map[string][]Challenge{},
 		handler:   Shell,
 		conns:     map[int]net.Conn{},
+		received:  map[[2]int][]byte{},
 	}
 	for _, o := range opts {
 		if err := o(s); err != nil {
@@ -318,6 +322,7 @@ func (s *Server) serveConn(c numberedConn) {
 		_ = c.Close()
 		s.mu.Lock()
 		delete(s.conns, c.n)
+		s.closes = append(s.closes, Request{Conn: c.n, Type: "disconnect"})
 		s.mu.Unlock()
 	}()
 	sc, chans, reqs, err := ssh.NewServerConn(c, s.config)
@@ -429,6 +434,22 @@ func (s *Server) RequestsOfType(typ string) []Request {
 	return out
 }
 
+// Closes returns, in order, every channel the server closed (Type
+// "close", with Conn and Channel) and every connection that ended (Type
+// "disconnect", with Conn).
+func (s *Server) Closes() []Request {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.closes)
+}
+
+// Received returns every byte a handler has read from a channel so far.
+func (s *Server) Received(conn, channel int) []byte {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return bytes.Clone(s.received[[2]int{conn, channel}])
+}
+
 // WaitFor polls cond every few milliseconds until it returns true or the
 // timeout expires, and reports whether it returned true.
 func (s *Server) WaitFor(timeout time.Duration, cond func() bool) bool {
@@ -490,6 +511,11 @@ type Session struct {
 
 func (ss *Session) serve(reqs <-chan *ssh.Request) {
 	var wg sync.WaitGroup
+	defer func() {
+		ss.srv.mu.Lock()
+		ss.srv.closes = append(ss.srv.closes, Request{Conn: ss.conn, Channel: ss.channel, Type: "close"})
+		ss.srv.mu.Unlock()
+	}()
 	defer wg.Wait()
 	defer func() { _ = ss.ch.Close() }()
 	for r := range reqs {
@@ -565,8 +591,18 @@ func (ss *Session) serve(reqs <-chan *ssh.Request) {
 	}
 }
 
-// Read reads the client's input.
-func (ss *Session) Read(p []byte) (int, error) { return ss.ch.Read(p) }
+// Read reads the client's input. The server records every byte read
+// (see Received).
+func (ss *Session) Read(p []byte) (int, error) {
+	n, err := ss.ch.Read(p)
+	if n > 0 {
+		k := [2]int{ss.conn, ss.channel}
+		ss.srv.mu.Lock()
+		ss.srv.received[k] = append(ss.srv.received[k], p[:n]...)
+		ss.srv.mu.Unlock()
+	}
+	return n, err
+}
 
 // Write writes to the client's stdout.
 func (ss *Session) Write(p []byte) (int, error) { return ss.ch.Write(p) }
@@ -624,6 +660,28 @@ func (ss *Session) Exit(code int) {
 	_ = ss.ch.Close()
 }
 
+// ExitSignal reports that the remote command was killed by signal (e.g.
+// "KILL") and closes the channel. Later calls, and Exit after it, do
+// nothing.
+func (ss *Session) ExitSignal(signal string) {
+	ss.mu.Lock()
+	if ss.exited {
+		ss.mu.Unlock()
+		return
+	}
+	ss.exited = true
+	ss.mu.Unlock()
+	msg := struct {
+		Signal     string
+		CoreDumped bool
+		Error      string
+		Lang       string
+	}{Signal: signal}
+	_, _ = ss.ch.SendRequest("exit-signal", false, ssh.Marshal(&msg))
+	_ = ss.ch.CloseWrite()
+	_ = ss.ch.Close()
+}
+
 // Shell is the default Handler: a scripted shell. With a PTY it echoes input
 // and ends lines with "\r\n". It understands:
 //
@@ -631,14 +689,20 @@ func (ss *Session) Exit(code int) {
 //	size           prints the PTY size as "<cols>x<rows>"
 //	exit [N]       exits with status N (default 0)
 //
-// For an exec request it runs the command once and exits with its status.
-// End of input exits with status 0.
+// and the M2 commands of scripts.go (flood, stream, replay, modes, query,
+// hostile, echo-hex). For an exec request it runs the command once and
+// exits with its status. End of input exits with status 0.
 func Shell(ss *Session) {
 	nl := "\n"
 	if ss.PTY() {
 		nl = "\r\n"
 	}
+	in := bufio.NewReader(ss)
 	if cmd := ss.Command(); cmd != "" {
+		if runScript(ss, in, cmd) {
+			ss.Exit(0)
+			return
+		}
 		out, code, _ := runCommand(ss, cmd)
 		_, _ = ss.Write([]byte(strings.ReplaceAll(out, "\n", nl)))
 		ss.Exit(code)
@@ -653,43 +717,45 @@ func Shell(ss *Session) {
 
 	prompt()
 	var line []byte
-	buf := make([]byte, 256)
 	for {
-		n, err := ss.Read(buf)
-		for _, b := range buf[:n] {
-			switch b {
-			case '\r', '\n':
-				echo(nl)
-				out, code, exit := runCommand(ss, string(line))
-				line = line[:0]
-				_, _ = ss.Write([]byte(strings.ReplaceAll(out, "\n", nl)))
-				if exit {
-					ss.Exit(code)
-					return
-				}
-				prompt()
-			case 0x7f, 0x08:
-				if len(line) > 0 {
-					line = line[:len(line)-1]
-					echo("\b \b")
-				}
-			case 0x03:
-				echo("^C" + nl)
-				line = line[:0]
-				prompt()
-			case 0x04:
-				if len(line) == 0 {
-					ss.Exit(0)
-					return
-				}
-			default:
-				line = append(line, b)
-				echo(string(b))
-			}
-		}
+		b, err := in.ReadByte()
 		if err != nil {
 			ss.Exit(0)
 			return
+		}
+		switch b {
+		case '\r', '\n':
+			echo(nl)
+			cmd := string(line)
+			line = line[:0]
+			if runScript(ss, in, cmd) {
+				prompt()
+				continue
+			}
+			out, code, exit := runCommand(ss, cmd)
+			_, _ = ss.Write([]byte(strings.ReplaceAll(out, "\n", nl)))
+			if exit {
+				ss.Exit(code)
+				return
+			}
+			prompt()
+		case 0x7f, 0x08:
+			if len(line) > 0 {
+				line = line[:len(line)-1]
+				echo("\b \b")
+			}
+		case 0x03:
+			echo("^C" + nl)
+			line = line[:0]
+			prompt()
+		case 0x04:
+			if len(line) == 0 {
+				ss.Exit(0)
+				return
+			}
+		default:
+			line = append(line, b)
+			echo(string(b))
 		}
 	}
 }

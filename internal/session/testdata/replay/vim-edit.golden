@@ -1,0 +1,27 @@
+  1 package main
+  2
+  3 import "fmt"
+  4
+  5 func main() {
+  6         fmt.Printf("hello, sshelf")
+  7         fmt.Println("日本語 ok")
+  8 }
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+:set number
+cursor: 35,6
+alt: true
+mouse: 0

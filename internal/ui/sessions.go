@@ -54,7 +54,21 @@ type sessionTab struct {
 	ended   error  // the end cause; meaningful once done
 	done    bool
 	failure string // a failed or cancelled reconnect, shown instead of the end cause
-	scroll  *int   // top line of the scrollback view in scrollback mode; nil otherwise
+	// scroll is the top line of the scrollback view in scrollback mode,
+	// counted from the session's first line (top + Dropped()), so the view
+	// keeps its place while the cap drops old lines; nil otherwise.
+	scroll *int
+}
+
+// scrollTop returns the top line of the scrollback view relative to the
+// oldest line the session keeps, as Scrollback takes it.
+func (t *sessionTab) scrollTop() int { return max(*t.scroll-t.sess.Dropped(), 0) }
+
+// setScrollTop sets the scrollback view's top line, relative to the
+// oldest line kept.
+func (t *sessionTab) setScrollTop(top int) {
+	abs := top + t.sess.Dropped()
+	t.scroll = &abs
 }
 
 // quitMsg closes every session and quits; the quit confirmation delivers
@@ -379,8 +393,7 @@ func (m Model) runPrefix(r keys.PrefixResult) (tea.Model, tea.Cmd) {
 	case keys.PrefixDoScrollback:
 		if t != nil && t.scroll == nil {
 			_, total := t.sess.Scrollback(0, 0)
-			top := max(total-m.areaRows(t), 0)
-			t.scroll = &top
+			t.setScrollTop(max(total-m.areaRows(t), 0))
 		}
 	}
 	return m, nil
@@ -409,7 +422,7 @@ func (m Model) sessionKey(t *sessionTab, k tea.KeyPressMsg) (tea.Model, tea.Cmd)
 func (m Model) scrollKey(t *sessionTab, k tea.KeyPressMsg) {
 	rows := m.areaRows(t)
 	_, total := t.sess.Scrollback(0, 0)
-	top := *t.scroll
+	top := t.scrollTop()
 	switch {
 	case key.Matches(k, keys.ScrollExit):
 		t.scroll = nil
@@ -427,8 +440,7 @@ func (m Model) scrollKey(t *sessionTab, k tea.KeyPressMsg) {
 	case key.Matches(k, keys.ScrollBottom):
 		top = total
 	}
-	top = min(max(top, 0), max(total-rows, 0))
-	t.scroll = &top
+	t.setScrollTop(min(max(top, 0), max(total-rows, 0)))
 }
 
 // areaRows is the number of rows of the session area.
@@ -483,7 +495,7 @@ func (m Model) sessionStatus(t *sessionTab) string {
 	}
 	if t.scroll != nil {
 		_, total := t.sess.Scrollback(0, 0)
-		last := min(*t.scroll+m.areaRows(t), total)
+		last := min(t.scrollTop()+m.areaRows(t), total)
 		hints := []string{
 			keys.ScrollUp.Help().Key + keys.ScrollDown.Help().Key,
 			keys.ScrollPageUp.Help().Key, keys.ScrollPageDown.Help().Key,
@@ -531,7 +543,7 @@ func (m Model) sessionView(t *sessionTab) tea.View {
 	if t.scroll != nil {
 		// The view keeps its top line while output arrives (FR-TAB-010).
 		_, total := t.sess.Scrollback(0, 0)
-		lines, _ = t.sess.Scrollback(min(*t.scroll, max(total-rows, 0)), rows)
+		lines, _ = t.sess.Scrollback(min(t.scrollTop(), max(total-rows, 0)), rows)
 	}
 	var ml []string
 	for _, md := range m.modals {

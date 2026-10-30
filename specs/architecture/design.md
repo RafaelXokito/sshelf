@@ -419,7 +419,15 @@ a future Bubble Tea upgrade can move `ultraviolet` under `vt`.
    wrapping (measured with `12345678日x` and `日本語ab👍x` at width 10).
    *Mitigation:* a failing replay golden (`utf8-wide`) and an upstream fix in
    T-031; open question 2 in `product/requirements.md` §22 if no release fixes
-   it by the gate.
+   it by the gate. *Outcome (T-031, D-015):* worked around in `emulator.go`:
+   a second `x/ansi` parser finds where each printed character starts, the
+   emulator is fed up to there, and `\r\n` is inserted before a wide
+   character that would not fit and before the character after one that
+   filled the last two columns. The `utf8-wide` golden passes and is not
+   skipped. Related, not worked around: `vt` ends a grapheme cluster at the
+   end of every `Write`, so a combining mark, ZWJ sequence or flag split
+   across two reads is drawn as separate cells; sshelf splits its own
+   writes only after control characters.
 3. **Throughput is 2 to 5 MB/s.** 10 MiB of 100-column lines took 2.1–2.4 s
    at 120×40 and 4.0–4.8 s at 200×50, with or without SGR colours; a native
    terminal does well over 50 MB/s. *Mitigation:* NFR-PERF-005 sets a CI floor
@@ -558,7 +566,7 @@ removed in revision 2.
 - Acceptance: With a server that stops replying and a fake clock, the session ends with `ErrKeepaliveTimeout`. An interval of 0 disables keepalives.
 
 **ARCH-SESS-008**: When a session ends, the system shall report the cause to the UI exactly once, as `nil` (exit 0), `*ExitError`, `*DisconnectError` or `ErrInternal`, after its connection is closed.
-- Priority: M2 · Status: Draft · Source: FR-CONN-005 revision, FR-CONN-010 (replaces the v1 "Disconnected" modal: the ended tab shows the cause and offers `r`)
+- Priority: M2 · Status: Implemented · Source: FR-CONN-005 revision, FR-CONN-010 (replaces the v1 "Disconnected" modal: the ended tab shows the cause and offers `r`)
 - Acceptance: Table test over sshtest's `exit 0`, `exit 3`, signal, dropped connection and a forced panic: `Err()` returns the right type, `Updates()` is closed exactly once after `Done()`, and sshtest has seen the connection close. Pressing `r` on the ended tab produces a `ConnectRequestMsg` with the same host ID and the tab's number.
 
 **ARCH-SESS-009**: Where agent forwarding is enabled for a host, the system shall forward the local ssh-agent (`SSH_AUTH_SOCK`) to the server, and shall never forward an agent by default.
@@ -570,7 +578,7 @@ removed in revision 2.
 - Acceptance: Open 3 sessions and focus only the first: sshtest output sent to the other two lands in their emulators. Input sent through each tab reaches the right server. Quitting closes all three connections (sshtest records each close), and `goleak` passes.
 
 **ARCH-SESS-011**: The system shall feed remote output only into the session's emulator and shall write to the local terminal only what sshelf's renderer draws from emulator state.
-- Priority: M2 · Status: Draft · Source: D-009, SEC-SESSION-005 (replaces the Later "repaint on reattach")
+- Priority: M2 · Status: Implemented · Source: D-009, SEC-SESSION-005 (replaces the Later "repaint on reattach")
 - Acceptance: Fuzz test: random bytes and a corpus of hostile sequences (OSC 52 clipboard, OSC 0/2 titles, OSC 8 links, DCS, APC, `ESC[21t` title report, DECRQSS, `ESC c`) written by sshtest end up only in the emulator. The rendered `View()` content contains no `ESC ]`, `ESC P`, `ESC _`, `ESC ^` or `ESC X`, only SGR and the characters of the screen; the session code holds no reference to `os.Stdout`.
 
 **ARCH-SESS-012**: Where a host has a jump chain, the system shall connect hop by hop over in-process `direct-tcpip` channels, with each hop's own identity and host-key verification.
@@ -582,11 +590,11 @@ removed in revision 2.
 - Acceptance: One integration test per kind sends an HTTP request through the forward. The listener is closed after the disconnect.
 
 **ARCH-SESS-014**: The system shall never block the UI goroutine on a session: input is queued in a per-session buffer of at most 1 MiB that a writer goroutine drains to the SSH channel, the emulator's replies are drained by a goroutine that never waits on the network, and output is read from the channel only as fast as the emulator processes it.
-- Priority: M2 · Status: Draft · Source: NFR-PERF-004, NFR-PERF-005, ADR-013 limitation 5
+- Priority: M2 · Status: Implemented · Source: NFR-PERF-004, NFR-PERF-005, ADR-013 limitation 5
 - Acceptance: With sshtest not reading its channel (window full), 10,000 `SendKey` calls return within 1 s in total and the queue stops at 1 MiB with `ErrInputFull`; the root model shows "web-prod: remote is not reading input" once. During `flood 10M`, `Snapshot()` never waits more than 20 ms for the emulator lock. A remote `ESC[c` during a stalled writer does not block `Snapshot()`.
 
 **ARCH-SESS-015**: The system shall notify the UI of processed output through a per-session channel of capacity 1 that is written without blocking, so that notifications coalesce and the UI renders each session at most once per frame.
-- Priority: M2 · Status: Draft · Source: NFR-PERF-005, FR-TAB-004
+- Priority: M2 · Status: Implemented · Source: NFR-PERF-005, FR-TAB-004
 - Acceptance: 10,000 output chunks produce at most one pending notification at any time (unit test reading `Updates()` slowly). The channel is closed exactly once, after the session's end is recorded. Each `SessionUpdateMsg` re-arms one listening command; `goleak` finds no listener left after a tab closes.
 
 **ARCH-SESS-016**: The system shall let the emulator answer the remote's terminal queries (device attributes, cursor position reports, mode reports, colour queries) and shall set the emulator's default foreground and background colours from the user's terminal when Bubble Tea reports them.
@@ -594,7 +602,7 @@ removed in revision 2.
 - Acceptance: sshtest's `query` script sends `ESC[c`, `ESC[6n` and `ESC]11;?ESC\` and receives the emulator's answers on the channel, including the cursor position within the session area. With a `tea.BackgroundColorMsg` of `#fdf6e3`, the OSC 11 answer is `rgb:fdfd/f6f6/e3e3`. Nothing is written to the local terminal in reply to a remote query (PTY output scan).
 
 **ARCH-SESS-017**: The system shall encode keys for the remote with the emulator's `SendKey`, except for the modified special keys the emulator drops, which sshelf encodes in xterm's `CSI 1;<mod> <final>` and `CSI <n>;<mod> ~` forms.
-- Priority: M2 · Status: Draft · Source: FR-TAB-006, ADR-013 limitation 1
+- Priority: M2 · Status: Implemented · Source: FR-TAB-006, ADR-013 limitation 1
 - Acceptance: A table test covers every row of the key table in §9.4 against `echo-hex`, in normal and application cursor mode. Ctrl+Up sends `ESC[1;5A`, Shift+Left `ESC[1;2D`, Ctrl+F5 `ESC[15;5~`, Ctrl+Delete `ESC[3;5~`, Alt+Shift+Right `ESC[1;4C`. No key that has an xterm encoding produces zero bytes.
 
 
@@ -706,11 +714,11 @@ removed in revision 2.
 - Acceptance: CI runs the integration suite with `-race` on Linux and macOS, using loopback only and no real keychain.
 
 **ARCH-TEST-002**: The system shall have emulator golden tests that replay recorded output of `vim`, `htop` and `less` into a session's emulator and compare the resulting screen with a golden file.
-- Priority: M2 · Status: Draft · Source: D-009, FR-CONN-001 revision
+- Priority: M2 · Status: Implemented · Source: D-009, FR-CONN-001 revision
 - Acceptance: `internal/session/testdata/replay/` holds at least `vim-edit`, `htop`, `less-search`, `tmux-split` and `utf8-wide` recordings (`.bin` raw output with the `TERM=xterm-256color` and size they were recorded at, `.golden` the expected screen as text plus a cursor line, and `.sgr.golden` the styled lines). `TestARCH_TEST_002_Replay` feeds each recording in 1-byte, 7-byte and 4 KiB chunks and every chunking matches the golden. `go test ./internal/session -update` rewrites them; the recording procedure (`script -q` on a real host, then trimming) is documented in `testdata/replay/README`.
 
 **ARCH-TEST-003**: The system's test SSH server shall support the M2 scripted commands `flood <size>`, `stream <rate>`, `replay <fixture>`, `modes <DECSET list>`, `query`, `hostile` and `echo-hex`, and shall record channel closes and every byte it receives.
-- Priority: M2 · Status: Draft · Source: NFR-PERF-005, NFR-PERF-006, FR-TAB-011, SEC-SESSION-005
+- Priority: M2 · Status: Implemented · Source: NFR-PERF-005, NFR-PERF-006, FR-TAB-011, SEC-SESSION-005
 - Acceptance: One test per command. `flood 10M` sends exactly 10 MiB; `stream 100K` paces output at 100 KB/s ± 10 %; `modes 1000,1006` enables those modes; `query` sends `ESC[c`, `ESC[6n` and an OSC 11 colour query and records the replies; `hostile` sends the corpus of ARCH-SESS-011; `echo-hex` echoes each received byte as hex so tests can assert the exact encoding of keys, pastes and mouse events.
 
 ---

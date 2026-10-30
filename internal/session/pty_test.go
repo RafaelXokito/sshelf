@@ -39,13 +39,13 @@ func stty(t *testing.T, tty *os.File) string {
 }
 
 // setupPTY opens a PTY and a session on its slave side, ready to Run.
-func setupPTY(t *testing.T, handler sshtest.Handler) (master, tty *os.File, s *Session, h *ptyHarness) {
+func setupPTY(t *testing.T, handler sshtest.Handler) (master, tty *os.File, s *Attached, h *ptyHarness) {
 	t.Helper()
 	return setupPTYTerm(t, handler, func(tty *os.File) Terminal { return term.NewTTY(tty) })
 }
 
 // setupPTYTerm is setupPTY with the session's Terminal built by mk.
-func setupPTYTerm(t *testing.T, handler sshtest.Handler, mk func(tty *os.File) Terminal) (master, tty *os.File, s *Session, h *ptyHarness) {
+func setupPTYTerm(t *testing.T, handler sshtest.Handler, mk func(tty *os.File) Terminal) (master, tty *os.File, s *Attached, h *ptyHarness) {
 	t.Helper()
 	if _, err := exec.LookPath("stty"); err != nil {
 		t.Skip("stty not available")
@@ -69,7 +69,7 @@ func setupPTYTerm(t *testing.T, handler sshtest.Handler, mk func(tty *os.File) T
 	})
 
 	h.srv = sshtest.New(t, sshtest.WithPassword("u", "pw"), sshtest.WithHandler(handler))
-	s, err = New(dialServer(t, h.srv), mk(tty), Options{Term: "xterm-256color"})
+	s, err = NewAttached(dialServer(t, h.srv), mk(tty), Options{Term: "xterm-256color"})
 	if err != nil {
 		t.Fatal(err)
 	}

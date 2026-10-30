@@ -4,38 +4,32 @@ import (
 	"image/color"
 
 	uv "github.com/charmbracelet/ultraviolet"
+
+	"github.com/RafaelXokito/sshelf/internal/session"
 )
 
-// The M2 session shape (design §8.4). Until T-037 wires the emulator-backed
-// session.Session, these types are defined here with the shapes design §8.4
-// gives the session package; T-037 turns them into aliases of the session
-// types and renames FramedSession to Session.
+// The M2 session shape (design §8.4). The types are the session package's;
+// T-037 renames FramedSession to Session when it removes the MVP handover.
 
 // Size is a session area in cells.
-type Size struct{ Cols, Rows int }
+type Size = session.Size
 
 // Cursor is the remote cursor, zero-based within the session area.
-type Cursor struct{ X, Y int }
+type Cursor = session.Cursor
 
 // MouseMode is the mouse reporting a remote app asked for.
-type MouseMode int
+type MouseMode = session.MouseMode
 
 // Mouse modes (design §8.4).
 const (
-	MouseNone  MouseMode = iota
-	MousePress           // ?9 / ?1000
-	MouseDrag            // ?1002
-	MouseAny             // ?1003
+	MouseNone  = session.MouseNone
+	MousePress = session.MousePress // ?9 / ?1000
+	MouseDrag  = session.MouseDrag  // ?1002
+	MouseAny   = session.MouseAny   // ?1003
 )
 
 // Snapshot is a copy of a session's screen, taken under the emulator lock.
-type Snapshot struct {
-	Lines  []string  // Size.Rows lines of Size.Cols cells, SGR styles only
-	Cursor *Cursor   // nil when the remote hides it
-	Mouse  MouseMode // what the remote app asked for
-	Alt    bool      // alternate screen active
-	Seq    uint64    // increases with every processed output chunk
-}
+type Snapshot = session.Snapshot
 
 // FramedSession is a session rendered inside sshelf's frame (design §8.4,
 // ADR-012). Input methods never block. Updates is closed after the end;
@@ -54,9 +48,16 @@ type FramedSession interface {
 	// followed by its screen, as one view, starting at line top (0 is the
 	// oldest line kept), and the number of lines in that view.
 	Scrollback(top, rows int) (lines []string, total int)
+	// Dropped returns how many lines have left the front of that view
+	// since the session started (the scrollback cap). A view position
+	// stored as top+Dropped() stays on the same line.
+	Dropped() int
 
 	Updates() <-chan struct{}
 	Done() <-chan struct{}
 	Err() error
 	Close() error
 }
+
+// The emulator-backed session is a FramedSession.
+var _ FramedSession = (*session.Session)(nil)
