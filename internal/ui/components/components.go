@@ -24,6 +24,15 @@ type Modal interface {
 	View() string
 }
 
+// Closer is a modal that answers a request from a running connection
+// attempt (an auth prompt, a host-key prompt). The root model pops it in
+// the same Update that delivered the answer, not when the modal's DoneMsg
+// arrives later: by then the attempt may already have pushed its next
+// prompt, and popping the top modal would close that one instead.
+type Closer interface {
+	Closed() bool
+}
+
 // Hinter is a screen or modal whose key hints the root model renders as
 // the footer, the last line of the terminal (FR-NAV-004). Hints returns
 // the main bindings of its current state, from ui/keys. A screen that is

@@ -345,10 +345,10 @@ outlined at the end without task detail.
 
 ### T-030 · MVP acceptance gate
 
-- **Delivers:** the ARCH-UI-001 teatest walkthrough (start, list, edit, save, connect, TOFU, stub session, back) with goldens; `scripts/tracecheck` in CI (NFR-QUAL-001); the coverage gate (NFR-QUAL-003); `docs/release-checklist.md` completed with the manual items: SEC-CRED-009 (store a password with build N, install unsigned build N+1 on macOS, connect, no Keychain dialog), FR-CONN-001 (`vim`, `htop` and `tmux` against a real `sshd`), the named terminals of NFR-PORT-002, and a Linux keyring-unlock prompt for FR-CRED-001.
+- **Delivers:** the ARCH-UI-001 walkthrough (start, list, edit, save, connect, TOFU, stub session, back) with goldens, driven without `teatest`; `scripts/tracecheck` in CI (NFR-QUAL-001); `scripts/covercheck`, the coverage gate (NFR-QUAL-003); tests that pin the CI checks of NFR-PORT-001, NFR-QUAL-002 and NFR-REL-001; the manual acceptance checklist [`acceptance.md`](acceptance.md); `docs/release-checklist.md` completed with the manual items: SEC-CRED-009 (store a password with build N, install unsigned build N+1 on macOS, connect, no Keychain dialog), FR-CONN-001 (`vim`, `htop` and `tmux` against a real `sshd`), the named terminals of NFR-PORT-002, and a Linux keyring-unlock prompt for FR-CRED-001.
 - **Satisfies:** ARCH-UI-001, NFR-QUAL-001, NFR-QUAL-003, SEC-CRED-009, FR-CONN-001, FR-CRED-001 (manual: OS unlock prompt)
 - **Depends on:** T-000 … T-029
-- **Tests:** `TestARCH_UI_001_Walkthrough`, `TestNFR_QUAL_001_EveryMVPIDTraced` (wraps `scripts/tracecheck`), CI step `NFR-QUAL-003`.
+- **Tests:** `TestARCH_UI_001_Walkthrough`, `TestNFR_QUAL_001_EveryMVPIDTraced` (wraps `scripts/tracecheck`), `TestNFR_QUAL_003_*` (covercheck), `TestNFR_PORT_001_CIRacesOnLinuxAndMacOS`, `TestNFR_QUAL_002_CIRunsStaticAnalysis`, `TestNFR_REL_001_GoroutinePackagesCheckLeaks`; CI steps `NFR-QUAL-001` and `NFR-QUAL-003`.
 - **Done when:** tracecheck reports zero untraced MVP IDs, coverage meets both thresholds, and the manual checklist is signed off on macOS and Linux.
 - **Estimate:** 1 d
 
@@ -418,6 +418,28 @@ and written into the specs:
   `TestOSStore_ErrorMapping`, extended whenever a new one is seen.
 
 ---
+
+## Manual-only requirements
+
+An `MVP` requirement listed here needs no automated test: `scripts/tracecheck`
+(NFR-QUAL-001) accepts it without one, but it must still be `Implemented`,
+and [`acceptance.md`](acceptance.md) must have the steps that verify it. Add
+a row only when no part of the requirement can be checked by a program.
+
+| ID | Why it cannot be automated | Steps |
+|---|---|---|
+
+None at the MVP gate: every MVP requirement has at least one automated test.
+These acceptance criteria are still checked by hand, in addition to their
+tests:
+
+- FR-CONN-001: `vim`, `htop` and `tmux` against a real `sshd`.
+- FR-CONN-004: `tput cols; tput lines` on a real host after a resize.
+- FR-CONN-005: no remote screen remnants after a full-screen program.
+- SEC-CRED-009 AC1: no Keychain dialog after installing an unsigned new build.
+- FR-CRED-001: the OS unlock prompt (macOS Keychain, Linux keyring).
+- NFR-PORT-002: the named terminal emulators.
+- ADR-007 (T-000): the `devcheck` raw-mode and `stty` round trip.
 
 ## Traceability matrix
 

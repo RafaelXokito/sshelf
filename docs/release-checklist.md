@@ -2,9 +2,32 @@
 
 Manual checks run before each release. Record the result (pass/fail, OS
 version, build) in the release PR. Started by T-010; T-030 completes it.
+The step-by-step commands are in [`specs/acceptance.md`](../specs/acceptance.md);
+run that whole checklist on macOS and Linux before a release.
+
+## Automated gates (must be green on the release commit)
+
+- [ ] CI: lint, `go test -race` on Linux and macOS, cross-compile, keyring jobs.
+- [ ] `go run ./scripts/tracecheck` reports 0 problems (NFR-QUAL-001).
+- [ ] `go run ./scripts/covercheck coverage.out` passes (NFR-QUAL-003).
+
+## Sessions and terminals
+
+- [ ] **FR-CONN-001: `vim`, `htop` and `tmux` against a real `sshd`**
+  render and accept input, including after a window resize
+  (acceptance §6).
+- [ ] **NFR-PORT-002: named terminals.** Start, list, connect, exit and
+  `stty -a` round trip in iTerm2, Terminal.app, kitty, WezTerm, Alacritty,
+  Ghostty, GNOME Terminal, Konsole, xterm, tmux and screen, as available
+  (acceptance §12.2).
+- [ ] **ADR-007 devcheck:** raw bytes, first keystroke after return and
+  `stty -a` round trip (acceptance §10).
 
 ## Credential store
 
+- [ ] **FR-CRED-001: OS unlock prompt.** With the Linux login keyring
+  locked, connecting a host with a stored password shows the desktop's
+  unlock dialog and then authenticates (acceptance §11.1).
 - [ ] **SEC-CRED-009: no Keychain dialog after an upgrade (macOS).**
   1. Install build N (unsigned). Save an identity with a password and link a
      host to it.

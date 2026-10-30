@@ -28,6 +28,7 @@ type DoneMsg struct{ Trusted bool }
 // key. "Trust once" is v1 (FR-KH-007).
 type Model struct {
 	prompt app.HostKeyPromptMsg
+	done   bool // answered; see components.Closer
 }
 
 // New returns the modal for p.
@@ -48,8 +49,12 @@ func (m Model) Update(msg tea.Msg) (components.Modal, tea.Cmd) {
 		return m, nil
 	}
 	m.prompt.Answer(trust) // a buffered channel: never blocks
+	m.done = true
 	return m, func() tea.Msg { return DoneMsg{Trusted: trust} }
 }
+
+// Closed implements components.Closer.
+func (m Model) Closed() bool { return m.done }
 
 // View implements components.Modal.
 func (m Model) View() string {

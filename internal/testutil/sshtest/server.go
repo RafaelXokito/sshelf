@@ -111,6 +111,15 @@ func WithKeyboardInteractive(user string, challenges ...Challenge) Option {
 	}
 }
 
+// WithPort makes the server listen on 127.0.0.1:port instead of a
+// random port (for sshtestd demos; tests keep the random port).
+func WithPort(port int) Option {
+	return func(srv *Server) error {
+		srv.port = port
+		return nil
+	}
+}
+
 // WithHandler replaces the scripted shell for shell and exec requests.
 func WithHandler(h Handler) Option {
 	return func(srv *Server) error {
@@ -128,6 +137,7 @@ type Server struct {
 	keys      map[string][]ssh.PublicKey
 	kbd       map[string][]Challenge
 	handler   Handler
+	port      int // 0: a random free port
 
 	wg sync.WaitGroup
 
@@ -172,7 +182,7 @@ func Start(opts ...Option) (*Server, error) {
 	}
 	s.config = s.serverConfig()
 
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	ln, err := net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(s.port)))
 	if err != nil {
 		return nil, err
 	}

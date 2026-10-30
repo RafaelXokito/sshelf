@@ -2,10 +2,17 @@
 // It prints its address, a known_hosts line and the path of a demo private
 // key that every user name can log in with. Stop it with Ctrl+C.
 //
-//	go run ./internal/testutil/sshtest/cmd/sshtestd [-dir DIR]
+//	go run ./internal/testutil/sshtest/cmd/sshtestd [-dir DIR] [-port N] [-password PW [-otp CODE]]
 //
 // With -dir, the host key and demo key are kept in DIR and reused, so the
-// known_hosts line stays valid across runs (the port still changes).
+// known_hosts line stays valid across runs. With -port the address stays
+// the same too (0, the default, picks a free port).
+//
+// With -password, password authentication with PW is accepted too. With
+// -otp as well, the password is asked through keyboard-interactive
+// instead, followed by a second round that asks for CODE, as a server
+// with a second factor does. Neither is ever a real secret: this is a
+// demo server on 127.0.0.1.
 package main
 
 import (
@@ -27,14 +34,21 @@ import (
 
 func main() {
 	dir := flag.String("dir", "", "directory for the host key and demo key (default: a new temp dir)")
+	port := flag.Int("port", 0, "port on 127.0.0.1 (default: a free port)")
+	password := flag.String("password", "", "also accept password authentication with this password, for any user")
+	otp := flag.String("otp", "", "with -password: ask for the password and then this one-time code through keyboard-interactive, instead of password authentication")
 	flag.Parse()
-	if err := run(*dir); err != nil {
+	if *otp != "" && *password == "" {
+		fmt.Fprintln(os.Stderr, "sshtestd: -otp needs -password")
+		os.Exit(2)
+	}
+	if err := run(*dir, *port, *password, *otp); err != nil {
 		fmt.Fprintln(os.Stderr, "sshtestd:", err)
 		os.Exit(1)
 	}
 }
 
-func run(dir string) error {
+func run(dir string, port int, password, otp string) error {
 	if dir == "" {
 		d, err := os.MkdirTemp("", "sshtestd-")
 		if err != nil {
@@ -55,16 +69,32 @@ func run(dir string) error {
 		return err
 	}
 
-	srv, err := sshtest.Start(
+	opts := []sshtest.Option{
 		sshtest.WithHostKey(hostKey),
 		sshtest.WithAuthorizedKey(sshtest.AnyUser, demoKey.PublicKey()),
-	)
+	}
+	auth := "public key (the demo key)"
+	switch {
+	case otp != "":
+		opts = append(opts, sshtest.WithKeyboardInteractive(sshtest.AnyUser,
+			sshtest.Challenge{Questions: []sshtest.Question{{Prompt: "Password: ", Answer: password}}},
+			sshtest.Challenge{Instruction: "Second factor", Questions: []sshtest.Question{{Prompt: "Verification code: ", Echo: true, Answer: otp}}}))
+		auth += "; keyboard-interactive: the -password, then the -otp code"
+	case password != "":
+		opts = append(opts, sshtest.WithPassword(sshtest.AnyUser, password))
+		auth += "; password: the -password value"
+	}
+	if port != 0 {
+		opts = append(opts, sshtest.WithPort(port))
+	}
+	srv, err := sshtest.Start(opts...)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = srv.Close() }()
 
 	fmt.Printf(`sshtestd listening on %s
+accepted authentication: %s
 
 known_hosts line (append it to <configDir>/known_hosts):
 %s
@@ -81,7 +111,7 @@ config.json example:
 }
 
 The shell understands: echo <words>, size, exit [N]. Ctrl+C stops the server.
-`, srv.Addr(), srv.KnownHostsLine(), keyPath, keyPath, srv.Host(), srv.Port())
+`, srv.Addr(), auth, srv.KnownHostsLine(), keyPath, keyPath, srv.Host(), srv.Port())
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

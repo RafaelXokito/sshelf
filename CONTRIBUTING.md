@@ -22,6 +22,7 @@ wins any conflict.
    go vet ./...
    go test -race ./...
    go build ./cmd/sshelf
+   go run ./scripts/tracecheck   # every MVP ID Implemented and traced to a test
    ```
 
    plus the linter configured in CI, if available locally.

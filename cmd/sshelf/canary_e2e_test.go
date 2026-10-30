@@ -117,7 +117,9 @@ func (c *canaryRun) connectShell(label string, srv *sshtest.Server, n int, promp
 
 // typeUntil types keys until done reports true, for a prompt that may not
 // have opened yet: keys typed too early go to the Connecting modal, which
-// ignores them.
+// ignores them. done must stay true once it is true (count with >=): a
+// retry typed while the server was still checking the previous answer
+// lands in the next prompt and moves the count past the target.
 func (c *canaryRun) typeUntil(srv *sshtest.Server, keys string, done func() bool) {
 	c.t.Helper()
 	for range 10 {
@@ -255,10 +257,12 @@ func mainFlows(t *testing.T, env ...string) *canaryRun {
 	}
 	c.typeKeys(keyEnter)
 	c.waitText(off, "Permission denied, please try again.")
-	c.typeUntil(srvPW, typedPw+keyEnter, func() bool { return failed() == 2 })
+	c.typeUntil(srvPW, typedPw+keyEnter, func() bool { return failed() >= 2 })
 	// The second prompt looks like the first, so the renderer may not
-	// redraw it: typeUntil retries until the server sees the answer.
-	c.typeUntil(srvPW, typedPw+keyEnter, func() bool { return failed() == 3 })
+	// redraw it: typeUntil retries until the server sees the answer. (This
+	// step used to flake: the first prompt's late DoneMsg could close the
+	// second prompt; the root model now pops a prompt when it is answered.)
+	c.typeUntil(srvPW, typedPw+keyEnter, func() bool { return failed() >= 3 })
 	c.waitText(off, "h4-wrongpw: authentication failed")
 
 	c.addHost(hostForm{label: "h5-mismatch", srv: srvBlocked, user: "alice", password: blockedPw})

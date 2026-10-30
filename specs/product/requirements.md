@@ -341,10 +341,11 @@ is described in `ARCH-*`. There is no fallback to the system `ssh` binary
 ### FR-CONN-001 · Open an interactive session
 When the user presses Enter on a host, the system shall open an interactive SSH shell session to that host in the current terminal, with the full screen given to the session until it ends.
 
-- **Priority:** MVP · **Status:** Draft
+- **Priority:** MVP · **Status:** Implemented
 - **Acceptance:**
   - `vim`, `htop` and `tmux` render and accept input correctly.
   - The remote PTY uses the local `TERM` value and the current window size.
+- **Note:** the first criterion needs a person at a real terminal and a real `sshd` (the test server has only a scripted shell). It is a manual step in [`specs/acceptance.md`](../acceptance.md) and the release checklist. The PTY request, `TERM`, size and full-screen handover are automated (`TestFR_CONN_001_*`, `TestNFR_PORT_002_TermMatrix`).
 
 ### FR-CONN-002 · Authenticate with stored credentials
 Where the effective identity has a private key or a password, the system shall authenticate with it without prompting, trying the key (stored or file) first and then password or keyboard-interactive (FR-CONN-008).
