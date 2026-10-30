@@ -501,6 +501,7 @@ The system shall treat host keys in `~/.ssh/known_hosts` as trusted, including h
   - A host present in `~/.ssh/known_hosts` under a hashed name connects with no prompt.
   - `~/.ssh/known_hosts` has the same checksum before and after any sshelf action.
   - A `@revoked` entry causes rejection with "host key revoked", shown in the status bar with the file and line of the `@revoked` entry and no trust action. Implemented as a status line rather than a block screen, because there is nothing to compare and nothing to offer (design §9.1).
+  - Like OpenSSH, a line that cannot be parsed (e.g. two entries joined by a missing newline) is skipped and logged as a warning with its file and line; every other line still trusts, blocks and reports its original file and line. A file with more than 100 unparseable lines is rejected. Found with a real `~/.ssh/known_hosts` during acceptance testing.
 
 ### FR-KH-004 · sshelf known_hosts file
 When the user chooses "trust and save", the system shall append the key to sshelf's own `known_hosts` file in its config directory.

@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"golang.org/x/crypto/ssh"
-	"golang.org/x/crypto/ssh/knownhosts"
 
 	"github.com/RafaelXokito/sshelf/internal/domain"
 )
@@ -225,7 +224,7 @@ func (c Config) hostKeyDB() (ssh.HostKeyCallback, error) {
 		}
 		files = append(files, f)
 	}
-	cb, err := knownhosts.New(files...)
+	cb, err := loadKnownHosts(files)
 	if err != nil {
 		return nil, fmt.Errorf("known_hosts: %w", err)
 	}
