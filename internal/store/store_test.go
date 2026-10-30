@@ -460,6 +460,9 @@ func FuzzLoadConfig(f *testing.F) {
 	f.Add([]byte(`{"version": 1, "settings": {"x": []}}`))
 	f.Add([]byte("{\n\"hosts\": [\n"))
 	f.Add([]byte(`{"version": 99}`))
+	// FR-NAV-018: an offset and a fraction are normalised; a bad time is dropped.
+	f.Add([]byte(`{"version": 1, "hosts": [{"id": "h", "last_connected_at": "2026-10-30T10:00:00.5+01:00"}]}`))
+	f.Add([]byte(`{"version": 1, "hosts": [{"id": "h", "last_connected_at": "9999-12-31T23:59:59-01:00"}]}`))
 	f.Fuzz(func(t *testing.T, b []byte) {
 		s, err := decode("config.json", b)
 		if err != nil {

@@ -40,7 +40,8 @@
         "pg"
       ],
       "jump_host_ids": [],
-      "forward_agent": false
+      "forward_agent": false,
+      "last_connected_at": "2026-10-30T09:00:00Z"
     },
     {
       "id": "0192a000-0000-7000-8000-0000000000c2",

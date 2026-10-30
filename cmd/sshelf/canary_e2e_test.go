@@ -325,7 +325,12 @@ func mainFlows(t *testing.T, env ...string) *canaryRun {
 	c.typeKeys(keyEnter)
 	off = c.waitText(off, "zz-imported")
 
-	// The list is back at its first host.
+	// The list is in last-use order (FR-NAV-018): find h1-password, and
+	// Esc leaves it selected.
+	c.typeKeys("/h1-password")
+	off = c.waitText(off, "/ h1-password")
+	c.typeKeys(keyEsc)
+	off = c.waitText(off, "zz-imported") // the whole list is back
 	c.typeKeys("d")
 	off = c.waitText(off, "Delete host h1-password?")
 	c.typeKeys("y")

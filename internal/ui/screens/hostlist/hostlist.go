@@ -1,11 +1,12 @@
 package hostlist
 
 import (
-	"cmp"
+	"fmt"
 	"net"
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
@@ -61,32 +62,70 @@ type IdentitiesMsg struct{}
 // ImportMsg asks the root model to import ~/.ssh/config (I).
 type ImportMsg struct{}
 
+// TimeWidth is the width of the last-use column at the end of each row
+// (FR-NAV-018).
+const TimeWidth = 8
+
+// TimeMinWidth is the narrowest list that shows the last-use column.
+const TimeMinWidth = 60
+
 // Model is the host list (FR-NAV-001, FR-NAV-003): one line per host,
-// sorted by label, with a cursor and a search field opened with /. While
-// the query is not empty only the hosts that fuzzy-match it are shown,
-// best match first (FR-NAV-002).
+// in last-use order (FR-NAV-018), with a cursor and a search field opened
+// with /. While the query is not empty only the hosts that fuzzy-match it
+// are shown, best match first (FR-NAV-002).
 type Model struct {
-	hosts  []domain.Host // sorted by label
-	shown  []int         // indexes into hosts, in row order
-	cursor int           // row
-	offset int           // first row shown
-	width  int           // 0 = unknown: nothing is truncated
-	height int           // rows available, search line included; 0 = unknown
+	hosts  []domain.Host    // in last-use order (domain.CompareLastUse)
+	now    func() time.Time // the clock the relative times are measured against
+	shown  []int            // indexes into hosts, in row order
+	cursor int              // row
+	offset int              // first row shown
+	width  int              // 0 = unknown: nothing is truncated
+	height int              // rows available, search line included; 0 = unknown
 
 	search    *components.TextInput
 	searching bool // the search field has the keyboard
 }
 
-// New returns a list of hosts, sorted by label case-insensitively, with the
-// first one selected.
+// New returns a list of hosts in last-use order (domain.CompareLastUse),
+// with the first one selected. Relative times are measured against
+// time.Now until WithClock replaces it.
 func New(hosts []domain.Host) Model {
-	hosts = slices.Clone(hosts)
-	slices.SortStableFunc(hosts, func(a, b domain.Host) int {
-		return cmp.Compare(strings.ToLower(a.Label), strings.ToLower(b.Label))
-	})
+	hosts = domain.SortByLastUse(hosts)
 	search := components.NewTextInput()
 	search.CharLimit = 128
-	return Model{hosts: hosts, shown: searchpkg.Filter(hosts, ""), search: search}
+	return Model{hosts: hosts, now: time.Now, shown: searchpkg.Filter(hosts, ""), search: search}
+}
+
+// WithClock returns m measuring relative times against now.
+func (m Model) WithClock(now func() time.Time) Model {
+	if now != nil {
+		m.now = now
+	}
+	return m
+}
+
+// Connected records that a session to the host with id was established
+// at t (FR-NAV-018): the list is sorted again and the search applied
+// again, and the selection stays on the host it was on.
+func (m Model) Connected(id domain.ID, t time.Time) Model {
+	i := slices.IndexFunc(m.hosts, func(h domain.Host) bool { return h.ID == id })
+	if i < 0 {
+		return m
+	}
+	sel, ok := m.Selected()
+	hosts := slices.Clone(m.hosts)
+	t = t.UTC()
+	hosts[i].LastConnectedAt = &t
+	m.hosts = domain.SortByLastUse(hosts)
+	m.shown = searchpkg.Filter(m.hosts, m.search.Value())
+	if ok {
+		if j := slices.IndexFunc(m.shown, func(j int) bool { return m.hosts[j].ID == sel.ID }); j >= 0 {
+			m.cursor = j
+		}
+	}
+	m.cursor = min(max(m.cursor, 0), max(len(m.shown)-1, 0))
+	m.scroll()
+	return m
 }
 
 // Selected returns the host under the cursor.
@@ -97,7 +136,7 @@ func (m Model) Selected() (domain.Host, bool) {
 	return m.hosts[m.shown[m.cursor]], true
 }
 
-// Hosts returns every host, sorted by label, whether shown or filtered
+// Hosts returns every host, in last-use order, whether shown or filtered
 // out. The caller must not modify them.
 func (m Model) Hosts() []domain.Host { return m.hosts }
 
@@ -359,16 +398,53 @@ func (m Model) View() string {
 		return b.String()
 	}
 	end := min(m.offset+m.rows(), len(m.shown))
+	now := m.now()
 	for i := m.offset; i < end; i++ {
-		h := m.hosts[m.shown[i]]
-		if i == m.cursor {
-			b.WriteString(selectedStyle.Render(m.fit(SelectGlyph + Line(h))))
-		} else {
-			b.WriteString(m.fit("  " + Line(h)))
-		}
+		b.WriteString(m.row(m.hosts[m.shown[i]], i == m.cursor, now))
 		b.WriteString("\n")
 	}
 	return b.String()
+}
+
+// row renders one host row: the selection glyph, Line, and, when the list
+// is at least TimeMinWidth wide and the host was connected, its last use
+// right-aligned and dim (FR-NAV-018).
+func (m Model) row(h domain.Host, selected bool, now time.Time) string {
+	prefix, paint := "  ", func(s string) string { return s }
+	if selected {
+		prefix, paint = SelectGlyph, func(s string) string { return selectedStyle.Render(s) }
+	}
+	if m.width < TimeMinWidth || h.LastConnectedAt == nil {
+		return paint(m.fit(prefix + Line(h)))
+	}
+	w := m.width - TimeWidth - 1
+	left := padRight(ansi.Truncate(prefix+Line(h), w, "…"), w)
+	ago := Ago(*h.LastConnectedAt, now)
+	return paint(left) + " " + dimStyle.Render(strings.Repeat(" ", max(TimeWidth-lipgloss.Width(ago), 0))+ago)
+}
+
+// Ago is the last-use time t as the host list shows it, relative to now
+// (FR-NAV-018): "just now" under a minute (or in the future), "5m ago"
+// under an hour, "2h ago" under a day, "3d ago" under 30 days, and then
+// the date in now's location: "Oct 12" in now's year, "Oct 2025" before.
+// It is at most TimeWidth columns wide.
+func Ago(t, now time.Time) string {
+	d := now.Sub(t)
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		return fmt.Sprintf("%dm ago", d/time.Minute)
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dh ago", d/time.Hour)
+	case d < 30*24*time.Hour:
+		return fmt.Sprintf("%dd ago", d/(24*time.Hour))
+	}
+	t = t.In(now.Location())
+	if t.Year() == now.Year() {
+		return t.Format("Jan 2")
+	}
+	return t.Format("Jan 2006")
 }
 
 // fit truncates s to the width with "…" (FR-NAV-001).

@@ -531,6 +531,24 @@ them in dependency order and rebase rather than resolve by hand.
 
 ---
 
+## v1
+
+v1 tasks are planned one at a time, ahead of the milestone outline below,
+when a product-owner decision pulls one forward. They follow the task
+conventions above. v1 requirements are not yet checked by
+`scripts/tracecheck`, so each task lists its tests here.
+
+### T-044 · Hosts ordered by last use
+
+- **Delivers:** D-016. `domain.Host.LastConnectedAt` stored as the optional `last_connected_at` (RFC 3339, UTC, whole seconds) in `config.json`, schema version unchanged, invalid values ignored with a warning; `domain.CompareLastUse` (newest first, never-connected A–Z by label); `app.Config.Now` as the clock seam; `app.Connect` records the time and saves atomically only after the session is established (authenticated and shell open), and a failed save does not fail the connect; `app` returns hosts in last-use order; the host list sorts with it, keeps the selection on the same host when the order changes, and is re-sorted after each `ConnectedMsg` (new tab or reconnect); `search.Filter` breaks equal scores by recency; a dim right-aligned relative time on each row (`just now`, `5m ago`, `2h ago`, `3d ago`, `Oct 12`, `Oct 2025`; blank when never connected), hidden below 60 columns. The README demo is re-recorded if the list looks different.
+- **Satisfies:** FR-NAV-018, FR-NAV-001 (v1 revision)
+- **Depends on:** T-043
+- **Tests:** `TestFR_NAV_018_StoreRoundTrip`, `TestFR_NAV_018_OldFileLoads`, `TestFR_NAV_018_InvalidTimeWarns`, `TestFR_NAV_018_Order` (recent first, never-connected A–Z, equal times), `TestFR_NAV_018_RecordedOnEstablished` (fake clock, sshtest), `TestFR_NAV_018_NotRecordedOnFailure` (auth failure, TOFU cancel, refused dial), `TestFR_NAV_018_SaveFailureKeepsSession`, `TestFR_NAV_018_EditKeepsTime`, `TestFR_NAV_018_ImportHasNoTime`, `TestFR_NAV_018_SearchTieBreak`, `TestFR_NAV_018_RelativeTime` (table), `TestFR_NAV_018_RowGolden` (80×24 and 120×40), `TestFR_NAV_018_NarrowHidesTime`, `TestFR_NAV_018_ResortKeepsSelection`, `TestFR_NAV_018_ReconnectResorts`; `FuzzLoadConfig` seeded with the new field; `TestNFR_PERF_001_Startup1k` and `TestNFR_PERF_002_Filter5k` still within their limits.
+- **Done when:** the tests pass with `-race`, lint is clean, `go run ./scripts/tracecheck` is green, and FR-NAV-018 and the FR-NAV-001 v1 revision are `Implemented`.
+- **Estimate:** 1 d
+
+---
+
 ## v1 milestones (outline)
 
 No task detail yet. Each milestone is planned as tasks once the MVP gate (T-030)
@@ -538,7 +556,7 @@ passes.
 
 | Milestone | Scope (requirement IDs) |
 |---|---|
-| **v1-A Organise** | Groups, nesting, collapse and inheritance (FR-GROUP-001 … FR-GROUP-005); tags and tag filter (FR-TAG-001, FR-TAG-002); clone, notes, favourites, reachability, details pane (FR-HOST-004 … FR-HOST-009); history (FR-HIST-001); highlighting, help, too-small, recent, sort, group filter, multi-select (FR-NAV-005 … FR-NAV-011); wider search (ARCH-UI-003) |
+| **v1-A Organise** | Groups, nesting, collapse and inheritance (FR-GROUP-001 … FR-GROUP-005); tags and tag filter (FR-TAG-001, FR-TAG-002); clone, notes, favourites, reachability, details pane (FR-HOST-004 … FR-HOST-009); history (FR-HIST-001); highlighting, help, too-small, recent, sort, group filter, multi-select (FR-NAV-005 … FR-NAV-011; the last-use order, FR-NAV-018, is T-044); wider search (ARCH-UI-003) |
 | **v1-B Connection extras** | ssh-agent (FR-CONN-007, SEC-AGENT-001); keepalive (FR-CONN-009, ARCH-SESS-007); agent forwarding (FR-CONN-011, SEC-AGENT-002, ARCH-SESS-009); startup command (FR-CONN-012); quick connect (FR-CONN-013). Reconnect and disconnect moved to M2 (FR-CONN-010, FR-CONN-014, ARCH-SESS-006, ARCH-SESS-008). |
 | **v1-C Jump hosts and forwarding** | FR-JUMP-001 … FR-JUMP-004, SEC-HOSTKEY-010, ARCH-SESS-012; forwarding rules, tunnels view and safety (FR-FWD-001 … FR-FWD-007, ARCH-SESS-013) |
 | **v1-D Snippets** | FR-SNIP-001 … FR-SNIP-006 |

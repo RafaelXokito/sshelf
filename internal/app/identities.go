@@ -412,7 +412,7 @@ const SecretsService = "sshelf"
 
 // DeletedIdentity is the result of DeleteIdentity.
 type DeletedIdentity struct {
-	// Hosts are every host after the delete, sorted by label; the ones
+	// Hosts are every host after the delete, in last-use order; the ones
 	// that used the identity are unlinked.
 	Hosts []domain.Host
 	// Identities are every identity left, hidden ones included.

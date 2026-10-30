@@ -36,7 +36,7 @@ type ImportReport struct {
 	NotImported []HostDirectives
 
 	// AllHosts and AllIdentities are the whole config after the import,
-	// sorted by label, for the UI to show.
+	// hosts in last-use order and identities by label, for the UI to show.
 	AllHosts      []domain.Host
 	AllIdentities []domain.Identity
 }

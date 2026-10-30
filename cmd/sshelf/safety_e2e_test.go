@@ -294,7 +294,9 @@ func TestSEC_LOG_001_CanaryHarnessM2(t *testing.T) {
 
 	// Tab 2: the stored password.
 	step("\x1dh", "enter connect")
-	step("k"+keyEnter, "[2 m2-stored]", "connected · alice@127.0.0.1")
+	// m2-typed moved to the top on connecting (FR-NAV-018): m2-stored is
+	// below it.
+	step("j"+keyEnter, "[2 m2-stored]", "connected · alice@127.0.0.1")
 	step("echo in-tab-2"+keyEnter, "in-tab-2")
 
 	// Switching, help and scrollback.

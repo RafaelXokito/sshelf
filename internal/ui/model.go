@@ -215,7 +215,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.identities = msg.Identities
-		m.screen = m.sized(hostsScreen(msg.Hosts))
+		m.screen = m.sized(m.hostsScreen(msg.Hosts))
 		return m, nil
 
 	case hostlist.AddHostMsg, welcome.AddHostMsg:
@@ -245,7 +245,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.identities = msg.Saved.Identities
 		}
 		m.modals = nil
-		m.screen = m.sized(hostlist.New(msg.Saved.Hosts).Select(h.ID))
+		m.screen = m.sized(hostlist.New(msg.Saved.Hosts).WithClock(m.now).Select(h.ID))
 		m.status = domain.Sanitize(strings.Join(append([]string{h.Label + ": saved"}, msg.Saved.Warnings...), "; "))
 		return m, nil
 
@@ -288,7 +288,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case importscreen.DoneMsg:
 		if r, ok := m.screen.(importscreen.Model); ok {
-			m.screen = m.sized(hostsScreen(r.Report().AllHosts))
+			m.screen = m.sized(m.hostsScreen(r.Report().AllHosts))
 		}
 		return m, nil
 
@@ -307,7 +307,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if l, ok := m.screen.(hostlist.Model); ok {
 			row = l.Cursor()
 		}
-		m.screen = m.sized(hostsScreen(msg.Hosts))
+		m.screen = m.sized(m.hostsScreen(msg.Hosts))
 		if l, ok := m.screen.(hostlist.Model); ok {
 			m.screen = l.SelectRow(row)
 		}
@@ -417,6 +417,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.cancelAttempt()
 		m.modals = nil
 		m.status = ""
+		m = m.markConnected(msg.HostID)
 		if t := m.attemptTabPtr(); t != nil {
 			return m.reconnected(t, msg.Session)
 		}
@@ -474,11 +475,26 @@ func (m Model) openForm(h domain.Host) Model {
 
 // hostsScreen is the host list, or the Welcome screen when there are no
 // hosts (FR-NAV-013).
-func hostsScreen(hosts []domain.Host) components.Screen {
+func (m Model) hostsScreen(hosts []domain.Host) components.Screen {
 	if len(hosts) == 0 {
 		return welcome.New()
 	}
-	return hostlist.New(hosts)
+	return hostlist.New(hosts).WithClock(m.now)
+}
+
+// markConnected re-sorts the host list, shown or kept behind a form, after
+// a session to the host with id was established (FR-NAV-018). The app has
+// recorded and saved the time; the list mirrors it with the UI's clock, so
+// it is in order by the time the user returns to the Hosts tab.
+func (m Model) markConnected(id domain.ID) Model {
+	now := m.now()
+	if l, ok := m.screen.(hostlist.Model); ok {
+		m.screen = l.Connected(id, now)
+	}
+	if l, ok := m.prev.(hostlist.Model); ok {
+		m.prev = l.Connected(id, now)
+	}
+	return m
 }
 
 // bodyHeight is the number of rows between the title and the status line.

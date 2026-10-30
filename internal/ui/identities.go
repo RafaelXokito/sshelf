@@ -155,7 +155,7 @@ func (m Model) updateIdentities(msg tea.Msg) (Model, tea.Cmd, bool) {
 		d := msg.Deleted
 		m.identities = d.Identities
 		// Hosts that used the identity are unlinked; keep the selection.
-		prev := hostsScreen(d.Hosts)
+		prev := m.hostsScreen(d.Hosts)
 		if old, ok := m.prev.(hostlist.Model); ok {
 			if l, ok := prev.(hostlist.Model); ok {
 				if h, ok := old.Selected(); ok {
