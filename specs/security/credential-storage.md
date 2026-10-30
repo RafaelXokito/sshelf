@@ -120,10 +120,19 @@ Decoding is tolerant of unknown fields (forward compatibility, FR-CFG-003). The 
   "hosts": [{
     "id": "uuid", "label": "db 1", "hostname": "db1.example.com", "port": 22,
     "user": "", "identity_id": "9b1c…", "group_id": "uuid", "tags": ["pg"],
-    "jump_host_ids": [], "forward_agent": false
+    "jump_host_ids": [], "forward_agent": false,
+    "last_connected_at": "2026-10-30T09:00:00Z" // optional (FR-NAV-018)
   }]
 }
 ```
+
+`last_connected_at` is optional: the time of the host's last established
+session, as RFC 3339 in UTC with whole seconds, written on each one
+(FR-NAV-018, D-016). It is absent for a host never connected, including every
+imported host. It was added without a version bump: it is additive, a file
+without it loads as before, and an older build ignores it (tolerant decoding)
+but drops it when it saves. A value that does not parse as RFC 3339 is
+ignored with a warning, never refused. It is not a secret.
 
 `domain.Host` (`internal/domain`, see `../architecture/design.md` §7) maps onto `hosts[]`. The `has_*` flags are hints, not proof: the store is
 the source of truth, and a missing item means "not set on this device" (SEC-CRED-007).

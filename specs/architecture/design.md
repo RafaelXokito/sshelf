@@ -857,6 +857,17 @@ func Save(path string, s *Snapshot) error
 `app` holds the one in-memory snapshot and saves after each mutation. A
 `config.json` with a newer `Version` is refused, never downgraded.
 
+The host list order (FR-NAV-018, D-016) is one function,
+`domain.CompareLastUse`: `LastConnectedAt` newest first, then the hosts
+without it A–Z by label, case-insensitively. `app` returns hosts in that
+order, the host list sorts with it, and `search` breaks equal scores with
+the same recency. `app.Connect` sets `LastConnectedAt` from its clock
+(`Config.Now`, `time.Now` by default) only after `session.New` returned a
+session, that is after authentication and the shell request succeeded, and
+saves; a failed save is logged and does not fail the connect. The UI marks
+the same host on `ConnectedMsg` with its own clock, so that the list is
+re-sorted without another call into `app`.
+
 ### 6.2 `secrets`: OS credential store
 
 The `secrets` API is owned by `security/credential-storage.md` §5; this is a
@@ -903,7 +914,7 @@ type Host struct {
 	ForwardIDs  []ID     // ForwardRules started with this host (v1)
 	Options     HostOptions
 	Favorite    bool
-	LastConnectedAt *time.Time
+	LastConnectedAt *time.Time // last established session, UTC (FR-NAV-018); nil = never
 	Import      *ImportSource // nil when created in sshelf
 }
 

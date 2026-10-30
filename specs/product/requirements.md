@@ -583,6 +583,9 @@ The system shall display each host as one line showing the label and `user@hostn
   - Port 22 is omitted from the display.
   - Lines wider than the terminal are truncated with `…`.
   - With no hosts, the Welcome screen (FR-NAV-013) is shown instead of the list.
+- **v1 revision** · Priority: v1 · Status: Draft · Source: D-016
+  - *Revised:* The system shall display each host as one line showing the label and `user@hostname:port`, in the order of FR-NAV-018.
+  - *Acceptance:* the criteria above, with the order, the relative time and the narrow-terminal rule of FR-NAV-018.
 
 ### FR-NAV-002 · Fuzzy search
 When the user types in the search field, the system shall filter the host list to hosts whose label, hostname or username fuzzy-matches the query, ordered by match score, and Enter shall connect to the selected result.
@@ -645,6 +648,7 @@ When the user cycles the sort mode, the system shall order hosts within each gro
 - **Priority:** v1 · **Status:** Draft
 - **Acceptance:**
   - Each sort mode orders a fixture list as expected, and the chosen mode is still active after a restart.
+  - The default mode is last use (FR-NAV-018, D-016).
 
 ### FR-NAV-010 · Group filter token
 When the search query contains a token `g:<name>`, the system shall show only hosts in groups whose path contains `<name>`, including subgroups.
@@ -715,6 +719,21 @@ While the Hosts tab is focused and no modal is open, when the user clicks a tab 
 - **Acceptance:**
   - A click on `2 web-prod` focuses that session tab; a click on `sshelf` or a separator does nothing.
   - While a session tab is focused, tabs are switched with the keyboard (FR-TAB-005, D-012): header clicks are either not reported (mouse tracking off) or ignored (FR-TAB-011).
+
+### FR-NAV-018 · Hosts ordered by last use
+The system shall order the host list by the time each host's last session was established, most recent first, followed by the hosts never connected in A–Z order by label, and show that time on each row as a dim relative time.
+
+- **Priority:** v1 · **Status:** Draft · **Source:** D-016
+- **Acceptance:**
+  - A session counts once it is established: authenticated and its shell (or remote command) opened (ARCH-SESS-002). sshelf then sets the host's `last_connected_at` to the current time (RFC 3339, UTC, whole seconds) and writes `config.json` through the atomic save (SEC-FILE-003). Reconnecting an ended tab (FR-CONN-010) counts.
+  - A failed dial, a cancelled TOFU prompt (FR-KH-001), an authentication failure or cancel, a session that could not be opened and a cancelled attempt leave `last_connected_at` and `config.json` unchanged.
+  - If that write fails, the session still opens; the time is kept in memory and written with the next save.
+  - Order: `last_connected_at` newest first; hosts without it come after, A–Z by label, case-insensitively; equal times are A–Z by label. The list is re-sorted by the time the user returns to the Hosts tab, and the selection stays on the same host when the order changes under it (as FR-NAV-002 and FR-CONN-005 keep it).
+  - Search (FR-NAV-002) orders by match score; for equal scores the more recently used host comes first, then the list order.
+  - Each row ends with the time, right-aligned and dim: `just now` (under a minute, or in the future), `5m ago` (under an hour), `2h ago` (under a day), `3d ago` (under 30 days), then the local date, `Oct 12` in the current year and `Oct 2025` before it. A never-connected host shows nothing there.
+  - The time column is hidden while the list is narrower than 60 columns; rows are truncated as in FR-NAV-001. Goldens at 80×24 and 120×40.
+  - `last_connected_at` is optional (credential-storage §3.3): a `config.json` without it loads with every host never connected, the field round-trips, and the schema version stays 1. A value that is not an RFC 3339 time is ignored with a one-line warning, like an unknown setting (FR-CFG-003).
+  - Imported hosts (FR-IMPORT-001) have no time. Editing a host (FR-HOST-001) keeps its time.
 
 ---
 
@@ -1109,6 +1128,7 @@ When an interactive session to a host is established, the system shall record th
 - **Priority:** v1 · **Status:** Draft
 - **Acceptance:**
   - The details pane shows "Last connected 3 h ago (42 times)". The data feeds FR-NAV-008 and FR-NAV-009.
+  - The time itself is recorded by FR-NAV-018; this requirement adds the count and the details pane.
 
 ### FR-HIST-002 · Session transcript logging
 Where session logging is enabled for a host, the system shall write the session's output to a log file named with the host label and start time.
