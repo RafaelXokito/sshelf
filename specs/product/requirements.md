@@ -508,20 +508,14 @@ When the user enters `[user@]host[:port]` in the quick-connect prompt, the syste
   - `root@10.0.0.5:2222` connects as `root` on port 2222 and creates no host until the user accepts the save offer.
 
 ### FR-CONN-014 · Disconnect with the prefix key
-While a session tab is focused, when the user presses the prefix key followed by `q` and confirms, the system shall close that session and its tab.
+While a session tab is focused, when the user presses the prefix key followed by `q` and confirms, the system shall close that session and its tab, and shall close its SSH connection unless an SFTP tab still uses it.
 
-- **Priority:** M2 · **Status:** Implemented · **Source:** D-009 (replaces the v1 `~.` escape; one way to do it, D-007)
+- **Priority:** M3 · **Status:** Implemented · **Source:** D-009 (replaces the v1 `~.` escape; one way to do it, D-007); M3: D-018 (the SFTP tab reuses the session's connection)
 - **Acceptance:**
-  - `Ctrl+]` `q` opens "Disconnect web-prod?" defaulting to No. `y` closes the SSH connection and the tab and focuses the tab to its left; `n`, Enter and Esc keep the session.
+  - With no SFTP tab on the connection: `Ctrl+]` `q` opens "Disconnect web-prod?" defaulting to No; `y` closes the session channel, the SSH connection and the tab, and focuses the tab to its left; `n`, Enter and Esc keep the session.
+  - With an SFTP tab on the same connection: the question is "Close this web-prod session? SFTP tab 3 stays connected."; `y` closes the session channel and the tab only, and the SFTP tab keeps listing and transferring (sshtest records the session channel close and no connection close).
   - sshtest records the channel close within 1 s.
   - Typing `~.` at the start of a line is sent to the remote like any other text.
-- **M3 revision** · Priority: M3 · Status: Implemented · Source: D-018 (the SFTP tab reuses the session's connection)
-  - *Revised:* While a session tab is focused, when the user presses the prefix key followed by `q` and confirms, the system shall close that session and its tab, and shall close its SSH connection unless an SFTP tab still uses it.
-  - *Acceptance:*
-    - With no SFTP tab on the connection: `Ctrl+]` `q` opens "Disconnect web-prod?" defaulting to No; `y` closes the session channel, the SSH connection and the tab, and focuses the tab to its left; `n`, Enter and Esc keep the session.
-    - With an SFTP tab on the same connection: the question is "Close this web-prod session? SFTP tab 3 stays connected."; `y` closes the session channel and the tab only, and the SFTP tab keeps listing and transferring (sshtest records the session channel close and no connection close).
-    - sshtest records the channel close within 1 s.
-    - Typing `~.` at the start of a line is sent to the remote like any other text.
 
 ### FR-CONN-015 · Connection hooks
 Where a host defines an on-connect or on-disconnect local command, the system shall run it when the session starts or ends, with the host label in the environment variable `SSHELF_HOST`.
@@ -1031,7 +1025,7 @@ sshelf │ Hosts │ 1 raspberrypi4 │[2 sftp: raspberrypi4]│
 (ADR-016); there is no FTP and no SCP. Remote names and paths are untrusted
 input (D-020, `SEC-SFTP-*`). Keys in this section apply while an SFTP tab is
 focused, no modal is open and the prefix key is not pending; the prefix key
-works on SFTP tabs as on session tabs (FR-TAB-005 M3 revision).
+works on SFTP tabs as on session tabs (FR-TAB-005).
 
 FR-SFTP-001 and FR-SFTP-002 were `Later` placeholders ("Transfer a single
 file", "SFTP browser"); M3 rewords and promotes them rather than adding
@@ -1057,7 +1051,7 @@ When the user presses `s` on a host in the host list, the system shall connect t
   - Dialling, host-key checks (TOFU, changed key), prompts and authentication happen exactly as for `enter` (FR-TAB-002, ARCH-SESS-002); no tab opens if any of them fails or is cancelled.
   - The connection opens no shell and no PTY: sshtest records one `subsystem sftp` request per SFTP channel and no `pty-req` or `shell`.
   - If the server refuses the SFTP subsystem, no tab opens, the connection is closed, and the status line says "<label>: the server does not offer SFTP".
-  - The tab is labelled `<n> sftp: <label>` (FR-TAB-003 M3 revision). Pressing `s` twice on the same host opens two SFTP tabs with two connections.
+  - The tab is labelled `<n> sftp: <label>` (FR-TAB-003). Pressing `s` twice on the same host opens two SFTP tabs with two connections.
   - `s` is listed in the host list's help and footer when there is room (FR-NAV-004).
 
 ### FR-SFTP-003 · Open SFTP from a session without logging in again
@@ -1249,7 +1243,7 @@ While an SFTP tab is focused and no modal is open, the system shall focus the pa
 
 - **Priority:** M3 · **Status:** Implemented · **Source:** D-011, D-017
 - **Acceptance:**
-  - Mouse tracking is on (cell motion) while an SFTP tab is focused (ARCH-UI-006 M3 revision); the terminal's own text selection is not available there, as on the Hosts tab.
+  - Mouse tracking is on (cell motion) while an SFTP tab is focused (ARCH-UI-006); the terminal's own text selection is not available there, as on the Hosts tab.
   - A click on a row focuses its pane and moves the cursor there; a click on a pane's border focuses that pane only. A double-click (ARCH-UI-007) on a directory opens it, and on a file does nothing.
   - Each wheel notch scrolls the pane under the pointer 3 rows, without changing focus.
   - A click on a tab in the tab bar focuses that tab, as on the Hosts tab (FR-NAV-017). A click on the progress line opens the transfers view (as `t`); a click on the footer does nothing.
@@ -1333,21 +1327,18 @@ When a connection started from the host list succeeds, the system shall open a n
   - The host list stays fully usable while sessions run: the user can add, edit, delete or connect to hosts.
 
 ### FR-TAB-003 · Tab bar
-The system shall show a one-line header that starts with `sshelf`, then the `Hosts` tab, then one entry `<number> <host label>` per session tab, separated by `│`, with the focused tab highlighted.
+The system shall show a one-line header that starts with `sshelf`, then the `Hosts` tab, then one entry per session tab (`<number> <host label>`) and per SFTP tab (`<number> sftp: <host label>`) in opening order, separated by `│`, with the focused tab highlighted.
 
-- **Priority:** M2 · **Status:** Implemented · **Source:** D-009, D-010
+- **Priority:** M3 · **Status:** Implemented · **Source:** D-009, D-010; M3: D-017
 - **Acceptance:**
   - The focused tab is shown in reverse video, and its padding spaces are replaced by `[` and `]` (`│[2 web-prod]│`), so focus is not shown by colour alone (NFR-UX-003).
   - Labels are sanitised (SEC-SESSION-003) and cut to 20 columns with `…`. A tab shows the host label only; a window title set by the remote (OSC 0 or 2) is never shown (SEC-SESSION-005).
   - If the tabs do not fit, the bar keeps the focused tab visible and replaces the hidden tabs with `‹+N` on the left and `+N›` on the right. At 80 columns, 10 tabs with 12-character labels fit on one line (golden).
   - The header is shown on every screen, the Hosts tab and the Welcome screen included, and replaces the MVP's `sshelf` title line.
-- **M3 revision** · Priority: M3 · Status: Implemented · Source: D-017
-  - *Revised:* The system shall show a one-line header that starts with `sshelf`, then the `Hosts` tab, then one entry per session tab (`<number> <host label>`) and per SFTP tab (`<number> sftp: <host label>`) in opening order, separated by `│`, with the focused tab highlighted.
-  - *Acceptance:* the M2 criteria above, unchanged, plus:
-    - Session and SFTP tabs share one numbering, so `Ctrl+]` `1`–`9` address both. Numbers are not reused.
-    - The text after the number (`sftp: raspberrypi4`) is sanitised and cut to 20 columns with `…`, as a session label is.
-    - Golden at 80×24 of the approved layout's header: `sshelf │ Hosts │ 1 raspberrypi4 │[2 sftp: raspberrypi4]│`.
-    - An SFTP tab shows `●` when a transfer finishes or fails while the tab is in the background, and `✕` while its connection is lost (FR-SFTP-018), with the rules of FR-TAB-004.
+  - Session and SFTP tabs share one numbering, so `Ctrl+]` `1`–`9` address both. Numbers are not reused.
+  - The text after the number (`sftp: raspberrypi4`) is sanitised and cut to 20 columns with `…`, as a session label is.
+  - Golden at 80×24 of the approved layout's header: `sshelf │ Hosts │ 1 raspberrypi4 │[2 sftp: raspberrypi4]│`.
+  - An SFTP tab shows `●` when a transfer finishes or fails while the tab is in the background, and `✕` while its connection is lost (FR-SFTP-018), with the rules of FR-TAB-004.
 
 ### FR-TAB-004 · Activity and end markers
 While a session tab is not focused, when its session receives output, the system shall mark that tab with `●` until it is focused; and when a session ends, the system shall mark its tab with `✕` until it is reconnected or closed.
@@ -1359,21 +1350,18 @@ While a session tab is not focused, when its session receives output, the system
   - Replies the emulator itself sends to the remote (ARCH-SESS-016) do not set the marker; only bytes received from the remote do.
 
 ### FR-TAB-005 · Prefix key
-While any tab is focused and no modal is open, when the user presses `Ctrl+]`, the system shall treat the next key as a tab command (`q` disconnect, `?` help, `h` or `0` Hosts tab, `1`–`9` tab, `n` next tab, `p` previous tab, `[` scrollback mode, `Ctrl+]` send a literal `Ctrl+]`) and shall send neither key to the remote.
+While any tab is focused and no modal is open, when the user presses `Ctrl+]`, the system shall treat the next key as a tab command (`q` disconnect or close, `?` help, `h` or `0` Hosts tab, `1`–`9` tab, `n` next tab, `p` previous tab, `[` scrollback mode, `s` SFTP tab for this host, `Ctrl+]` send a literal `Ctrl+]`) and shall send neither key to the remote.
 
-- **Priority:** M2 · **Status:** Implemented · **Source:** D-009, D-010 (the preview approved by the product owner)
+- **Priority:** M3 · **Status:** Implemented · **Source:** D-009, D-010 (the preview approved by the product owner); M3: D-017, D-018
 - **Acceptance:**
   - Each command has a unit test on the prefix state machine and a test through the root model.
   - `Ctrl+]` `Ctrl+]` sends exactly one byte, `0x1d`, to the remote.
   - After `Ctrl+]`, the status bar shows `Ctrl+] …` until the next key. Esc, or any key that is not a command, cancels the prefix and is not sent to the remote. There is no timeout.
   - `Ctrl+]` `?` opens a help overlay listing every prefix command, generated from `ui/keys` (ARCH-UI-004); `?` or Esc closes it.
   - On the Hosts tab the prefix key works on every screen, including while a text field is focused; `q` and `[` do nothing there.
-- **M3 revision** · Priority: M3 · Status: Implemented · Source: D-017, D-018
-  - *Revised:* While any tab is focused and no modal is open, when the user presses `Ctrl+]`, the system shall treat the next key as a tab command (`q` disconnect or close, `?` help, `h` or `0` Hosts tab, `1`–`9` tab, `n` next tab, `p` previous tab, `[` scrollback mode, `s` SFTP tab for this host, `Ctrl+]` send a literal `Ctrl+]`) and shall send neither key to the remote.
-  - *Acceptance:* the M2 criteria above, unchanged, plus:
-    - `Ctrl+]` `s` on a live session tab opens or focuses the SFTP tab on that session's connection (FR-SFTP-003); on an ended session tab it opens an SFTP tab for the same host through the normal connect flow (FR-SFTP-002); on the Hosts tab and on an SFTP tab it does nothing.
-    - On an SFTP tab, `Ctrl+]` `q` closes that tab (FR-SFTP-025) and `Ctrl+]` `[` does nothing. Every other prefix command works there as on a session tab.
-    - The help overlay lists `s`.
+  - `Ctrl+]` `s` on a live session tab opens or focuses the SFTP tab on that session's connection (FR-SFTP-003); on an ended session tab it opens an SFTP tab for the same host through the normal connect flow (FR-SFTP-002); on the Hosts tab and on an SFTP tab it does nothing.
+  - On an SFTP tab, `Ctrl+]` `q` closes that tab (FR-SFTP-025) and `Ctrl+]` `[` does nothing. Every other prefix command works there as on a session tab.
+  - The help overlay lists `s`.
 
 ### FR-TAB-006 · Keys and paste go to the focused session
 While a live session tab is focused and neither the prefix key, an overlay nor scrollback mode is active, the system shall send every key press and paste to that session's remote, encoded according to the emulator's current modes.
@@ -1403,20 +1391,14 @@ While a session tab is not focused, the system shall keep reading that session's
   - The remote is slowed down only when the emulator cannot keep up, never because its tab is in the background (ARCH-SESS-014).
 
 ### FR-TAB-009 · Quit with open sessions
-When the user quits sshelf (`q` on the host list or the Welcome screen, or Ctrl+C on the Hosts tab) while at least one session is live, the system shall ask "Quit and close N sessions?" and quit only on `y`.
+When the user quits sshelf (`q` on the host list or the Welcome screen, or Ctrl+C on the Hosts tab) while at least one session is live, an SFTP tab is connected, or a transfer is queued, running or paused, the system shall ask "Quit and close N tabs?", followed by "M transfers will stop." when M is not zero, and quit only on `y`.
 
-- **Priority:** M2 · **Status:** Implemented · **Source:** D-010
+- **Priority:** M3 · **Status:** Implemented · **Source:** D-010; M3: D-017, D-018
 - **Acceptance:**
-  - The confirmation defaults to No: `n`, Enter and Esc keep sshelf running with every session intact.
-  - Ended tabs do not count. With no live session, `q` quits at once as in the MVP.
-  - SIGTERM and SIGHUP close every session without asking, restore the terminal and exit 0.
-- **M3 revision** · Priority: M3 · Status: Implemented · Source: D-017, D-018
-  - *Revised:* When the user quits sshelf (`q` on the host list or the Welcome screen, or Ctrl+C on the Hosts tab) while at least one session is live, an SFTP tab is connected, or a transfer is queued, running or paused, the system shall ask "Quit and close N tabs?", followed by "M transfers will stop." when M is not zero, and quit only on `y`.
-  - *Acceptance:*
-    - N counts live session tabs and SFTP tabs that are connected or have paused transfers; M counts queued, running, paused and waiting transfers in every SFTP tab.
-    - The confirmation defaults to No: `n`, Enter and Esc keep sshelf running with every session and transfer intact.
-    - On `y`, every transfer is cancelled as in FR-SFTP-015 (partial files removed), then every connection is closed. With nothing live and no transfer, `q` quits at once.
-    - SIGTERM and SIGHUP do the same without asking, restore the terminal and exit 0.
+  - N counts live session tabs and SFTP tabs that are connected or have paused transfers; M counts queued, running, paused and waiting transfers in every SFTP tab.
+  - The confirmation defaults to No: `n`, Enter and Esc keep sshelf running with every session and transfer intact.
+  - On `y`, every transfer is cancelled as in FR-SFTP-015 (partial files removed), then every connection is closed. With nothing live and no transfer, `q` quits at once.
+  - SIGTERM and SIGHUP do the same without asking, restore the terminal and exit 0.
 
 ### FR-TAB-010 · Scrollback mode
 While a session tab is focused, when the user presses the prefix key followed by `[`, the system shall show the session's scrollback and screen as one view that PgUp, PgDn, the arrow keys, `g` and `G` move, until the user presses Esc.
@@ -1611,3 +1593,14 @@ which the product owner may still change:
 6. **One SFTP tab per connection.** `Ctrl+]` `s` focuses the existing SFTP
    tab of that connection rather than opening a second one, so "the queue
    per connection" is also "the queue per SFTP tab" (FR-SFTP-003).
+7. **Keystrokes during a transfer on the same connection** (raised by
+   T-058). An upload keeps 64 requests in flight (ADR-016), and they sit on
+   the TCP connection ahead of a session's keys, so on the CI runners a key
+   took 8 to 17 ms at p99 against NFR-PERF-004's 5 ms. **D-021: up to 50 ms
+   (p99) while a transfer shares the connection**, with full upload speed;
+   5 ms still holds with no transfer on it (NFR-PERF-008).
+
+Status at the M3 gate (T-059): question 7 is answered by D-021. No
+product-owner objection to choices 1 to 6 is recorded; they ship as
+specified, and the M3 acceptance run (`acceptance.md`) is where the product
+owner confirms them.

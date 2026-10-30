@@ -260,7 +260,7 @@ process is `/usr/bin/security`, run by `zalando/go-keyring` on macOS, which
 D-008 accepts. A single Go test is enough; there is no extra linter
 configuration (D-007).
 
-*M3 revision (ADR-019):* `internal/ui/editor` is the one sshelf package
+*M3 (ADR-019):* `internal/ui/editor` is the one sshelf package
 allowed to import `os/exec`, to run the user's editor for edit-locally
 (D-019). archtest checks that exception by name.
 
@@ -569,7 +569,10 @@ whole file system; `WithServerWorkingDirectory` is not a chroot) and
    sshelf opens the browse channel itself and passes it to `NewClientPipe`
    behind a counting reader, so a listing that has read more than 64 MiB is
    cancelled, then cuts the result at 100,000 entries (SEC-SFTP-004,
-   ARCH-SFTP-002). An upstream issue asks for a limit or an iterator.
+   ARCH-SFTP-002). Upstream status (checked 2026-10-30, T-059): still
+   open. pkg/sftp issue #187 proposes a bounded `(*File).Readdir(n)`; no
+   release after v1.13.12 adds one, and the v2 rework (issue #648) is not
+   released. sshelf keeps its own limits; re-check on every upgrade.
 2. **Names are rewritten.** `ReadDirContext` drops `.` and `..` and reduces
    every name with `path.Base`, so `../x` arrives as `x` and `x/..` as `..`;
    the server's `longname` is discarded. SEC-SFTP-001 checks what the library
@@ -779,7 +782,7 @@ hand. (a) is the least code (D-007).
   ran, sets activity markers for tabs that received output, and redraws.
 
 **Consequences.** One child process besides `/usr/bin/security`, documented in
-SEC-MEM-008's M3 revision and ARCH-SESS-001's. While the editor runs the user
+SEC-MEM-008 and ARCH-SESS-001 (M3). While the editor runs the user
 sees only the editor; sshelf's tabs are not visible until it exits.
 
 ### ADR-020: The SFTP tab lives in the root model; its view is `ui/sftpview` (extends ADR-014 and ADR-015)
@@ -789,7 +792,7 @@ sees only the editor; sshelf's tabs are not visible until it exits.
 **Decision.**
 
 - The root model's tab list holds session tabs and SFTP tabs in one opening
-  order with one numbering (FR-TAB-003 M3 revision). An SFTP tab entry holds
+  order with one numbering (FR-TAB-003). An SFTP tab entry holds
   its number, host ID and label, the `app.Browser`, its `sftpview.Model`, and
   its connection state.
 - `internal/ui/sftpview` is the SFTP tab's view: the two panes, the progress
@@ -803,9 +806,9 @@ sees only the editor; sshelf's tabs are not visible until it exits.
   columns. Below 80×24 the frame's general too-small rule applies (FR-NAV-007,
   v1).
 - **Mouse.** The SFTP tab is an sshelf screen: mouse mode is cell motion
-  (ARCH-UI-006 M3 revision). Unlike the other sshelf screens it also uses
+  (ARCH-UI-006). Unlike the other sshelf screens it also uses
   motion with the left button held and the release, for dragging
-  (ARCH-UI-007 M3 revision). Tab-bar clicks work on it as on the Hosts tab.
+  (ARCH-UI-007). Tab-bar clicks work on it as on the Hosts tab.
 - **Keys.** The routing order of §9.4 holds, with the SFTP tab in step 4:
   the filter field takes text while it is focused, then the transfers view's
   keys while it is shown, then the panes' keys (§9.6).
@@ -824,12 +827,9 @@ removed in revision 2.
 
 ### 4.1 Sessions (`ARCH-SESS`)
 
-**ARCH-SESS-001**: The system shall open SSH sessions in process with `golang.org/x/crypto/ssh` and shall start no child process other than the `/usr/bin/security` calls made by `zalando/go-keyring` on macOS (D-008).
-- Priority: MVP · Status: Implemented
-- Acceptance: `archtest` finds no import of `os/exec` in any sshelf package. A connect test against the in-process server passes on a machine without OpenSSH installed.
-- **M3 revision** · Priority: M3 · Status: Implemented · Source: D-019, ADR-019
-  - *Revised:* The system shall open SSH sessions and SFTP channels in process with `golang.org/x/crypto/ssh` and `github.com/pkg/sftp`, and shall start no child process other than the `/usr/bin/security` calls made by `zalando/go-keyring` on macOS (D-008) and the user's editor, started by `internal/ui/editor` for edit-locally (D-019).
-  - *Acceptance:* `archtest` finds `os/exec` imported by `internal/ui/editor` and by no other sshelf package (a fixture module with `os/exec` in another package fails). A connect test and an SFTP listing against the in-process server pass on a machine without OpenSSH installed.
+**ARCH-SESS-001**: The system shall open SSH sessions and SFTP channels in process with `golang.org/x/crypto/ssh` and `github.com/pkg/sftp`, and shall start no child process other than the `/usr/bin/security` calls made by `zalando/go-keyring` on macOS (D-008) and the user's editor, started by `internal/ui/editor` for edit-locally (D-019).
+- Priority: M3 · Status: Implemented · Source: D-019, ADR-019
+- Acceptance: `archtest` finds `os/exec` imported by `internal/ui/editor` and by no other sshelf package (a fixture module with `os/exec` in another package fails). A connect test and an SFTP listing against the in-process server pass on a machine without OpenSSH installed.
 
 **ARCH-SESS-002**: When the user connects to a host, the system shall finish dialling, host-key verification and authentication before it opens the session's tab.
 - Priority: M2 · Status: Implemented · Source: D-009, D-010 (the MVP finished them before releasing the terminal)
@@ -855,12 +855,9 @@ removed in revision 2.
 - Priority: v1 · Source: FR-CONN-009
 - Acceptance: With a server that stops replying and a fake clock, the session ends with `ErrKeepaliveTimeout`. An interval of 0 disables keepalives.
 
-**ARCH-SESS-008**: When a session ends, the system shall report the cause to the UI exactly once, as `nil` (exit 0), `*ExitError`, `*DisconnectError` or `ErrInternal`, after its connection is closed.
-- Priority: M2 · Status: Implemented · Source: FR-CONN-005 revision, FR-CONN-010 (replaces the v1 "Disconnected" modal: the ended tab shows the cause and offers `r`)
-- Acceptance: Table test over sshtest's `exit 0`, `exit 3`, signal, dropped connection and a forced panic: `Err()` returns the right type, `Updates()` is closed exactly once after `Done()`, and sshtest has seen the connection close. Pressing `r` on the ended tab produces a `ConnectRequestMsg` with the same host ID and the tab's number.
-- **M3 revision** · Priority: M3 · Status: Implemented · Source: D-018, ADR-017
-  - *Revised:* When a session ends, the system shall report the cause to the UI exactly once, as `nil` (exit 0), `*ExitError`, `*DisconnectError` or `ErrInternal`, after its channel is closed and its connection lease is released.
-  - *Acceptance:* The M2 table test, with "sshtest has seen the connection close" replaced by: sshtest has seen the session channel close, and the connection close too when the session held the only lease. With a second lease held by an SFTP browser, `exit 0` ends the session with `nil` and sshtest records no connection close; a dropped connection ends it with `*DisconnectError`. Pressing `r` on the ended tab produces a `ConnectRequestMsg` with the same host ID and the tab's number.
+**ARCH-SESS-008**: When a session ends, the system shall report the cause to the UI exactly once, as `nil` (exit 0), `*ExitError`, `*DisconnectError` or `ErrInternal`, after its channel is closed and its connection lease is released.
+- Priority: M3 · Status: Implemented · Source: FR-CONN-005 revision, FR-CONN-010 (replaces the v1 "Disconnected" modal: the ended tab shows the cause and offers `r`); M3: D-018, ADR-017
+- Acceptance: Table test over sshtest's `exit 0`, `exit 3`, signal, dropped connection and a forced panic: `Err()` returns the right type, `Updates()` is closed exactly once after `Done()`, and sshtest has seen the session channel close, and the connection close too when the session held the only lease. With a second lease held by an SFTP browser, `exit 0` ends the session with `nil` and sshtest records no connection close; a dropped connection ends it with `*DisconnectError`. Pressing `r` on the ended tab produces a `ConnectRequestMsg` with the same host ID and the tab's number.
 
 **ARCH-SESS-009**: Where agent forwarding is enabled for a host, the system shall forward the local ssh-agent (`SSH_AUTH_SOCK`) to the server, and shall never forward an agent by default.
 - Priority: v1
@@ -971,13 +968,10 @@ removed in revision 2.
 
 ### 4.5 UI (`ARCH-UI`)
 
-**ARCH-UI-001**: The system shall run one root Bubble Tea model that holds the Hosts tab (one active screen and a stack of modal overlays, as in the MVP) and the session tabs, routes every message to the focused tab, the modal stack or the sessions as defined in §9, and draws the frame around them.
-- Priority: M2 · Status: Implemented · Source: D-009, D-010, ADR-015
-- Acceptance: An M2 walk-through (start, list, connect with a stub session, tab opens, `Ctrl+]` `h`, connect a second host, `Ctrl+]` `1`, remote `exit 3`, ended tab, `x`, list with the host selected) matches its golden files. The MVP walk-through (start, list, edit, save, connect, TOFU, stub session, back) still passes with the header line in place of the title. Both drive the root model directly, the way `tea.Program` does, without `teatest` (see the golden convention in `tasks.md`).
+**ARCH-UI-001**: The system shall run one root Bubble Tea model that holds the Hosts tab (one active screen and a stack of modal overlays, as in the MVP), the session tabs and the SFTP tabs, routes every message to the focused tab, the modal stack, the sessions or the SFTP browsers as defined in §9, and draws the frame around them.
+- Priority: M3 · Status: Implemented · Source: D-009, D-010, ADR-015; M3: D-017, ADR-020
+- Acceptance: An M2 walk-through (start, list, connect with a stub session, tab opens, `Ctrl+]` `h`, connect a second host, `Ctrl+]` `1`, remote `exit 3`, ended tab, `x`, list with the host selected) matches its golden files. The MVP walk-through (start, list, edit, save, connect, TOFU, stub session, back) still passes with the header line in place of the title. Both drive the root model directly, the way `tea.Program` does, without `teatest` (see the golden convention in `tasks.md`). An M3 walk-through (host list, `s` on a host, TOFU, SFTP tab opens, `tab`, `enter` into a directory, `c`, progress line, `t`, Esc, `Ctrl+]` `h`, `enter` on another host, `Ctrl+]` `s`, the existing SFTP tab is not reused because the connection differs, `Ctrl+]` `q` on the SFTP tab, confirm) matches its golden files, driven through the root model with a fake `app.Browser`.
 - Note: a modal that answers a running connection attempt (auth prompt, TOFU) is popped in the `Update` that delivers the answer, not when its `DoneMsg` arrives, so a late `DoneMsg` can never close the next prompt.
-- **M3 revision** · Priority: M3 · Status: Implemented · Source: D-017, ADR-020
-  - *Revised:* The system shall run one root Bubble Tea model that holds the Hosts tab (one active screen and a stack of modal overlays, as in the MVP), the session tabs and the SFTP tabs, routes every message to the focused tab, the modal stack, the sessions or the SFTP browsers as defined in §9, and draws the frame around them.
-  - *Acceptance:* The M2 walk-through still passes. An M3 walk-through (host list, `s` on a host, TOFU, SFTP tab opens, `tab`, `enter` into a directory, `c`, progress line, `t`, Esc, `Ctrl+]` `h`, `enter` on another host, `Ctrl+]` `s`, the existing SFTP tab is not reused because the connection differs, `Ctrl+]` `q` on the SFTP tab, confirm) matches its golden files, driven through the root model with a fake `app.Browser`.
 
 **ARCH-UI-002**: The system shall perform all I/O (config, keychain, SSH, filesystem) in `tea.Cmd` values or goroutines that report back with messages, never inside `Update`.
 - Priority: MVP · Status: Implemented
@@ -991,26 +985,17 @@ removed in revision 2.
 - Priority: MVP · Status: Implemented
 - Acceptance: A test checks that every binding has help text and that no two bindings in the same screen share a key.
 
-**ARCH-UI-005**: The system shall draw every frame as one header row with the tab bar, then either the Hosts tab's MVP layout (blank row, screen and modals, status line, footer) or a session tab's area of `height − 2` rows, then the session's status bar, with no line wider than the terminal.
-- Priority: M2 · Status: Implemented · Source: D-009, FR-TAB-003, FR-TAB-007, NFR-UX-002
-- Acceptance: Goldens at 80×24 and 120×40 of: the host list with no sessions, the host list with 3 tabs, a live session (replayed `htop`), a session with a modal open, an ended session, scrollback mode, the prefix help overlay, and 10 tabs with overflow markers. The NFR-UX-002 helper checks widths; for session tabs it checks that the last line is the status bar. The cursor reported in `tea.View.Cursor` is the remote cursor shifted down one row, or nil when the remote hides it or a modal is open.
-- **M3 revision** · Priority: M3 · Status: Implemented · Source: D-017, FR-SFTP-023
-  - *Revised:* The system shall draw every frame as one header row with the tab bar, then either the Hosts tab's MVP layout (blank row, screen and modals, status line, footer), a session tab's area of `height − 2` rows and its status bar, or an SFTP tab's two panes side by side, its progress line and its footer, with no line wider than the terminal.
-  - *Acceptance:* The M2 goldens, plus at 80×24 and 120×40: the approved SFTP layout, the SFTP tab with a modal (rename, delete confirmation, conflict), the transfers view, the drag hint and a disconnected SFTP tab. The NFR-UX-002 helper checks widths and that the last line is the footer. `tea.View.Cursor` is nil on an SFTP tab except while the filter or a text modal is focused.
+**ARCH-UI-005**: The system shall draw every frame as one header row with the tab bar, then either the Hosts tab's MVP layout (blank row, screen and modals, status line, footer), a session tab's area of `height − 2` rows and its status bar, or an SFTP tab's two panes side by side, its progress line and its footer, with no line wider than the terminal.
+- Priority: M3 · Status: Implemented · Source: D-009, FR-TAB-003, FR-TAB-007, NFR-UX-002; M3: D-017, FR-SFTP-023
+- Acceptance: Goldens at 80×24 and 120×40 of: the host list with no sessions, the host list with 3 tabs, a live session (replayed `htop`), a session with a modal open, an ended session, scrollback mode, the prefix help overlay, 10 tabs with overflow markers, the approved SFTP layout, the SFTP tab with a modal (rename, delete confirmation, conflict), the transfers view, the drag hint and a disconnected SFTP tab. The NFR-UX-002 helper checks widths; for session tabs it checks that the last line is the status bar, for SFTP tabs that it is the footer. The cursor reported in `tea.View.Cursor` is the remote cursor shifted down one row, or nil when the remote hides it or a modal is open; on an SFTP tab it is nil except while the filter or a text modal is focused.
 
-**ARCH-UI-006**: The system shall compute `tea.View.MouseMode` in one function of (focused tab, modal open, scrollback mode, session ended, the focused session's requested mouse mode), following ADR-014.
-- Priority: M2 · Status: Implemented · Source: D-011, D-012, NFR-UX-001 revision
-- Acceptance: A table test covers every combination. A root-model test switches between the Hosts tab, a plain shell tab and a tab whose remote sent `?1003h`, and checks the mode of each next `View()`.
-- **M3 revision** · Priority: M3 · Status: Implemented · Source: D-011, ADR-020
-  - *Revised:* The system shall compute `tea.View.MouseMode` in one function of (focused tab kind, modal open, scrollback mode, session ended, the focused session's requested mouse mode), with cell motion on the Hosts tab and on SFTP tabs, following ADR-014.
-  - *Acceptance:* The table test gains the SFTP rows (live, disconnected, transfers view, modal open: all cell motion). A root-model test switches from a plain shell tab to an SFTP tab and back and checks the mode of each next `View()`.
+**ARCH-UI-006**: The system shall compute `tea.View.MouseMode` in one function of (focused tab kind, modal open, scrollback mode, session ended, the focused session's requested mouse mode), with cell motion on the Hosts tab and on SFTP tabs, following ADR-014.
+- Priority: M3 · Status: Implemented · Source: D-011, D-012, NFR-UX-001 revision; M3: D-011, ADR-020
+- Acceptance: A table test covers every combination. A root-model test switches between the Hosts tab, a plain shell tab and a tab whose remote sent `?1003h`, and checks the mode of each next `View()`. The table test gains the SFTP rows (live, disconnected, transfers view, modal open: all cell motion). A root-model test switches from a plain shell tab to an SFTP tab and back and checks the mode of each next `View()`.
 
-**ARCH-UI-007**: The system shall route each mouse press and wheel event to the single component under it, in that component's own coordinates computed from the same layout function as its `View`, and shall recognise a double-click as two left presses on the same row within 400 ms.
-- Priority: M2 · Status: Implemented · Source: D-011, ADR-014, FR-NAV-012, FR-NAV-014 … FR-NAV-017
-- Acceptance: Unit tests for each layout function compare the region reported for a target with the position of its text in `View()` (for example the column of `[ Save ]`). Double-click tests with an injected clock: 399 ms on the same row is a double-click, 401 ms is not, a different row is not, and a third press after a double-click starts over. Mouse releases and motion on sshelf screens are ignored.
-- **M3 revision** · Priority: M3 · Status: Implemented · Source: D-017, FR-SFTP-021, FR-SFTP-022
-  - *Revised:* The system shall route each mouse press and wheel event to the single component under it, in that component's own coordinates computed from the same layout function as its `View`, shall recognise a double-click as two left presses on the same row within 400 ms, and, on an SFTP tab only, shall route motion with the left button held and the release to the SFTP view for dragging.
-  - *Acceptance:* The M2 tests, plus: `sftpview.Layout` regions match the text positions in `View()` at 80×24, 120×40 and an odd width; a press on a local row, motion over the remote pane and a release there queue one copy; motion and release on every other sshelf screen are still ignored (table test).
+**ARCH-UI-007**: The system shall route each mouse press and wheel event to the single component under it, in that component's own coordinates computed from the same layout function as its `View`, shall recognise a double-click as two left presses on the same row within 400 ms, and, on an SFTP tab only, shall route motion with the left button held and the release to the SFTP view for dragging.
+- Priority: M3 · Status: Implemented · Source: D-011, ADR-014, FR-NAV-012, FR-NAV-014 … FR-NAV-017; M3: D-017, FR-SFTP-021, FR-SFTP-022
+- Acceptance: Unit tests for each layout function compare the region reported for a target with the position of its text in `View()` (for example the column of `[ Save ]`). Double-click tests with an injected clock: 399 ms on the same row is a double-click, 401 ms is not, a different row is not, and a third press after a double-click starts over. Mouse releases and motion on sshelf screens are ignored. Also: `sftpview.Layout` regions match the text positions in `View()` at 80×24, 120×40 and an odd width; a press on a local row, motion over the remote pane and a release there queue one copy; motion and release on every other sshelf screen are still ignored (table test).
 
 
 ### 4.6 Testing (`ARCH-TEST`)
@@ -2108,7 +2093,7 @@ slice with one numbering (ADR-020).
 | `progressTickMsg` | `tea.Tick(250ms)` while any transfer runs in the focused tab | redraw the progress line and transfers view |
 | `SFTPDoneMsg{tab}` | listener on `Browser.Done()` | disconnected state, `✕` |
 | `EditFetchedMsg`, `editorDoneMsg`, `EditResultMsg` | edit commands (§8.10) | next step of edit-locally |
-| `tea.MouseMotionMsg`, `tea.MouseReleaseMsg` | Bubble Tea | drag, on an SFTP tab only (ARCH-UI-007 M3 revision) |
+| `tea.MouseMotionMsg`, `tea.MouseReleaseMsg` | Bubble Tea | drag, on an SFTP tab only (ARCH-UI-007) |
 
 **Layout** (`sftpview.Layout(width, height)`). Row 0 is the header. Rows 1 to
 `height − 3` hold the two pane boxes side by side: the left box is

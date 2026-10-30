@@ -59,7 +59,16 @@ func TestNFR_QUAL_001_CIRunsTracecheck(t *testing.T) {
 	wantAll(t, ciFile, readRootFile(t, ciFile), "go run ./scripts/tracecheck")
 }
 
-// TestNFR_QUAL_003_CIRunsCoverageGate: CI writes a cross-package profile
+// TestNFR_REL_001_CIRunsFaultInjectionTests: tests behind the
+// sshelf_faultinject build tag (the queue's panic test) run in CI with
+// -race on both OSes, not only on a developer machine.
+func TestNFR_REL_001_CIRunsFaultInjectionTests(t *testing.T) {
+	wantAll(t, ciFile, readRootFile(t, ciFile),
+		"grep -rl --include='*_test.go' '^//go:build.*sshelf_faultinject' .",
+		"go test -race -count=1 -tags sshelf_faultinject $pkgs")
+}
+
+// TestNFR_QUAL_003_CIRunsCoverageGate:CI writes a cross-package profile
 // and gates it.
 func TestNFR_QUAL_003_CIRunsCoverageGate(t *testing.T) {
 	wantAll(t, ciFile, readRootFile(t, ciFile), "-coverpkg=./... -coverprofile=coverage.out", "go run ./scripts/covercheck coverage.out")
@@ -80,8 +89,7 @@ func TestNFR_PERF_005_CIRunsPerfSessionJob(t *testing.T) {
 // records them (T-058).
 func TestNFR_PERF_007_CIRunsPerfSFTPJob(t *testing.T) {
 	wantAll(t, ciFile, readRootFile(t, ciFile), "perf-sftp:",
-		"-run 'TestNFR_PERF_00[789]_|TestNFR_SIZE_004_' -skip 'TestNFR_PERF_008_SessionKeys' ./internal/files ./internal/ui ./cmd/sshelf",
-		"-run 'TestNFR_PERF_008_SessionKeysDuringTransfers' ./cmd/sshelf",
+		"-run 'TestNFR_PERF_00[789]_|TestNFR_SIZE_004_' ./internal/files ./internal/ui ./cmd/sshelf",
 		"failed once on this runner; retrying", "BenchmarkNFR_PERF_00[79]_",
 		"continue-on-error: ${{ matrix.os != 'ubuntu-latest' }}")
 	const tmpl = ".github/pull_request_template.md"

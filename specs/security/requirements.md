@@ -288,25 +288,18 @@ Priority: MVP · Status: Implemented · Threats: T-7, T-4
   runs, `Getrlimit(RLIMIT_CORE)` returns `{0,0}`. On Linux, `PR_GET_DUMPABLE` returns 0.
 
 **SEC-MEM-008: No secrets to child processes.**
-The system shall never pass a secret through argv or environment variables, and the only child process that may
-receive secrets is `/usr/bin/security`, invoked by `zalando/go-keyring` on macOS through stdin and stdout (D-008).
-Priority: MVP · Status: Implemented · Threats: T-17
-- AC1: The import-rule test (`internal/archtest`, ADR-009) finds no import of `os/exec` in any sshelf package, so
-  sshelf itself starts no child process that could receive a secret.
+The system shall never pass a secret through argv or environment variables, and shall start no child
+process other than `/usr/bin/security`, invoked by `zalando/go-keyring` on macOS through stdin and stdout (D-008),
+and the user's editor for edit-locally (FR-SFTP-019), started only by `internal/ui/editor`.
+Priority: M3 · Status: Implemented · Threats: T-17 · Source: D-019
+- AC1: The import-rule test (`internal/archtest`, ADR-009 as revised by ADR-019) finds `os/exec` imported by
+  `internal/ui/editor` and by no other sshelf package (`TestSEC_MEM_008_M3_ExecOnlyInEditor`, which replaces
+  the MVP's `TestSEC_MEM_008_NoOsExecImport`; a fixture module with `os/exec` elsewhere fails).
 - AC2: A dependency review confirms the keyring library uses `security -i` (stdin) for set operations.
-- **M3 revision** · Priority: M3 · Status: Implemented · Source: D-019
-  - *Revised:* The system shall never pass a secret through argv or environment variables, and shall start no child
-    process other than `/usr/bin/security`, invoked by `zalando/go-keyring` on macOS through stdin and stdout (D-008),
-    and the user's editor for edit-locally (FR-SFTP-019), started only by `internal/ui/editor`.
-  - *Acceptance:*
-    - AC1: The import-rule test (`internal/archtest`, ADR-009 as revised by ADR-019) finds `os/exec` imported by
-      `internal/ui/editor` and by no other sshelf package (`TestSEC_MEM_008_M3_ExecOnlyInEditor`, which replaces
-      the MVP's `TestSEC_MEM_008_NoOsExecImport`; a fixture module with `os/exec` elsewhere fails).
-    - AC2: A dependency review confirms the keyring library uses `security -i` (stdin) for set operations.
-    - AC3: A unit test with `SSHELF_TEST_CANARY` in the credential store, after a connect, checks that the editor
-      command's `Args` are exactly the words of `$VISUAL`/`$EDITOR`/`vi` plus the temp file path, its `Env` is
-      the process environment unchanged, and neither contains the canary (sshelf never puts a secret in its own
-      environment, so the editor inherits none).
+- AC3: A unit test with `SSHELF_TEST_CANARY` in the credential store, after a connect, checks that the editor
+  command's `Args` are exactly the words of `$VISUAL`/`$EDITOR`/`vi` plus the temp file path, its `Env` is
+  the process environment unchanged, and neither contains the canary (sshelf never puts a secret in its own
+  environment, so the editor inherits none).
 
 **SEC-MEM-009: Just-in-time secrets.**
 When connecting, the system shall read the identity's secrets from the store only for that connection attempt,
@@ -533,7 +526,7 @@ directly, with the remaining words and the temp file path as separate arguments 
 Priority: M3 · Status: Implemented · Threats: T-26 · Source: D-019
 - AC1: A file named `$(touch pwned);x.txt` is given to a fake editor (`testdata` script) through `editor.Command`; no
   file `pwned` is created anywhere, and the editor receives the name as one argument.
-- AC2: archtest: `os/exec` is imported by `internal/ui/editor` only (SEC-MEM-008 M3 revision AC1).
+- AC2: archtest: `os/exec` is imported by `internal/ui/editor` only (SEC-MEM-008 AC1).
 
 **SEC-SFTP-007: No file contents or paths in logs.**
 The system shall never write file contents to the debug log, the screen outside the panes, a crash report or test
@@ -564,9 +557,9 @@ Priority: M3 · Status: Implemented · Threats: T-15
 
 | Priority | Count |
 |----------|-------|
-| MVP | 31 (SEC-MEM-008 carries an M3 revision) |
+| MVP | 30 |
 | M2 | 2 |
-| M3 | 8 (SEC-SFTP-001 … SEC-SFTP-008) |
+| M3 | 9 (SEC-SFTP-001 … SEC-SFTP-008; SEC-MEM-008 revised from MVP by T-059) |
 | v1 | 4 |
 | Later | 2 |
 | **Total** | **47** |

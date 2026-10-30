@@ -1151,7 +1151,7 @@ copy with ctrl+shift+C. Repeat M2.12 in GNOME Terminal, Konsole and xterm.
 
 # M3 manual acceptance checklist (SFTP)
 
-Status: Draft (run at the M3 gate) · Owner: product owner · Task: T-059
+Status: Ready to run; sign-off pending · Owner: product owner · Task: T-059
 
 This is the hands-on part of the M3 gate. Everything else is automated
 (`go test -race ./...`, `go run ./scripts/tracecheck`, which then covers
@@ -1236,13 +1236,16 @@ form, add `acc-a` (127.0.0.1, port 2201, user `pi`, password `acc-pw-A`) and
   key with `y`.
 
   Expected: tab `1 sftp: acc-a` opens and is focused; the left pane is
-  titled `Local: /tmp/sshelf-acceptance-m3/local` (where sshelf was started)
-  and lists `tree/` then `big.bin`; the right pane, `Remote: /home/pi`, is
-  focused (`>` on its cursor row) and lists `notes.txt`; the footer reads
-  `tab switch pane · c copy · r rename · d delete · m mkdir`. The layout
-  matches the approved mock-up. — Pass [ ] Fail [ ]
+  titled `Local:` and the directory sshelf was started in
+  (`…/sshelf-acceptance-m3/local`, cut with `…` at 80 columns) and lists
+  `..`, `tree/` then `big.bin`; the right pane, `Remote: /home/pi`, is
+  focused (`>` on its cursor row) and lists `notes.txt`; at 80 columns the
+  footer reads
+  `tab switch pane · c copy · r rename · d delete · m mkdir · e edit locally`.
+  `?` lists every key of the tab; `?` closes it. The layout matches the
+  approved mock-up. — Pass [ ] Fail [ ]
 
-- [ ] **M3.1.2 Width and hidden files.** Widen the window past 104 columns,
+- [ ] **M3.1.2 Width and hidden files.** Widen the window to 120 columns,
   then back to 80; press `.` twice.
 
   Expected: wide, an mtime column appears; at 80 it is gone and nothing
@@ -1282,25 +1285,33 @@ form, add `acc-a` (127.0.0.1, port 2201, user `pi`, password `acc-pw-A`) and
 
 - [ ] **M3.2.3 Existing target.** Upload `big.bin` again.
 
-  Expected: the question shows both sizes and times and offers
-  `[o] Overwrite · [s] Skip · [n] Keep both · [a] apply to all`; `n` creates
-  `big (1).bin` on the remote side. — Pass [ ] Fail [ ]
+  Expected: the progress line shows `? big.bin exists · t to answer`. Press
+  `t`, put the cursor on the `waiting` row and press `enter`: the question
+  `big.bin already exists` shows both sides' size and time and offers
+  `[o] Overwrite    [s] Skip    [n] Keep both` and `[a] apply to all: no`.
+  `n` creates `big (1).bin` on the remote side; Esc returns to the panes.
+  — Pass [ ] Fail [ ]
 
-- [ ] **M3.2.4 Transfers view.** Upload `big.bin` once more with `o`, and
-  while it runs press `t`.
+- [ ] **M3.2.4 Transfers view.** Upload `big.bin` once more and answer `o`
+  as in M3.2.3; while it runs, stay in the transfers view (`t`).
 
-  Expected: one row per transfer with its state in words, bytes, rate and
-  ETA. `x` on the running row cancels it within a second, and
-  `ls "$SSHELF_ACC/srv/home/pi"` shows no `big.bin.sshelf-part`. `r` retries
-  it; Esc returns to the panes. — Pass [ ] Fail [ ]
+  Expected: one row per transfer with its state in words (`running`,
+  `done`, …), bytes, rate and time left; the footer reads
+  `x cancel · r retry · enter answer · C clear finished · t/esc back`. `x`
+  on the running row shows `cancelled` within a second, and
+  `ls "$SSHELF_ACC/srv/home/pi"` shows no `big.bin.sshelf-part`. `r` on it
+  runs it again (answer `o`); `C` removes the finished rows; Esc returns to
+  the panes. — Pass [ ] Fail [ ]
 
 ## M3.3 Interrupt and resume
 
 - [ ] **M3.3.1 Connection lost.** Download the remote `big (1).bin` into the
   local pane; at about 40 % stop **A** with `ctrl+c`.
 
-  Expected: tab 1 shows `✕` and `⏸ 1 transfers paused: connection lost · r
-  reconnect`; `big (1).bin.sshelf-part` exists locally. — Pass [ ] Fail [ ]
+  Expected: tab 1 shows `✕`, the progress line reads
+  `⏸ 1 transfer paused: connection lost · r reconnect` and the footer
+  `r reconnect · x close · t transfers`; `ls "$SSHELF_ACC/local"` shows
+  `big (1).bin.sshelf-part`. — Pass [ ] Fail [ ]
 
 - [ ] **M3.3.2 Reconnect and resume.** Restart A with M3.0.2's command and
   press `r` in tab 1.
@@ -1323,24 +1334,25 @@ form, add `acc-a` (127.0.0.1, port 2201, user `pi`, password `acc-pw-A`) and
   `docs`; `r` → `docs2`; `/` `doc` shows only it, Esc clears; upload
   `tree/` into `docs2`; `d` on `docs2`.
 
-  Expected: the question names `docs2/` and the number of entries in it and
-  defaults to No; `y` deletes it. — Pass [ ] Fail [ ]
+  Expected: the question reads `Delete docs2/ and the N entries in it? This
+  cannot be undone.` and defaults to No; `y` deletes it. — Pass [ ] Fail [ ]
 
 ## M3.5 Edit locally
 
 - [ ] **M3.5.1 Your editor.** In tab 1's remote pane select `notes.txt`,
   press `e`, add a line, save and quit.
 
-  Expected: your editor replaces sshelf's screen, then sshelf comes back
-  with "saved notes.txt"; `cat "$SSHELF_ACC/srv/home/pi/notes.txt"` shows the
-  new line; `ls -d "${TMPDIR:-/tmp}"/sshelf-edit-*` finds nothing.
+  Expected: your editor (`$VISUAL`, else `$EDITOR`, else `vi`) replaces
+  sshelf's screen, then sshelf comes back with `saved notes.txt (N B)`;
+  `cat "$SSHELF_ACC/srv/home/pi/notes.txt"` shows the new line;
+  `ls -d "${TMPDIR:-/tmp}"/sshelf-edit-*` finds nothing.
   — Pass [ ] Fail [ ]
 
 - [ ] **M3.5.2 Sessions keep running.** Open a session to `acc-real`, run
   `while true; do date; sleep 1; done`, go to tab 1, `e` on `notes.txt`,
   wait 10 s in the editor, quit without saving.
 
-  Expected: "notes.txt: no changes"; in the session tab the clock has no
+  Expected: `notes.txt: no changes`; in the session tab the clock has no
   gap. — Pass [ ] Fail [ ]
 
 - [ ] **M3.5.3 Remote changed meanwhile.** `e` on `notes.txt`; while the
@@ -1348,9 +1360,11 @@ form, add `acc-a` (127.0.0.1, port 2201, user `pi`, password `acc-pw-A`) and
   `echo other >> "$SSHELF_ACC/srv/home/pi/notes.txt"`; change the file in
   the editor, save and quit.
 
-  Expected: the question offers `[o] Overwrite · [k] Keep remote · [s] Save
-  mine as notes.txt.local-edit`; `s` creates `notes.txt.local-edit` beside
-  it. — Pass [ ] Fail [ ]
+  Expected: `notes.txt changed on the server while you edited it.` with
+  `[o] Overwrite`, `[k] Keep remote` and
+  `[s] Save mine as notes.txt.local-edit`; `s` creates
+  `notes.txt.local-edit` beside it on the server.
+  — Pass [ ] Fail [ ]
 
 - [ ] **M3.5.4 A GUI editor.** Quit sshelf, `export VISUAL='code -w'` (or
   your GUI editor with its wait flag), start sshelf and repeat M3.5.1.
@@ -1366,10 +1380,12 @@ form, add `acc-a` (127.0.0.1, port 2201, user `pi`, password `acc-pw-A`) and
 - [ ] **M3.6.2 Drag.** Press on `big.bin` in the local pane, move into the
   remote pane, release.
 
-  Expected: while dragging, the progress line shows the `drag: copy …` hint
-  and the remote pane's border is highlighted; the release queues the copy
-  (answer the existing-file question with `s`). Releasing over the same pane
-  copies nothing. — Pass [ ] Fail [ ]
+  Expected: while dragging, the progress line shows
+  `drag: copy 1 item to Remote: /home/pi · release over the other pane` and
+  the remote pane's border is highlighted; the release queues the copy
+  (it waits on the existing-file question; answer it with `t`, `enter`,
+  `s`). Releasing over the same pane copies nothing, and a click without
+  moving is a plain click. — Pass [ ] Fail [ ]
 
 ## M3.7 A planted symlink
 
@@ -1387,14 +1403,15 @@ form, add `acc-a` (127.0.0.1, port 2201, user `pi`, password `acc-pw-A`) and
 - [ ] **M3.8.1** Start an upload of `big.bin` (answer `o`), then `ctrl+]` `q`
   in tab 1.
 
-  Expected: "Close SFTP tab 1?" with "1 transfers will stop.", defaulting to
-  No; `y` closes it, and no `.sshelf-part` remains on A. — Pass [ ] Fail [ ]
+  Expected: `Close SFTP tab 1? 1 transfer will stop.`, defaulting to No;
+  `y` closes it, and `ls "$SSHELF_ACC/srv/home/pi"` shows no
+  `.sshelf-part` file. — Pass [ ] Fail [ ]
 
 - [ ] **M3.8.2** In tab 3 start a transfer, `ctrl+]` `h`, `q`.
 
-  Expected: "Quit and close N tabs? M transfers will stop."; `y` quits;
-  the shell prompt is normal and moving the mouse prints nothing.
-  — Pass [ ] Fail [ ]
+  Expected: `Quit and close N tabs? 1 transfer will stop.`, defaulting to
+  No; `y` quits; the shell prompt is normal, `stty -a` looks as before, and
+  moving the mouse prints nothing. — Pass [ ] Fail [ ]
 
 ## M3.9 Other terminals
 

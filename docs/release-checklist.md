@@ -1,14 +1,14 @@
 # Release checklist
 
 Manual checks run before each release. Record the result (pass/fail, OS
-version, build) in the release PR. Started by T-010; T-030 completes it.
+version, build) in the release PR. Started by T-010; T-030 completes it; T-059 adds the SFTP items.
 The step-by-step commands are in [`specs/acceptance.md`](../specs/acceptance.md);
 run that whole checklist on macOS and Linux before a release.
 
 ## Automated gates (must be green on the release commit)
 
-- [ ] CI: lint, `go test -race` on Linux and macOS, cross-compile, keyring jobs.
-- [ ] `go run ./scripts/tracecheck` reports 0 problems over MVP and M2 (NFR-QUAL-001).
+- [ ] CI: lint, `go test -race` on Linux and macOS (with the `sshelf_faultinject` tests), perf jobs, cross-compile, keyring jobs.
+- [ ] `go run ./scripts/tracecheck` reports 0 problems over MVP, M2 and M3 (NFR-QUAL-001).
 - [ ] `go run ./scripts/covercheck coverage.out` passes (NFR-QUAL-003).
 
 ## Sessions and terminals
@@ -35,6 +35,24 @@ run that whole checklist on macOS and Linux before a release.
   (acceptance §12.2).
 - [ ] **ADR-007:** keys on the wire, first keystroke after a session and
   `stty -a` round trip (acceptance §10).
+
+## SFTP
+
+- [ ] **FR-SFTP-001, FR-SFTP-017: a real OpenSSH `sftp-server`.** Upload
+  and download a 200 MB file and a directory tree against a real `sshd`;
+  checksums match. Break the connection at about 40 % and reconnect with
+  `r`: the transfer resumes or says why it restarted (acceptance M3.2,
+  M3.3.3).
+- [ ] **FR-SFTP-019, FR-SFTP-020: real editors.** Edit locally with `vim`
+  and with `code -w` (or another GUI editor with its wait flag): a saved
+  change is uploaded, no change says so, a file changed on the server
+  meanwhile asks first, and no `sshelf-edit-*` directory is left in
+  `$TMPDIR` (acceptance M3.5).
+- [ ] **FR-SFTP-021, FR-SFTP-022: mouse and drag in the named terminals**
+  of NFR-PORT-002: clicks, double-click, wheel, tab-bar clicks and a drag
+  from one pane to the other (acceptance M3.6, M3.9).
+- [ ] **SEC-SFTP-002: a planted symlink** in the download folder is
+  replaced, not followed (acceptance M3.7).
 
 ## Credential store
 

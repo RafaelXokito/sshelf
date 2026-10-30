@@ -29,6 +29,7 @@ const module = "github.com/RafaelXokito/sshelf/"
 var corePackages = []string{
 	"internal/domain", "internal/store", "internal/secrets", "internal/paths",
 	"internal/sshclient", "internal/sshconfig", "internal/search",
+	"internal/files", // M3 (T-059)
 }
 
 const (

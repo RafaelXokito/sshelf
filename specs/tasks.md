@@ -857,7 +857,9 @@ Every `MVP` requirement and the tasks that cover it. The task that completes an
 ID is listed last. The nine requirements that M2 revised (FR-CONN-001,
 FR-CONN-004, FR-CONN-005, ARCH-SESS-002 … ARCH-SESS-005, ARCH-UI-001,
 NFR-UX-001) are now `M2` and are listed, with their MVP tasks, in the
-[M2 traceability matrix](#m2-traceability-matrix).
+[M2 traceability matrix](#m2-traceability-matrix); ARCH-UI-001 was revised
+again by M3. The two that M3 revised (SEC-MEM-008, ARCH-SESS-001) are now
+`M3` and are listed in the [M3 traceability matrix](#m3-traceability-matrix).
 
 ### Functional (`FR-*`)
 
@@ -914,7 +916,6 @@ NFR-UX-001) are now `M2` and are listed, with their MVP tasks, in the
 | SEC-HOSTKEY-007 | T-008 |
 | SEC-MEM-001 | T-009 |
 | SEC-MEM-003 | T-026 |
-| SEC-MEM-008 | T-000, T-010 |
 | SEC-MEM-009 | T-012 |
 | SEC-LOG-001 | T-028 |
 | SEC-LOG-002 | T-009 |
@@ -934,7 +935,6 @@ NFR-UX-001) are now `M2` and are listed, with their MVP tasks, in the
 
 | ID | Tasks |
 |---|---|
-| ARCH-SESS-001 | T-000, T-002 |
 | ARCH-CONN-001 | T-012 |
 | ARCH-CONN-002 | T-013 |
 | ARCH-CONN-003 | T-007 |
@@ -971,8 +971,9 @@ NFR-UX-001) are now `M2` and are listed, with their MVP tasks, in the
 | NFR-QUAL-002 | T-000 |
 | NFR-QUAL-003 | T-000, T-030 |
 
-Totals: 30 FR + 31 SEC + 17 ARCH + 14 NFR = **92 MVP requirements**, all
-covered by T-000 … T-030 (101 at the MVP gate; 9 were revised to `M2`).
+Totals: 30 FR + 30 SEC + 16 ARCH + 14 NFR = **90 MVP requirements**, all
+covered by T-000 … T-030 (101 at the MVP gate; 9 were revised to `M2` and
+2 to `M3`).
 
 ## M2 manual-only requirements
 
@@ -996,8 +997,11 @@ full-screen programs or the user's own terminal emulator:
 ## M2 traceability matrix
 
 Every `M2` requirement and the tasks that cover it; the task that completes
-an ID is listed last. The nine MVP requirements that M2 revised keep their
-MVP tasks first.
+an ID is listed last. The MVP requirements that M2 revised keep their
+MVP tasks first. The nine M2 requirements that M3 revised (FR-TAB-003,
+FR-TAB-005, FR-TAB-009, FR-CONN-014, ARCH-SESS-008, ARCH-UI-001,
+ARCH-UI-005, ARCH-UI-006, ARCH-UI-007) are now `M3` and are listed in the
+[M3 traceability matrix](#m3-traceability-matrix).
 
 ### Functional (`FR-*`)
 
@@ -1007,7 +1011,6 @@ MVP tasks first.
 | FR-CONN-004 | T-003, T-037 |
 | FR-CONN-005 | T-004, T-036 |
 | FR-CONN-010 | T-036 |
-| FR-CONN-014 | T-035, T-037 |
 | FR-NAV-012 | T-038 |
 | FR-NAV-014 | T-038 |
 | FR-NAV-015 | T-039, T-040 |
@@ -1015,13 +1018,10 @@ MVP tasks first.
 | FR-NAV-017 | T-040 |
 | FR-TAB-001 | T-034, T-035 |
 | FR-TAB-002 | T-034, T-037 |
-| FR-TAB-003 | T-034, T-042 |
 | FR-TAB-004 | T-034 |
-| FR-TAB-005 | T-035 |
 | FR-TAB-006 | T-035, T-037 |
 | FR-TAB-007 | T-034, T-042 |
 | FR-TAB-008 | T-037 |
-| FR-TAB-009 | T-036 |
 | FR-TAB-010 | T-036 |
 | FR-TAB-011 | T-041 |
 
@@ -1041,17 +1041,12 @@ MVP tasks first.
 | ARCH-SESS-004 | T-003, T-032, T-037 |
 | ARCH-SESS-005 | T-003, T-027, T-032, T-037 |
 | ARCH-SESS-006 | T-035 |
-| ARCH-SESS-008 | T-032, T-036 |
 | ARCH-SESS-010 | T-032, T-037 |
 | ARCH-SESS-011 | T-031, T-032 |
 | ARCH-SESS-014 | T-032 |
 | ARCH-SESS-015 | T-032 |
 | ARCH-SESS-016 | T-031, T-032, T-037 |
 | ARCH-SESS-017 | T-031 |
-| ARCH-UI-001 | T-004, T-030, T-034, T-037, T-043 |
-| ARCH-UI-005 | T-034 |
-| ARCH-UI-006 | T-038, T-041 |
-| ARCH-UI-007 | T-038, T-040 |
 | ARCH-TEST-002 | T-031 |
 | ARCH-TEST-003 | T-032 |
 
@@ -1065,9 +1060,10 @@ MVP tasks first.
 | NFR-SIZE-003 | T-033 |
 | NFR-UX-001 | T-016, T-029, T-038, T-041 |
 
-Totals: 21 FR + 2 SEC + 18 ARCH + 5 NFR = **46 M2 requirements**: 36 new
-or promoted, 9 revised from the MVP (folded in by T-043) and SEC-SESSION-006
-(added by T-043), all covered by T-031 … T-043.
+Totals: 17 FR + 2 SEC + 13 ARCH + 5 NFR = **37 M2 requirements**: 28 new
+or promoted, 8 revised from the MVP (folded in by T-043) and SEC-SESSION-006
+(added by T-043), all covered by T-031 … T-043 (46 at the M2 gate; 9 were
+revised to `M3` by T-059).
 
 ## M3 manual-only requirements
 

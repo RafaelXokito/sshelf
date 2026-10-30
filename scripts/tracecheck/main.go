@@ -1,20 +1,20 @@
-// Command tracecheck is the NFR-QUAL-001 gate. It reads every MVP and M2
-// requirement (FR-*, SEC-*, ARCH-*, NFR-*) from the spec files and fails
+// Command tracecheck is the NFR-QUAL-001 gate. It reads every MVP, M2
+// and M3 requirement (FR-*, SEC-*, ARCH-*, NFR-*) from the spec files and fails
 // when one of them
 //
 //   - is not Implemented (or Verified),
 //   - is missing from its milestone's traceability matrix in
 //     specs/tasks.md ("Traceability matrix" for MVP, "M2 traceability
-//     matrix" for M2), or
+//     matrix" for M2, "M3 traceability matrix" for M3), or
 //   - is referenced by no *_test.go file (as FR-X-NNN or FR_X_NNN, the
 //     form test names use), unless specs/tasks.md lists it under its
-//     milestone's manual-only table ("Manual-only requirements" or "M2
-//     manual-only requirements").
+//     milestone's manual-only table ("Manual-only requirements", "M2
+//     manual-only requirements" or "M3 manual-only requirements").
 //
 // It also fails when a matrix or manual-only table lists an ID that is not
 // a requirement of that milestone, and when a spec file still holds an
-// "M2 revision" block (specs/README.md, "Revisions": the M2 gate folds
-// every revision into its requirement).
+// "M2 revision" or "M3 revision" block (specs/README.md, "Revisions":
+// each milestone's gate folds every revision into its requirement).
 //
 // Run it from the module root: go run ./scripts/tracecheck
 package main
@@ -50,6 +50,7 @@ var milestones = []struct {
 }{
 	{"MVP", "Traceability matrix", "Manual-only requirements"},
 	{"M2", "M2 traceability matrix", "M2 manual-only requirements"},
+	{"M3", "M3 traceability matrix", "M3 manual-only requirements"},
 }
 
 var (
@@ -61,8 +62,8 @@ var (
 	tableRow  = regexp.MustCompile(`^\|\s*((?:FR|SEC|ARCH|NFR)-[A-Z]+-\d{3})\s*\|`)
 	anyID     = regexp.MustCompile(`(?:FR|SEC|ARCH|NFR)[-_][A-Z]+[-_]\d{3}`)
 	// revision matches the first line of a revision block
-	// ("- **M2 revision** · Priority: M2 · …").
-	revision = regexp.MustCompile(`^\s*-\s+\*\*M2 revision\*\*`)
+	// ("- **M2 revision** · Priority: M2 · …", or M3).
+	revision = regexp.MustCompile(`^\s*-\s+\*\*(M2|M3) revision\*\*`)
 )
 
 // Requirement is one requirement as the spec files define it.
@@ -77,7 +78,8 @@ type Requirement struct {
 type Result struct {
 	MVP      []Requirement
 	M2       []Requirement
-	Manual   []string // MVP and M2 IDs listed as manual-only
+	M3       []Requirement
+	Manual   []string // MVP, M2 and M3 IDs listed as manual-only
 	Problems []string
 }
 
@@ -90,8 +92,8 @@ func Check(fsys fs.FS) (Result, error) {
 		if err != nil {
 			return res, err
 		}
-		for _, line := range revs {
-			res.Problems = append(res.Problems, fmt.Sprintf("%s:%d holds an M2 revision block; fold it into its requirement", f, line))
+		for _, rv := range revs {
+			res.Problems = append(res.Problems, fmt.Sprintf("%s:%d holds an %s revision block; fold it into its requirement", f, rv.Line, rv.Milestone))
 		}
 		for _, r := range found {
 			if prev, dup := reqs[r.ID]; dup {
@@ -118,10 +120,13 @@ func Check(fsys fs.FS) (Result, error) {
 			if r.Priority != ms.Priority {
 				continue
 			}
-			if ms.Priority == "MVP" {
+			switch ms.Priority {
+			case "MVP":
 				res.MVP = append(res.MVP, r)
-			} else {
+			case "M2":
 				res.M2 = append(res.M2, r)
+			default:
+				res.M3 = append(res.M3, r)
 			}
 			switch r.Status {
 			case "Implemented", "Verified":
@@ -155,10 +160,16 @@ func Check(fsys fs.FS) (Result, error) {
 	return res, nil
 }
 
-// parseSpec returns the requirements defined in name, and the line
-// numbers of any M2 revision blocks. A requirement's priority and status
-// are on the first line after its heading that names a priority.
-func parseSpec(fsys fs.FS, name string) (reqs []Requirement, revisions []int, err error) {
+// revisionBlock is a revision block left in a spec file.
+type revisionBlock struct {
+	Line      int
+	Milestone string // "M2" or "M3"
+}
+
+// parseSpec returns the requirements defined in name, and any revision
+// blocks. A requirement's priority and status are on the first line after
+// its heading that names a priority.
+func parseSpec(fsys fs.FS, name string) (reqs []Requirement, revisions []revisionBlock, err error) {
 	b, err := fs.ReadFile(fsys, name)
 	if err != nil {
 		return nil, nil, err
@@ -167,8 +178,8 @@ func parseSpec(fsys fs.FS, name string) (reqs []Requirement, revisions []int, er
 	sc := bufio.NewScanner(strings.NewReader(string(b)))
 	for n := 1; sc.Scan(); n++ {
 		line := sc.Text()
-		if revision.MatchString(line) {
-			revisions = append(revisions, n)
+		if m := revision.FindStringSubmatch(line); m != nil {
+			revisions = append(revisions, revisionBlock{Line: n, Milestone: m[1]})
 			continue
 		}
 		if m := idHeading.FindStringSubmatch(line); m != nil {
@@ -265,7 +276,7 @@ func main() {
 	for _, p := range res.Problems {
 		fmt.Println("FAIL", p)
 	}
-	fmt.Printf("tracecheck: %d MVP and %d M2 requirements, %d manual-only, %d problems\n", len(res.MVP), len(res.M2), len(res.Manual), len(res.Problems))
+	fmt.Printf("tracecheck: %d MVP, %d M2 and %d M3 requirements, %d manual-only, %d problems\n", len(res.MVP), len(res.M2), len(res.M3), len(res.Manual), len(res.Problems))
 	if len(res.Problems) > 0 {
 		os.Exit(1)
 	}

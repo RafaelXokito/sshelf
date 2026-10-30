@@ -8,11 +8,11 @@ import (
 	"testing/fstest"
 )
 
-// TestNFR_QUAL_001_EveryMVPAndM2IDTraced runs the gate over this module:
-// every MVP and M2 requirement is Implemented, in its milestone's
+// TestNFR_QUAL_001_EveryMilestoneIDTraced runs the gate over this module:
+// every MVP, M2 and M3 requirement is Implemented, in its milestone's
 // traceability matrix, and referenced by a test or listed as manual-only,
-// and no M2 revision block is left.
-func TestNFR_QUAL_001_EveryMVPAndM2IDTraced(t *testing.T) {
+// and no M2 or M3 revision block is left.
+func TestNFR_QUAL_001_EveryMilestoneIDTraced(t *testing.T) {
 	res, err := Check(os.DirFS("../.."))
 	if err != nil {
 		t.Fatal(err)
@@ -20,19 +20,23 @@ func TestNFR_QUAL_001_EveryMVPAndM2IDTraced(t *testing.T) {
 	for _, p := range res.Problems {
 		t.Error(p)
 	}
-	// A parser that finds nothing would pass trivially. The plan counts 92
-	// MVP requirements and 46 M2 ones once the 9 revisions are folded
-	// (specs/tasks.md, the two traceability matrices).
-	if n := len(res.MVP); n < 92 {
-		t.Errorf("found %d MVP requirements, want at least 92", n)
+	// A parser that finds nothing would pass trivially. The plan counts 90
+	// MVP requirements, 37 M2 ones and 57 M3 ones once every revision is
+	// folded (specs/tasks.md, the three traceability matrices).
+	if n := len(res.MVP); n < 90 {
+		t.Errorf("found %d MVP requirements, want at least 90", n)
 	}
-	if n := len(res.M2); n < 46 {
-		t.Errorf("found %d M2 requirements, want at least 46", n)
+	if n := len(res.M2); n < 37 {
+		t.Errorf("found %d M2 requirements, want at least 37", n)
+	}
+	if n := len(res.M3); n < 57 {
+		t.Errorf("found %d M3 requirements, want at least 57", n)
 	}
 }
 
-// fixture is a module with one requirement per heading style, and an M2
-// requirement traced by a test and one listed as manual-only.
+// fixture is a module with one requirement per heading style, and for M2
+// and M3 each a requirement traced by a test and one listed as
+// manual-only.
 func fixture() fstest.MapFS {
 	return fstest.MapFS{
 		"specs/product/requirements.md": {Data: []byte(`
@@ -44,6 +48,9 @@ func fixture() fstest.MapFS {
 
 ### FR-TEST-003 · M2
 - **Priority:** M2 · **Status:** Implemented
+
+### FR-TEST-004 · M3
+- **Priority:** M3 · **Status:** Implemented
 `)},
 		"specs/security/requirements.md": {Data: []byte(`
 **SEC-TEST-001: Manual.**
@@ -53,6 +60,10 @@ Priority: MVP · Status: Implemented · Threats: T-1
 **SEC-TEST-002: Manual in M2.**
 The system shall.
 Priority: M2 · Status: Implemented · Threats: T-1
+
+**SEC-TEST-003: Manual in M3.**
+The system shall.
+Priority: M3 · Status: Implemented · Threats: T-1
 `)},
 		"specs/architecture/design.md": {Data: []byte(`
 **ARCH-TEST-001**: The system shall.
@@ -90,10 +101,31 @@ Priority: M2 · Status: Implemented · Threats: T-1
 |---|---|
 | FR-TEST-003 | T-2 |
 | SEC-TEST-002 | T-2 |
+
+## M3 manual-only requirements
+
+| ID | Why |
+|---|---|
+| SEC-TEST-003 | needs a human |
+
+## M3 traceability matrix
+
+### Functional
+
+| ID | Tasks |
+|---|---|
+| FR-TEST-004 | T-3 |
+
+### Security
+
+| ID | Tasks |
+|---|---|
+| SEC-TEST-003 | T-3 |
 `)},
 		"a/a_test.go":          {Data: []byte("func TestFR_TEST_001_X(t *testing.T) {}\n// ARCH-TEST-001\n")},
 		"b/b_test.go":          {Data: []byte("func TestNFR_TEST_001(t *testing.T) {}\n")},
 		"c/c_test.go":          {Data: []byte("func TestFR_TEST_003_M2(t *testing.T) {}\n")},
+		"d/d_test.go":          {Data: []byte("func TestFR_TEST_004_M3(t *testing.T) {}\n")},
 		"b/testdata/x_test.go": {Data: []byte("// FR-TEST-002\n")},
 	}
 }
@@ -123,7 +155,7 @@ func TestNFR_QUAL_001_FixturePasses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(res.Problems) != 0 || len(res.MVP) != 4 || len(res.M2) != 2 || !slices.Equal(res.Manual, []string{"SEC-TEST-001", "SEC-TEST-002"}) {
+	if len(res.Problems) != 0 || len(res.MVP) != 4 || len(res.M2) != 2 || len(res.M3) != 2 || !slices.Equal(res.Manual, []string{"SEC-TEST-001", "SEC-TEST-002", "SEC-TEST-003"}) {
 		t.Fatalf("result %+v", res)
 	}
 }
@@ -157,6 +189,58 @@ func TestNFR_QUAL_001_M2MatrixRead(t *testing.T) {
 		if !slices.ContainsFunc(res.Problems, func(p string) bool { return strings.Contains(p, want) }) {
 			t.Errorf("without the M2 tables, problems %q lack %q", res.Problems, want)
 		}
+	}
+}
+
+// TestNFR_QUAL_001_M3MatrixRead: the M3 requirements are counted, the M3
+// matrix is read across its level-3 subsections, and the M3 matrix and
+// the M3 manual-only table are what make them pass.
+func TestNFR_QUAL_001_M3MatrixRead(t *testing.T) {
+	res, err := Check(fixture())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ids []string
+	for _, r := range res.M3 {
+		ids = append(ids, r.ID)
+	}
+	if !slices.Equal(ids, []string{"FR-TEST-004", "SEC-TEST-003"}) || len(res.Problems) != 0 {
+		t.Fatalf("M3 %v, problems %q", ids, res.Problems)
+	}
+
+	f := clone(fixture())
+	replace(t, f, "specs/tasks.md", "## M3 traceability matrix", "## Some other section")
+	replace(t, f, "specs/tasks.md", "## M3 manual-only requirements", "## Another section")
+	res, err = Check(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		`FR-TEST-004 is missing from the "M3 traceability matrix" section`,
+		`SEC-TEST-003 is missing from the "M3 traceability matrix" section`,
+		"SEC-TEST-003 is referenced by no *_test.go file and is not manual-only",
+	} {
+		if !slices.ContainsFunc(res.Problems, func(p string) bool { return strings.Contains(p, want) }) {
+			t.Errorf("without the M3 tables, problems %q lack %q", res.Problems, want)
+		}
+	}
+}
+
+// TestNFR_QUAL_001_M3RevisionBlockFails: an M3 revision block left in any
+// spec file fails the gate, with its file and line, as an M2 one does.
+func TestNFR_QUAL_001_M3RevisionBlockFails(t *testing.T) {
+	f := clone(fixture())
+	f["specs/nfr.md"].Data = append(f["specs/nfr.md"].Data, []byte("- **M3 revision** · Priority: M3 · Status: Implemented · Source: D-1\n  - *Revised:* The system shall.\n")...)
+	res, err := Check(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(res.Problems, "specs/nfr.md:4 holds an M3 revision block; fold it into its requirement") {
+		t.Fatalf("problems %q", res.Problems)
+	}
+	// The block's own priority line does not change NFR-TEST-001's.
+	if len(res.MVP) != 4 || len(res.M3) != 2 {
+		t.Fatalf("MVP %v, M3 %v", res.MVP, res.M3)
 	}
 }
 
@@ -200,6 +284,20 @@ func TestNFR_QUAL_001_FailsEachRule(t *testing.T) {
 			"NFR-TEST-001 is referenced by no *_test.go file"},
 		{"M2 untraced", func(_ *testing.T, f fstest.MapFS) { delete(f, "c/c_test.go") },
 			"FR-TEST-003 is referenced by no *_test.go file"},
+		{"M3 untraced", func(_ *testing.T, f fstest.MapFS) { delete(f, "d/d_test.go") },
+			"FR-TEST-004 is referenced by no *_test.go file"},
+		{"M3 draft", func(t *testing.T, f fstest.MapFS) {
+			replace(t, f, fr, "**Priority:** M3 · **Status:** Implemented", "**Priority:** M3 · **Status:** Draft")
+		}, "FR-TEST-004 (specs/product/requirements.md) is Draft, not Implemented"},
+		{"M3 manual-only must still be implemented", func(t *testing.T, f fstest.MapFS) {
+			replace(t, f, sec, "Priority: M3 · Status: Implemented", "Priority: M3 · Status: Draft")
+		}, "SEC-TEST-003 (specs/security/requirements.md) is Draft"},
+		{"M3 matrix lists an M2 ID", func(t *testing.T, f fstest.MapFS) {
+			replace(t, f, tasks, "| FR-TEST-004 | T-3 |\n", "| FR-TEST-004 | T-3 |\n| FR-TEST-003 | T-3 |\n")
+		}, `FR-TEST-003 is in the "M3 traceability matrix" section but is not an M3 requirement`},
+		{"M3 manual-only lists an M2 ID", func(t *testing.T, f fstest.MapFS) {
+			replace(t, f, tasks, "| SEC-TEST-003 | needs a human |\n", "| SEC-TEST-003 | needs a human |\n| SEC-TEST-002 | no |\n")
+		}, `SEC-TEST-002 is listed in "M3 manual-only requirements" but is not an M3 requirement`},
 		{"testdata does not count", func(t *testing.T, f fstest.MapFS) {
 			replace(t, f, fr, "- **Priority:** Later · **Status:** Draft", "- **Priority:** MVP · **Status:** Implemented")
 			replace(t, f, tasks, "| NFR-TEST-001 | T-1 |\n", "| NFR-TEST-001 | T-1 |\n| FR-TEST-002 | T-1 |\n")
@@ -207,8 +305,8 @@ func TestNFR_QUAL_001_FailsEachRule(t *testing.T) {
 		{"not in matrix", func(t *testing.T, f fstest.MapFS) {
 			replace(t, f, tasks, "| ARCH-TEST-001 | T-1 |\n", "")
 		}, `ARCH-TEST-001 is missing from the "Traceability matrix" section`},
-		{"M2 matrix lists a v1 ID", func(_ *testing.T, f fstest.MapFS) {
-			f[tasks].Data = append(f[tasks].Data, []byte("| FR-TEST-002 | T-1 |\n")...)
+		{"M2 matrix lists a v1 ID", func(t *testing.T, f fstest.MapFS) {
+			replace(t, f, tasks, "| SEC-TEST-002 | T-2 |\n", "| SEC-TEST-002 | T-2 |\n| FR-TEST-002 | T-1 |\n")
 		}, `FR-TEST-002 is in the "M2 traceability matrix" section but is not an M2 requirement`},
 		{"MVP matrix lists an M2 ID", func(t *testing.T, f fstest.MapFS) {
 			replace(t, f, tasks, "| NFR-TEST-001 | T-1 |\n", "| NFR-TEST-001 | T-1 |\n| FR-TEST-003 | T-1 |\n")

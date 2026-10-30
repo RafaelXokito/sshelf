@@ -24,7 +24,7 @@ jobs:
         run: |
           go vet ./...
           go vet -tags integration_keyring ./...
-      - name: Traceability gate, MVP and M2 (NFR-QUAL-001)
+      - name: Traceability gate, MVP, M2 and M3 (NFR-QUAL-001)
         run: go run ./scripts/tracecheck
       - name: golangci-lint (NFR-QUAL-002)
         uses: golangci/golangci-lint-action@v9
@@ -47,6 +47,16 @@ jobs:
           go-version-file: go.mod
       - name: go test -race (NFR-PORT-001, NFR-REL-001)
         run: go test -race -coverpkg=./... -coverprofile=coverage.out ./...
+      - name: go test -race -tags sshelf_faultinject on the fault-injection tests (NFR-REL-001)
+        # Tests behind the fault-injection build tag (a panic forced in a
+        # transfer, ...) do not build without it. Run every package that
+        # has one; the E2E tests already build the binary with the tag.
+        shell: bash
+        run: |
+          pkgs=$(grep -rl --include='*_test.go' '^//go:build.*sshelf_faultinject' . | xargs -n1 dirname | sort -u)
+          if [ -z "$pkgs" ]; then echo "no fault-injection tests found"; exit 1; fi
+          echo "$pkgs"
+          go test -race -count=1 -tags sshelf_faultinject $pkgs
       - name: performance limits without -race (NFR-PERF-002)
         # NFR-PERF-005 runs in the perf-session job; NFR-PERF-007, 008 and
         # 009 in the perf-sftp job.
@@ -112,24 +122,13 @@ jobs:
           # Shared runners stall now and then. Retry once; the first
           # failure stays visible as a warning (specs/nfr.md §1).
           checks() {
-            go test -count=1 -v -run 'TestNFR_PERF_00[789]_|TestNFR_SIZE_004_' -skip 'TestNFR_PERF_008_SessionKeys' ./internal/files ./internal/ui ./cmd/sshelf | tee perf.txt
+            go test -count=1 -v -run 'TestNFR_PERF_00[789]_|TestNFR_SIZE_004_' ./internal/files ./internal/ui ./cmd/sshelf | tee perf.txt
           }
           if ! checks; then
             echo "::warning::NFR-PERF-007/008/009 or NFR-SIZE-004 failed once on this runner; retrying"
             checks
           fi
           grep 'sftp:' perf.txt >> "$GITHUB_STEP_SUMMARY"
-      - name: Session keys during transfers (NFR-PERF-008; open in specs/nfr.md, does not fail the build)
-        continue-on-error: true
-        shell: bash
-        run: |
-          ok=0
-          go test -count=1 -v -run 'TestNFR_PERF_008_SessionKeysDuringTransfers' ./cmd/sshelf | tee keys.txt || ok=$?
-          grep 'sftp:' keys.txt >> "$GITHUB_STEP_SUMMARY" || true
-          if [ "$ok" != 0 ]; then
-            echo "::warning::NFR-PERF-008: session keystrokes during transfers over the 5 ms bound (open question in specs/nfr.md)"
-            exit 1
-          fi
       - name: SFTP benchmarks (NFR-PERF-007, NFR-PERF-009)
         shell: bash
         run: go test -run '^$' -bench 'BenchmarkNFR_PERF_00[79]_' -benchtime 5x ./internal/files ./internal/ui | tee -a "$GITHUB_STEP_SUMMARY"

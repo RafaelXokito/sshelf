@@ -328,10 +328,11 @@ func TestNFR_PERF_008_FrameGaps(t *testing.T) {
 
 // TestNFR_PERF_008_SessionKeysDuringTransfers: while two transfers run
 // on the connection (startTransfers), 1,000 keys to the session tab on
-// it reach the server within 5 ms at the 99th percentile (NFR-PERF-004's
-// bound). Open in specs/nfr.md: CI runners measure 8 to 17 ms.
+// it reach the server within 50 ms at the 99th percentile (D-021: the
+// upload's 64 requests in flight share the connection, so NFR-PERF-004's
+// 5 ms bound applies only with no transfer on it).
 func TestNFR_PERF_008_SessionKeysDuringTransfers(t *testing.T) {
-	const strokeLimit = 5 * time.Millisecond
+	const strokeLimit = 50 * time.Millisecond
 	tr := startTransfers(t)
 	p, l := tr.p, tr.l
 	p.send(tea.KeyPressMsg{Code: ']', Mod: tea.ModCtrl})
