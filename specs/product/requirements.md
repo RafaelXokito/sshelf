@@ -635,13 +635,6 @@ If the terminal is smaller than 60 columns or 12 rows, then the system shall sho
 - **Acceptance:**
   - At 59×24 or 80×11 only the message is shown. Resizing to 60×12 restores the previous view with its state intact.
 
-### FR-NAV-008 · Recent hosts
-The system shall show the 5 most recently connected hosts in a "Recent" section at the top while no search is active.
-
-- **Priority:** v1 · **Status:** Draft · **Source:** Termius, Royal TSX
-- **Acceptance:**
-  - The section is hidden when `show_recent = false` or when no host has been connected yet.
-
 ### FR-NAV-009 · Sort order
 When the user cycles the sort mode, the system shall order hosts within each group by label, by last connection time, or by hostname, and remember the mode.
 
@@ -1127,7 +1120,7 @@ When an interactive session to a host is established, the system shall record th
 
 - **Priority:** v1 · **Status:** Draft
 - **Acceptance:**
-  - The details pane shows "Last connected 3 h ago (42 times)". The data feeds FR-NAV-008 and FR-NAV-009.
+  - The details pane shows "Last connected 3 h ago (42 times)". The data feeds FR-NAV-009 and FR-NAV-018.
   - The time itself is recorded by FR-NAV-018; this requirement adds the count and the details pane.
 
 ### FR-HIST-002 · Session transcript logging
