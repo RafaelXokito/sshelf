@@ -230,6 +230,14 @@ func (r *RemoteFS) readDir(ctx context.Context, dir string) (infos []fs.FileInfo
 	if budget() {
 		return infos, true, nil
 	}
+	if err == nil && errors.Is(lctx.Err(), context.DeadlineExceeded) {
+		// pkg/sftp waits for each reply in a select on the reply and the
+		// context; when both are ready it may take the reply, so a
+		// listing can return complete after its deadline. It did not
+		// finish within ListTimeout, so it fails like one that was cut
+		// (TestARCH_SFTP_002_ListingTimeout failed on CI).
+		err = lctx.Err()
+	}
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil, false, ctx.Err()
