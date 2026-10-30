@@ -65,6 +65,15 @@ func TestNFR_QUAL_003_CIRunsCoverageGate(t *testing.T) {
 	wantAll(t, ciFile, readRootFile(t, ciFile), "-coverpkg=./... -coverprofile=coverage.out", "go run ./scripts/covercheck coverage.out")
 }
 
+// TestNFR_PERF_005_CIRunsPerfSessionJob: the emulator throughput and
+// session memory checks run without -race in a job of their own, so it
+// can be re-run alone (T-033), and the PR template records them.
+func TestNFR_PERF_005_CIRunsPerfSessionJob(t *testing.T) {
+	wantAll(t, ciFile, readRootFile(t, ciFile), "perf-session:", "-run 'TestNFR_PERF_005|TestNFR_SIZE_003' ./internal/session", "BenchmarkNFR_PERF_005_EmulatorWrite")
+	const tmpl = ".github/pull_request_template.md"
+	wantAll(t, tmpl, readRootFile(t, tmpl), "emulator: throughput", "emulator: heap per session")
+}
+
 // TestNFR_REL_001_GoroutinePackagesCheckLeaks: every package that starts
 // goroutines, and every package NFR-REL-001 names, calls
 // goleak.VerifyTestMain (through testutil.VerifyTestMain) in its tests.

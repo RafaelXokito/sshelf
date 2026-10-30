@@ -269,10 +269,13 @@ func (s *Session) readOutput(r io.Reader) {
 	}
 }
 
-// feed writes p to the emulator in pieces of at most writeChunk bytes, so
+// feed writes p to the emulator; see feedEmulator.
+func (s *Session) feed(p []byte) { feedEmulator(s.scr, p) }
+
+// feedEmulator writes p to e in pieces of at most writeChunk bytes, so
 // Snapshot never waits long for the lock. A piece ends after a control
 // character where there is one, which never splits a grapheme cluster.
-func (s *Session) feed(p []byte) {
+func feedEmulator(e emulator, p []byte) {
 	for len(p) > 0 {
 		n := len(p)
 		if n > writeChunk {
@@ -284,7 +287,7 @@ func (s *Session) feed(p []byte) {
 				}
 			}
 		}
-		s.scr.write(p[:n])
+		e.write(p[:n])
 		p = p[n:]
 	}
 }

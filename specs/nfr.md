@@ -54,7 +54,7 @@ While a session tab is focused, when the root model receives a key press, the sy
 ### NFR-PERF-005 · Output throughput
 When a session receives a burst of output, the system shall process at least 1 MB/s of it into the emulator while keeping the UI responsive and the memory held for unprocessed output bounded.
 
-- **Priority:** M2 · **Status:** Draft · **Source:** D-009, ADR-013 (x/vt v0.1.0 processes 2 to 5 MB/s on an Apple M1 Pro)
+- **Priority:** M2 · **Status:** Implemented · **Source:** D-009, ADR-013 (x/vt v0.1.0 processes 2 to 5 MB/s on an Apple M1 Pro)
 - **Check:** `TestNFR_PERF_005_TenMegabytes` connects one session at 120×40 to sshtest's `flood 10M` command (10 MiB of 100-column text lines, half of them with SGR colours) and asserts on the CI runner: (1) the last line is on the emulator's screen within 10 s; (2) while the flood runs, `View()` is produced at least every 100 ms and Ctrl+C reaches sshtest within 100 ms; (3) the heap never exceeds NFR-SIZE-003's per-session bound plus 8 MiB during the flood: sshelf reads the channel only as fast as the emulator processes it, so x/crypto/ssh's channel window (2 MiB) slows the server instead of sshelf buffering (ARCH-SESS-014); (4) the session's input queue never exceeds its 1 MiB cap. `BenchmarkNFR_PERF_005_EmulatorWrite` reports MB/s for the emulator alone, for tracking regressions.
 
 ### NFR-PERF-006 · Ten concurrent sessions
@@ -76,7 +76,7 @@ While sshelf is idle with 5,000 hosts loaded and no session open, the system sha
 ### NFR-SIZE-003 · Memory per session
 While a session at 120×40 has a full scrollback of 100-column lines, the system shall use no more than 48 MB of heap for that session, and shall cap the scrollback at 2,000 lines.
 
-- **Priority:** M2 · **Status:** Draft · **Source:** D-010, ADR-013, open question 1 in `product/requirements.md` §22
+- **Priority:** M2 · **Status:** Implemented · **Source:** D-010, ADR-013, open question 1 in `product/requirements.md` §22
 - **Check:** `TestNFR_SIZE_003_SessionHeap` measures `runtime.MemStats.HeapAlloc` (after `runtime.GC()`) before and after one session at 120×40 receives 5,000 lines of 100 columns with SGR colours: the difference is ≤ 48 MiB and `ScrollbackLen()` is 2,000. With x/vt v0.1.0 the measured cost is about 31 MB. Closing the session and running `runtime.GC()` returns the heap to within 2 MiB of the starting value.
 
 ### NFR-SIZE-002 · Binary size
