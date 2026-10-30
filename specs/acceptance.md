@@ -1262,7 +1262,9 @@ form, add `acc-a` (127.0.0.1, port 2201, user `pi`, password `acc-pw-A`) and
 - [ ] **M3.1.4 Ending the shell keeps SFTP.** In tab 2 type `exit`.
 
   Expected: tab 2 shows `✕`; tab 3 still lists and opens directories. `x`
-  closes tab 2; tab 3 still works. — Pass [ ] Fail [ ]
+  closes tab 2, and the SFTP tab becomes `2 sftp: acc-real` (tab numbers are
+  positions, D-023) and still works. Later steps name it the `acc-real` SFTP
+  tab. — Pass [ ] Fail [ ]
 
 ## M3.2 Copy, conflicts and progress (tab 1)
 
@@ -1320,7 +1322,7 @@ form, add `acc-a` (127.0.0.1, port 2201, user `pi`, password `acc-pw-A`) and
   its checksum matches M3.0.1; no `.sshelf-part` file remains.
   — Pass [ ] Fail [ ]
 
-- [ ] **M3.3.3 Against the real server.** In tab 3, upload `big.bin` into
+- [ ] **M3.3.3 Against the real server.** In the `acc-real` SFTP tab, upload `big.bin` into
   `~/sshelf-acc-m3` and break the connection at about 40 % (turn the network
   off for a remote host, or on the host run `pkill -f "sshd: $USER"` from
   another login). Reconnect with `r`.
@@ -1330,7 +1332,7 @@ form, add `acc-a` (127.0.0.1, port 2201, user `pi`, password `acc-pw-A`) and
 
 ## M3.4 Rename, delete, mkdir, filter
 
-- [ ] **M3.4.1** In tab 3's remote pane, inside `~/sshelf-acc-m3`: `m` →
+- [ ] **M3.4.1** In the `acc-real` SFTP tab's remote pane, inside `~/sshelf-acc-m3`: `m` →
   `docs`; `r` → `docs2`; `/` `doc` shows only it, Esc clears; upload
   `tree/` into `docs2`; `d` on `docs2`.
 
@@ -1407,7 +1409,7 @@ form, add `acc-a` (127.0.0.1, port 2201, user `pi`, password `acc-pw-A`) and
   `y` closes it, and `ls "$SSHELF_ACC/srv/home/pi"` shows no
   `.sshelf-part` file. — Pass [ ] Fail [ ]
 
-- [ ] **M3.8.2** In tab 3 start a transfer, `ctrl+]` `h`, `q`.
+- [ ] **M3.8.2** In the `acc-real` SFTP tab start a transfer, `ctrl+]` `h`, `q`.
 
   Expected: `Quit and close N tabs? 1 transfer will stop.`, defaulting to
   No; `y` quits; the shell prompt is normal, `stty -a` looks as before, and
