@@ -15,7 +15,7 @@ import (
 
 // sliceFixture is a config dir with one key-file host pointing at an
 // sshtest server, as in the T-004 demo.
-func sliceFixture(t *testing.T, authorize bool) (*App, *sshtest.Server) {
+func sliceFixture(t *testing.T, authorize bool, extra ...sshtest.Option) (*App, *sshtest.Server) {
 	t.Helper()
 	home, dir := t.TempDir(), t.TempDir()
 	if err := os.Mkdir(filepath.Join(home, ".ssh"), 0o700); err != nil {
@@ -35,7 +35,7 @@ func sliceFixture(t *testing.T, authorize bool) (*App, *sshtest.Server) {
 		}
 		opts = append(opts, sshtest.WithAuthorizedKey("demo", other.PublicKey()))
 	}
-	srv := sshtest.New(t, opts...)
+	srv := sshtest.New(t, append(opts, extra...)...)
 	kh := filepath.Join(dir, "known_hosts")
 	if err := os.WriteFile(kh, []byte(srv.KnownHostsLine()+"\n"), 0o600); err != nil {
 		t.Fatal(err)

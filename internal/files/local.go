@@ -10,10 +10,6 @@ import (
 	"strings"
 	"syscall"
 	"time"
-	"unicode"
-	"unicode/utf8"
-
-	"github.com/RafaelXokito/sshelf/internal/domain"
 )
 
 // Errors of the local side. Their texts are what the UI shows.
@@ -153,10 +149,10 @@ func (LocalFS) Stat(_ context.Context, path string) (Entry, error) {
 // Rename renames from to to inside dir. It never replaces an existing
 // entry: when to exists, it fails with ErrExists (FR-SFTP-010).
 func (LocalFS) Rename(_ context.Context, dir, from, to string) error {
-	if err := checkLocalName(from); err != nil {
+	if err := CheckName(from); err != nil {
 		return err
 	}
-	if err := checkLocalName(to); err != nil {
+	if err := CheckName(to); err != nil {
 		return err
 	}
 	root, err := os.OpenRoot(dir)
@@ -174,7 +170,7 @@ func (LocalFS) Rename(_ context.Context, dir, from, to string) error {
 
 // Mkdir creates the directory name in dir with DirMode (FR-SFTP-012).
 func (LocalFS) Mkdir(_ context.Context, dir, name string) error {
-	if err := checkLocalName(name); err != nil {
+	if err := CheckName(name); err != nil {
 		return err
 	}
 	root, err := os.OpenRoot(dir)
@@ -205,7 +201,7 @@ func (LocalFS) Delete(ctx context.Context, dir string, names []string) (int, err
 		if err := ctx.Err(); err != nil {
 			return i, err
 		}
-		if err := checkLocalName(name); err != nil {
+		if err := CheckName(name); err != nil {
 			return i, err
 		}
 		if err := root.RemoveAll(name); err != nil {
@@ -242,7 +238,7 @@ func (d *LocalDir) Close() error { return d.root.Close() }
 
 // Lstat describes name without following a link (to detect a conflict).
 func (d *LocalDir) Lstat(name string) (fs.FileInfo, error) {
-	if err := checkLocalName(name); err != nil {
+	if err := CheckName(name); err != nil {
 		return nil, err
 	}
 	return d.root.Lstat(name)
@@ -254,7 +250,7 @@ func (d *LocalDir) Lstat(name string) (fs.FileInfo, error) {
 // (SEC-SFTP-002 AC2); a directory swapped for a link between the check
 // and the open fails too.
 func (d *LocalDir) Subdir(name string) (*LocalDir, error) {
-	if err := checkLocalName(name); err != nil {
+	if err := CheckName(name); err != nil {
 		return nil, err
 	}
 	if err := d.root.Mkdir(name, DirMode); err != nil && !errors.Is(err, fs.ErrExist) {
@@ -286,7 +282,7 @@ func PartName(name string) string { return name + PartSuffix }
 // O_CREATE|O_EXCL|O_WRONLY and PartMode. O_EXCL refuses a symbolic link
 // in its place.
 func (d *LocalDir) CreatePart(name string) (*os.File, error) {
-	if err := checkLocalName(name); err != nil {
+	if err := CheckName(name); err != nil {
 		return nil, err
 	}
 	return d.root.OpenFile(PartName(name), os.O_CREATE|os.O_EXCL|os.O_WRONLY, PartMode)
@@ -297,7 +293,7 @@ func (d *LocalDir) CreatePart(name string) (*os.File, error) {
 // opened with O_NOFOLLOW and must be the file the Lstat saw. Anything else
 // fails with ErrUnsafePart (SEC-SFTP-002 AC3, AC4).
 func (d *LocalDir) OpenPart(name string) (*os.File, error) {
-	if err := checkLocalName(name); err != nil {
+	if err := CheckName(name); err != nil {
 		return nil, err
 	}
 	part := PartName(name)
@@ -330,7 +326,7 @@ func (d *LocalDir) OpenPart(name string) (*os.File, error) {
 // RemovePart removes name's part file (a link in its place is removed, not
 // followed). A missing part is not an error.
 func (d *LocalDir) RemovePart(name string) error {
-	if err := checkLocalName(name); err != nil {
+	if err := CheckName(name); err != nil {
 		return err
 	}
 	if err := d.root.Remove(PartName(name)); err != nil && !errors.Is(err, fs.ErrNotExist) {
@@ -345,7 +341,7 @@ func (d *LocalDir) RemovePart(name string) error {
 // whatever is at name, a symbolic link included, and never writes through
 // it (SEC-SFTP-002 AC1, SEC-SFTP-003). f is closed whatever the outcome.
 func (d *LocalDir) Finish(f *os.File, name string, mode fs.FileMode, mtime time.Time) error {
-	if err := checkLocalName(name); err != nil {
+	if err := CheckName(name); err != nil {
 		f.Close() //nolint:errcheck,gosec // failed
 		return err
 	}
@@ -366,42 +362,16 @@ func (d *LocalDir) Finish(f *os.File, name string, mode fs.FileMode, mtime time.
 	return d.root.Rename(part, name)
 }
 
-// checkLocalName refuses a name that is not one path element: empty, .,
-// .., or containing /, NUL or a control character (the rules of
-// FR-SFTP-010 and SEC-SFTP-001).
-func checkLocalName(name string) error {
-	if name == "" || name == "." || name == ".." || strings.ContainsRune(name, '/') {
-		return ErrBadName
-	}
-	for _, r := range name {
-		if unicode.IsControl(r) {
-			return ErrBadName
-		}
-	}
-	return nil
-}
-
 // entryOf builds an entry from Lstat (or Stat) information.
 func entryOf(name string, info fs.FileInfo) Entry {
 	return Entry{
 		Name:    name,
-		Display: display(name),
+		Display: Display(name),
 		Kind:    kindOf(info.Mode()),
 		Size:    info.Size(),
 		Mode:    info.Mode().Perm(),
 		ModTime: info.ModTime(),
 	}
-}
-
-// display makes a name safe to show on one line: escape sequences and
-// controls removed, invalid UTF-8, tabs and newlines as U+FFFD.
-func display(name string) string {
-	return strings.Map(func(r rune) rune {
-		if r == '\t' || r == '\n' {
-			return utf8.RuneError
-		}
-		return r
-	}, domain.Sanitize(name))
 }
 
 // localTitle is dir for a pane title: sanitised, the home directory as ~.
@@ -413,5 +383,5 @@ func localTitle(dir string) string {
 			dir = "~/" + rest
 		}
 	}
-	return display(dir)
+	return Display(dir)
 }

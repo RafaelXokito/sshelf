@@ -41,7 +41,9 @@ var rules = []rule{
 	// The session never touches the local terminal: no raw mode, no
 	// cancelable stdin (ARCH-SESS-003 revision).
 	{pkg: "internal/session", allow: []string{"internal/domain", "internal/sshclient", "internal/term"}, forbid: append([]string{"internal/secrets", "internal/store", "internal/ui/...", "internal/app", "golang.org/x/term", "github.com/muesli/cancelreader"}, bubbleTea...)},
-	{pkg: "internal/ui/...", allow: []string{"internal/app", "internal/domain", "internal/search", "internal/session", "internal/ui/..."}, forbid: []string{"internal/secrets", "internal/store", "internal/sshclient", "golang.org/x/crypto/ssh/..."}},
+	// The SFTP tab's back end (M3, ADR-016, ADR-018).
+	{pkg: "internal/files", allow: []string{"internal/domain", "internal/sshclient", "internal/term"}, forbid: append([]string{"internal/secrets", "internal/store", "internal/ui/...", "internal/app", "internal/session"}, bubbleTea...)},
+	{pkg: "internal/ui/...", allow: []string{"internal/app", "internal/domain", "internal/search", "internal/session", "internal/ui/..."}, forbid: []string{"internal/secrets", "internal/store", "internal/sshclient", "internal/files", "golang.org/x/crypto/ssh/...", "github.com/pkg/sftp/..."}},
 	{pkg: "internal/app", forbid: []string{"internal/ui/..."}},
 }
 
@@ -50,6 +52,9 @@ var rules = []rule{
 var (
 	osExec    = "os/exec"
 	clipboard = []string{"clipboard", "osc52"} // substrings of known clipboard package paths
+	// pkg/sftp only in internal/files and the test server (ARCH-SFTP-001).
+	pkgSFTP   = "github.com/pkg/sftp/..."
+	sftpUsers = []string{"internal/files", "internal/testutil/..."}
 )
 
 type pkg struct {
@@ -128,6 +133,9 @@ func violations(module string, pkgs []pkg) []string {
 				if strings.Contains(imp, c) {
 					out = append(out, fmt.Sprintf("%s imports clipboard package %s", rel(p.ImportPath), imp))
 				}
+			}
+			if match(module, pkgSFTP, imp) && !matchAny(module, sftpUsers, p.ImportPath) {
+				out = append(out, fmt.Sprintf("%s imports %s", rel(p.ImportPath), imp))
 			}
 			for _, r := range rules {
 				if !match(module, r.pkg, p.ImportPath) {

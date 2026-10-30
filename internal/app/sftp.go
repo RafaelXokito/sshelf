@@ -3,6 +3,7 @@ package app
 import (
 	"errors"
 
+	"github.com/RafaelXokito/sshelf/internal/files"
 	"github.com/RafaelXokito/sshelf/internal/sshclient"
 )
 
@@ -16,14 +17,24 @@ type connHolder interface {
 	Conn() *sshclient.Conn
 }
 
-// OpenSFTPOn takes a second lease on the connection of s (ADR-017,
-// design §8.8), without dialling or authenticating again (FR-SFTP-003).
-// It fails with sshclient.ErrConnClosed once that connection has ended.
-// The caller owns the lease.
-func (a *App) OpenSFTPOn(s Session) (*sshclient.Lease, error) {
+// OpenSFTPOn opens the remote side of an SFTP tab on the connection of s,
+// with a second lease and without dialling or authenticating again
+// (ADR-017, design §8.8, FR-SFTP-003). It fails with
+// sshclient.ErrConnClosed once that connection has ended and with
+// ErrNoSFTP when the server refuses the subsystem; the session keeps
+// running either way. T-054 wraps the result in the tab's app.Browser.
+func (a *App) OpenSFTPOn(s Session) (*files.RemoteFS, error) {
 	h, ok := s.(connHolder)
 	if !ok {
 		return nil, ErrNoSharedConn
 	}
-	return h.Conn().Lease()
+	lease, err := h.Conn().Lease()
+	if err != nil {
+		return nil, err
+	}
+	r, err := files.OpenRemote(lease) // owns the lease, also on failure
+	if errors.Is(err, files.ErrNoSFTP) {
+		return nil, ErrNoSFTP
+	}
+	return r, err
 }

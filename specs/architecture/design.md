@@ -638,7 +638,8 @@ func (l *Lease) Release()                    // idempotent; the last release clo
 One goroutine per `Conn` (through `term.SafeGo`) waits on `client.Wait()` and
 closes `Done`. Constructors take ownership of a lease: `session.New(lease,
 opts)` and `files.Open(lease, opts)` release it when they end, fail or are
-closed. `app.Connect` creates the `Conn`; `app.OpenSFTPOn(session)` takes a
+closed. (`files.Open` builds the tab's `Browser` on `files.OpenRemote(lease)`,
+the remote side with its two channels, T-046.) `app.Connect` creates the `Conn`; `app.OpenSFTPOn(session)` takes a
 second lease from the session's `Conn`. `app.Session` and `app.Browser`
 gain `ConnID() uint64`, so the root model can find the SFTP tab already on a
 session's connection (FR-SFTP-003) without seeing `sshclient`.
@@ -1031,7 +1032,7 @@ removed in revision 2.
 ### 4.7 SFTP and transfers (`ARCH-SFTP`)
 
 **ARCH-SFTP-001**: The system shall use `github.com/pkg/sftp` v1.13.12 only in `internal/files/remote.go` (and in the test server), and shall open for each SFTP tab one browse channel through `NewClientPipe` behind a byte-counting reader and one transfer channel, both on the tab's connection lease.
-- Priority: M3 · Status: Draft · Source: ADR-016, ADR-018
+- Priority: M3 · Status: Implemented · Source: ADR-016, ADR-018
 - Acceptance: archtest: no other sshelf package imports `github.com/pkg/sftp`. sshtest records two `subsystem sftp` requests per SFTP tab. With `WithMaxSessions` allowing only one more channel, the tab still opens and transfers and listings work over one channel. Closing the browser closes both channels (sshtest records their closes) and releases the lease once.
 
 **ARCH-SFTP-002**: The system shall list, stat and change remote and local directories only in commands off the UI goroutine, applying the name check of SEC-SFTP-001 and the limits of SEC-SFTP-004 inside `internal/files`, so that the UI receives only safe, capped listings.
