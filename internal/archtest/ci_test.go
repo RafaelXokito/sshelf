@@ -80,8 +80,10 @@ func TestNFR_PERF_005_CIRunsPerfSessionJob(t *testing.T) {
 // records them (T-058).
 func TestNFR_PERF_007_CIRunsPerfSFTPJob(t *testing.T) {
 	wantAll(t, ciFile, readRootFile(t, ciFile), "perf-sftp:",
-		"-run 'TestNFR_PERF_00[789]_|TestNFR_SIZE_004_' ./internal/files ./internal/ui ./cmd/sshelf",
-		"failed once on this runner; retrying", "BenchmarkNFR_PERF_00[79]_")
+		"-run 'TestNFR_PERF_00[789]_|TestNFR_SIZE_004_' -skip 'TestNFR_PERF_008_SessionKeys' ./internal/files ./internal/ui ./cmd/sshelf",
+		"-run 'TestNFR_PERF_008_SessionKeysDuringTransfers' ./cmd/sshelf",
+		"failed once on this runner; retrying", "BenchmarkNFR_PERF_00[79]_",
+		"continue-on-error: ${{ matrix.os != 'ubuntu-latest' }}")
 	const tmpl = ".github/pull_request_template.md"
 	wantAll(t, tmpl, readRootFile(t, tmpl), "sftp: throughput down / up", "heap peak, two transfers")
 }

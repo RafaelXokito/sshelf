@@ -103,8 +103,7 @@ func (m Model) snapshot(ts []app.Transfer) (Model, tea.Cmd) {
 		side := t.From.Other()
 		if p := m.panes[side]; p.loaded && p.dir == t.DstDir && !refreshed[side] {
 			refreshed[side] = true
-			name, _ := p.cursorName()
-			cmds = append(cmds, m.list(side, p.dir, name))
+			cmds = append(cmds, m.refreshSide(side))
 		}
 	}
 	for id, bt := range batches {

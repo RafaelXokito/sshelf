@@ -216,27 +216,27 @@ func keeper(b app.Browser, local, remoteDir string, srv *sshtest.Server, stop <-
 	return rounds, fail, func() { <-finished }
 }
 
-// TestNFR_PERF_008_FrameGaps drives the root model as tea.Program would,
-// with a session tab and an SFTP tab on one connection to sshtest, while
-// a 256 MiB download and a 256 MiB upload run (queued again whenever
-// they finish): 200 cursor keys to the SFTP tab, 50 ms apart, each show
-// the moved cursor within 100 ms; no Update or View call takes more than
-// 20 ms; the progress line is redrawn at most 4 times a second; then
-// 1,000 keys to the session tab reach the server within 5 ms at the
-// 99th percentile (NFR-PERF-004).
-func TestNFR_PERF_008_FrameGaps(t *testing.T) {
+// transfersRunning is a live model with a session tab and an SFTP tab on
+// one connection to sshtest, the SFTP tab focused, while a 256 MiB
+// download and a 256 MiB upload run, each queued again as soon as it
+// finishes (over loopback one takes well under a second).
+type transfersRunning struct {
+	l      *liveModel
+	p      *program
+	rounds func() int    // transfers queued so far
+	failed func() string // a transfer that stopped, or ""
+	stop   func()        // stops queueing and waits
+}
+
+func startTransfers(t *testing.T) *transfersRunning {
+	t.Helper()
 	if testing.Short() {
 		t.Skip("timing")
 	}
 	if raceEnabled {
 		t.Skip("timing limit not meaningful under -race; CI runs it in the perf-sftp job")
 	}
-	const (
-		keyLimit    = 100 * time.Millisecond
-		callLimit   = 20 * time.Millisecond
-		strokeLimit = 5 * time.Millisecond
-		size        = 256 << 20
-	)
+	const size = 256 << 20
 	local, remote := t.TempDir(), t.TempDir()
 	t.Chdir(local) // the local pane starts in the working directory (FR-SFTP-005)
 	writeRandom(t, filepath.Join(local, "up.bin"), size)
@@ -264,7 +264,7 @@ func TestNFR_PERF_008_FrameGaps(t *testing.T) {
 	rounds, failed, wait := keeper(b, local, sshtest.SFTPHome, l.srv, stop)
 	stopKeeper := sync.OnceFunc(func() { close(stop); wait() })
 	t.Cleanup(stopKeeper)
-	p.until("both transfers running", func(v string) bool {
+	p.until("both transfers running", func(string) bool {
 		running := 0
 		for _, x := range b.Transfers() {
 			if x.State == app.Running {
@@ -273,9 +273,22 @@ func TestNFR_PERF_008_FrameGaps(t *testing.T) {
 		}
 		return running == 2
 	})
+	return &transfersRunning{l: l, p: p, rounds: rounds, failed: failed, stop: stopKeeper}
+}
 
-	// 200 cursor keys to the SFTP tab, 50 ms apart: j and k alternate
-	// between ".." and a00.txt.
+// TestNFR_PERF_008_FrameGaps drives the root model as tea.Program would
+// while two transfers run (startTransfers): 200 cursor keys to the SFTP
+// tab, 50 ms apart, each show the moved cursor within 100 ms; no Update
+// or View call takes more than 20 ms; the progress line is redrawn at
+// most 4 times a second.
+func TestNFR_PERF_008_FrameGaps(t *testing.T) {
+	const (
+		keyLimit  = 100 * time.Millisecond
+		callLimit = 20 * time.Millisecond
+	)
+	tr := startTransfers(t)
+	p := tr.p
+	// j and k alternate between ".." and a00.txt.
 	p.slowest, p.ticks = 0, 0
 	start := time.Now()
 	var worst time.Duration
@@ -290,14 +303,15 @@ func TestNFR_PERF_008_FrameGaps(t *testing.T) {
 		}
 		worst = max(worst, took)
 		p.step(time.Now().Add(50*time.Millisecond), true)
-		if f := failed(); f != "" {
+		if f := tr.failed(); f != "" {
 			t.Fatalf("a transfer stopped: %s", f)
 		}
 	}
 	elapsed := time.Since(start)
+	tr.stop()
 	slowest, slowMsg, ticks := p.slowest, p.slowMsg, p.ticks
 	t.Logf("sftp: during transfers, key to frame worst %v, slowest call %v (%s), %d progress ticks in %v, %d transfers queued",
-		worst, slowest, slowMsg, ticks, elapsed.Round(time.Millisecond), rounds())
+		worst, slowest, slowMsg, ticks, elapsed.Round(time.Millisecond), tr.rounds())
 	if worst > keyLimit {
 		t.Errorf("a key took %v to reach the frame; want at most %v", worst, keyLimit)
 	}
@@ -310,8 +324,16 @@ func TestNFR_PERF_008_FrameGaps(t *testing.T) {
 	if ticks == 0 {
 		t.Error("no progress tick while the transfers ran")
 	}
+}
 
-	// 1,000 keys to the session tab on the same connection.
+// TestNFR_PERF_008_SessionKeysDuringTransfers: while two transfers run
+// on the connection (startTransfers), 1,000 keys to the session tab on
+// it reach the server within 5 ms at the 99th percentile (NFR-PERF-004's
+// bound). Open in specs/nfr.md: CI runners measure 8 to 17 ms.
+func TestNFR_PERF_008_SessionKeysDuringTransfers(t *testing.T) {
+	const strokeLimit = 5 * time.Millisecond
+	tr := startTransfers(t)
+	p, l := tr.p, tr.l
 	p.send(tea.KeyPressMsg{Code: ']', Mod: tea.ModCtrl})
 	p.send(tea.KeyPressMsg{Code: '1', Text: "1"})
 	p.until("the session tab focused", func(v string) bool { return !strings.Contains(v, "a00.txt") })
@@ -341,13 +363,13 @@ func TestNFR_PERF_008_FrameGaps(t *testing.T) {
 		times[i] = time.Since(sent)
 		have = want
 	}
-	if f := failed(); f != "" {
+	if f := tr.failed(); f != "" {
 		t.Fatalf("a transfer stopped: %s", f)
 	}
-	stopKeeper()
+	tr.stop()
 	slices.Sort(times)
 	p99 := times[len(times)*99/100]
-	t.Logf("sftp: session keystroke overhead during transfers p99 %v, %d transfers queued in all", p99, rounds())
+	t.Logf("sftp: session keystroke overhead during transfers p99 %v, %d transfers queued", p99, tr.rounds())
 	if p99 > strokeLimit {
 		t.Errorf("session keystroke overhead p99 %v during transfers; want at most %v", p99, strokeLimit)
 	}

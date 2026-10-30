@@ -405,6 +405,22 @@ func TestFR_SFTP_013_RefreshKeepsCursor(t *testing.T) {
 	}
 }
 
+// TestFR_SFTP_013_RefreshKeepsLaterMoves: a cursor key pressed while a
+// refresh is on its way counts; the listing does not put the cursor back
+// where it was when the refresh was asked for (found by
+// TestNFR_PERF_008_FrameGaps on a loaded CI runner).
+func TestFR_SFTP_013_RefreshKeepsLaterMoves(t *testing.T) {
+	d, _ := approvedTab(t)
+	d.keys("j") // scripts/
+	m, refresh := d.m.Update(tea.KeyPressMsg{Code: 'R', Text: "R"})
+	d.m = m
+	d.keys("j") // .bashrc, before the listing arrives
+	d.run(refresh)
+	if _, _, cur := where(t, d); cur != ".bashrc" {
+		t.Fatalf("cursor = %q after the refresh arrived, want .bashrc", cur)
+	}
+}
+
 func TestFR_TAB_003_M3_SftpLabel(t *testing.T) {
 	d, _ := approvedTab(t)
 	if h := headerLine(d); h != "sshelf │ Hosts │ 1 raspberrypi4 │[2 sftp: raspberrypi4]│" {

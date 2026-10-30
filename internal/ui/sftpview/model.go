@@ -140,12 +140,7 @@ func (m Model) Init() tea.Cmd {
 func (m Model) Refresh() tea.Cmd {
 	var cmds []tea.Cmd
 	for _, p := range m.panes {
-		if !p.loaded {
-			cmds = append(cmds, m.listStart(p.side))
-			continue
-		}
-		name, _ := p.cursorName()
-		cmds = append(cmds, m.list(p.side, p.dir, name))
+		cmds = append(cmds, m.refreshSide(p.side))
 	}
 	return tea.Batch(cmds...)
 }
@@ -580,14 +575,15 @@ func (m Model) edit(p *pane) (Model, tea.Cmd) {
 	return m, nil
 }
 
-// refreshSide lists one pane again.
+// refreshSide lists one pane again. The cursor stays on the name under
+// it when the listing arrives, not when it was asked for: keys pressed
+// meanwhile still count.
 func (m Model) refreshSide(side app.Side) tea.Cmd {
 	p := m.panes[side]
 	if !p.loaded {
 		return m.listStart(side)
 	}
-	name, _ := p.cursorName()
-	return m.list(side, p.dir, name)
+	return m.list(side, p.dir, "")
 }
 
 // open opens the row under the cursor: "..", a directory, or a link to
