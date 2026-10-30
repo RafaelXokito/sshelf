@@ -1,0 +1,24 @@
+sshelf │ Hosts │ 1 raspberrypi4 │[2 sftp: raspberrypi4]│
+┌ Transfers (1) ───────────────────────────────────────────────────────────────┐
+│> ↓ notes.txt                    waiting               0/3 KB                 │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+
+╭────────────────────────────────────────────╮
+│ notes.txt already exists                   │
+│ remote 840 MB, Oct 29 10:12                │
+│ local  812 MB, Oct 28 09:12                │
+│                                            │
+│ [o] Overwrite    [s] Skip    [n] Keep both │
+│ [a] apply to all: no    [esc] Skip         │
+╰────────────────────────────────────────────╯
+ ? notes.txt exists · t to answer
+o overwrite • s skip • n keep both • a apply to all

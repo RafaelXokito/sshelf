@@ -130,11 +130,16 @@ type Model struct {
 	now    func() time.Time                     // injectable clock
 	tick   func() tea.Cmd                       // the one-second clock; tests replace it
 	listen func(num int, s app.Session) tea.Cmd // waits for a session's next update; tests replace it
+	// listenSFTP waits for an SFTP tab's next queue change or drop, and
+	// progressTick is its 250 ms redraw; tests replace both.
+	listenSFTP   func(num, gen int, b app.Browser, watchDone bool, stop <-chan struct{}) tea.Cmd
+	progressTick func(num int, b app.Browser) tea.Cmd
 }
 
 // New returns the root model. It does no I/O; Init loads the config.
 func New(svc app.Service) Model {
-	return Model{svc: svc, now: time.Now, tick: tickEverySecond, listen: listenSession, home: localHome()}
+	return Model{svc: svc, now: time.Now, tick: tickEverySecond, listen: listenSession, home: localHome(),
+		listenSFTP: listenBrowser, progressTick: progressTick}
 }
 
 // Init implements tea.Model. Besides loading the config it asks the
@@ -160,6 +165,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return next, cmd
 	}
 	if next, cmd, ok := m.updateSFTP(msg); ok {
+		return next, cmd
+	}
+	if next, cmd, ok := m.updateTransfers(msg); ok {
 		return next, cmd
 	}
 	switch msg := msg.(type) {

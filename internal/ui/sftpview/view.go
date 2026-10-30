@@ -36,11 +36,16 @@ func (m Model) View() string { return strings.Join(m.Lines(), "\n") }
 func (m Model) Lines() []string {
 	w, _ := m.size()
 	lay := m.Layout()
-	left := m.box(app.Local, lay.Boxes[0])
-	right := m.box(app.Remote, lay.Boxes[1])
-	out := make([]string, 0, len(left)+2)
-	for i := range left {
-		out = append(out, left[i]+right[i])
+	var out []string
+	if m.showTransfers {
+		b := lay.Boxes[0]
+		out = m.transfersBox(Rect{X: 0, Y: b.Y, W: w, H: b.H})
+	} else {
+		left := m.box(app.Local, lay.Boxes[0])
+		right := m.box(app.Remote, lay.Boxes[1])
+		for i := range left {
+			out = append(out, left[i]+right[i])
+		}
 	}
 	out = append(out, m.ProgressLine(), m.Footer())
 	for i, l := range out {
@@ -156,10 +161,11 @@ func (m Model) ProgressLine() string {
 	if c := m.counting; c != nil {
 		return msgStyle.Render(" " + cut("Counting "+c.label+"… esc cancel", w-1))
 	}
-	if m.msg == "" {
+	s := m.statusLine(w - 1)
+	if s == "" {
 		return ""
 	}
-	return msgStyle.Render(" " + cut(m.msg, w-1))
+	return msgStyle.Render(" " + cut(s, w-1))
 }
 
 // Footer is the last line: the key hints of the current state, from
@@ -174,6 +180,8 @@ func (m Model) Hints() []key.Binding {
 	switch {
 	case m.panes[m.focus].filtering:
 		return []key.Binding{keys.FilterKeep, keys.FilterClear}
+	case m.showTransfers:
+		return []key.Binding{keys.TransferCancel, keys.TransferRetry, keys.TransferAnswer, keys.TransferClear, keys.TransfersBack}
 	case m.disconnected:
 		return keys.SFTPDisconnectedKeys()
 	}

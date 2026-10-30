@@ -2119,6 +2119,14 @@ footer, generated from `ui/keys`, dropping hints from the right to fit. The
 transfers view replaces the two boxes with one full-width box. At 80×24 each
 box shows 18 entry rows.
 
+**Progress line, in order** (FR-SFTP-014, FR-SFTP-024): a delete's count
+("Counting photos/… esc cancel"); the oldest running transfer; a message
+set less than 10 s ago (an error, a warning, a finished copy's summary, a
+failed reconnect); paused transfers; a waiting question; the last message.
+The view reads snapshots only: the listener command takes
+`Browser.Transfers()` on each `Updates()` notification and the 250 ms tick
+takes one when it fires, so `Update` never calls the browser.
+
 **Key routing on an SFTP tab** (step 4 of §9.4's order): the filter field
 while it is focused (text, `enter`, `esc`); otherwise the transfers view's
 keys while it is shown; otherwise the panes' keys of §9.3. A disconnected

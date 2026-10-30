@@ -132,7 +132,12 @@ type driver struct {
 	// counts the clock ticks asked for.
 	listeners map[int]tea.Cmd
 	ticks     int
-	clock     time.Time
+	// progressTicks counts the SFTP progress ticks asked for; pendingTick
+	// is the last one, delivered by fireTick.
+	progressTicks int
+	pendingTick   tea.Cmd
+	svcSFTP       *sftpService // set by sftpDriver
+	clock         time.Time
 }
 
 // testEpoch is the driver's clock at the start of every test.

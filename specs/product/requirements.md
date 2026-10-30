@@ -1341,7 +1341,7 @@ The system shall show a one-line header that starts with `sshelf`, then the `Hos
   - Labels are sanitised (SEC-SESSION-003) and cut to 20 columns with `…`. A tab shows the host label only; a window title set by the remote (OSC 0 or 2) is never shown (SEC-SESSION-005).
   - If the tabs do not fit, the bar keeps the focused tab visible and replaces the hidden tabs with `‹+N` on the left and `+N›` on the right. At 80 columns, 10 tabs with 12-character labels fit on one line (golden).
   - The header is shown on every screen, the Hosts tab and the Welcome screen included, and replaces the MVP's `sshelf` title line.
-- **M3 revision** · Priority: M3 · Status: Draft · Source: D-017
+- **M3 revision** · Priority: M3 · Status: Implemented · Source: D-017
   - *Revised:* The system shall show a one-line header that starts with `sshelf`, then the `Hosts` tab, then one entry per session tab (`<number> <host label>`) and per SFTP tab (`<number> sftp: <host label>`) in opening order, separated by `│`, with the focused tab highlighted.
   - *Acceptance:* the M2 criteria above, unchanged, plus:
     - Session and SFTP tabs share one numbering, so `Ctrl+]` `1`–`9` address both. Numbers are not reused.

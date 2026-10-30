@@ -99,6 +99,12 @@ type Model struct {
 
 	counting *counting // a delete counting what it will delete; nil if none
 	countSeq int
+
+	transfers     []app.Transfer // the last snapshot, oldest first
+	showTransfers bool           // the transfers view replaces the panes
+	tcursor       int            // the selected transfer
+	doneSeen      map[app.TransferID]bool
+	reported      map[app.BatchID]bool // finished copies already summed up
 }
 
 // New returns the view of SFTP tab number tab, browsing with b. The
@@ -109,8 +115,16 @@ func New(tab int, b app.Browser, opts Options) Model {
 	}
 	return Model{
 		tab: tab, b: b, opts: opts, focus: app.Remote,
-		panes: [2]*pane{newPane(app.Local), newPane(app.Remote)},
+		panes:    [2]*pane{newPane(app.Local), newPane(app.Remote)},
+		doneSeen: map[app.TransferID]bool{}, reported: map[app.BatchID]bool{},
 	}
+}
+
+// WithMessage puts text on the progress line, such as why a reconnect
+// failed (FR-SFTP-018).
+func (m Model) WithMessage(text string) Model {
+	m.setMessage(text)
+	return m
 }
 
 // Init lists both panes' starting directories.
@@ -261,6 +275,10 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		cmd = m.runDelete(msg, m.panes[msg.side].deleteWant(msg.names))
 	case opDoneMsg:
 		m, cmd = m.opDone(msg)
+	case SnapshotMsg:
+		m, cmd = m.snapshot(msg.Transfers)
+	case answerMsg:
+		cmd = m.answer(msg)
 	default:
 		return m, nil
 	}
@@ -439,6 +457,9 @@ func (m Model) key(k tea.KeyPressMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 	m.expireMessage()
+	if m.showTransfers {
+		return m.transferKey(k)
+	}
 	if m.disconnected && !m.browsable(k) {
 		m.setMessage(ErrorMark + " not connected")
 		return m, nil
@@ -449,7 +470,7 @@ func (m Model) key(k tea.KeyPressMsg) (Model, tea.Cmd) {
 // browsable reports whether k works while the connection is lost:
 // switching panes, and browsing the local pane (FR-SFTP-018).
 func (m Model) browsable(k tea.KeyPressMsg) bool {
-	if key.Matches(k, keys.SwitchPane, keys.SFTPHelp) {
+	if key.Matches(k, keys.SwitchPane, keys.SFTPHelp, keys.Transfers) {
 		return true
 	}
 	return m.focus == app.Local && key.Matches(k, keys.Up, keys.Down, keys.PageUp, keys.PageDown,
@@ -509,6 +530,10 @@ func (m Model) paneKey(p *pane, k tea.KeyPressMsg) (Model, tea.Cmd) {
 	case key.Matches(k, keys.SFTPHelp):
 		modal := help.NewList("SFTP tab keys", keys.SFTPPaneKeys())
 		return m, func() tea.Msg { return components.ShowModalMsg{Modal: modal} }
+	case key.Matches(k, keys.Transfers):
+		m.showTransfers = true
+	case key.Matches(k, keys.Copy):
+		return m, m.copySelection(p)
 	case key.Matches(k, keys.Rename):
 		return m, m.rename(p)
 	case key.Matches(k, keys.Mkdir):

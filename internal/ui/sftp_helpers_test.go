@@ -109,13 +109,22 @@ func approvedBrowser(connID uint64) *apptest.FakeBrowser {
 func sftpDriver(t *testing.T, hosts []domain.Host, sessions []*apptest.FakeSession, browsers ...*apptest.FakeBrowser) (*driver, *sftpService) {
 	t.Helper()
 	svc := &sftpService{fakeService: &fakeService{hosts: hosts, framed: sessions}, browsers: browsers}
-	d := &driver{t: t, svc: svc.fakeService, listeners: map[int]tea.Cmd{}, clock: testEpoch}
+	d := &driver{t: t, svc: svc.fakeService, svcSFTP: svc, listeners: map[int]tea.Cmd{}, clock: testEpoch}
 	m := New(svc)
 	m.home = "/Users/me"
 	m.now = func() time.Time { return d.clock }
 	m.tick = func() tea.Cmd { d.ticks++; return nil }
 	m.listen = func(num int, s app.Session) tea.Cmd {
 		d.listeners[num] = listenSession(num, s)
+		return nil
+	}
+	m.listenSFTP = func(num, gen int, b app.Browser, watchDone bool, stop <-chan struct{}) tea.Cmd {
+		d.listeners[num] = listenBrowser(num, gen, b, watchDone, stop)
+		return nil
+	}
+	m.progressTick = func(num int, b app.Browser) tea.Cmd {
+		d.progressTicks++
+		d.pendingTick = func() tea.Msg { return progressTickMsg{num: num, transfers: b.Transfers()} }
 		return nil
 	}
 	d.m = m

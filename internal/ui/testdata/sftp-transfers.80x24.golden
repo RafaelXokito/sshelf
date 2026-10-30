@@ -1,0 +1,24 @@
+sshelf │ Hosts │ 1 raspberrypi4 │[2 sftp: raspberrypi4]│
+┌ Transfers (8) ───────────────────────────────────────────────────────────────┐
+│> ↓ backup.tar.gz                running           412/840 MB   12 MB/s   0:35│
+│  ↓ photos/a.jpg                 queued                0/2 MB                 │
+│  ↓ notes.txt                    waiting               0/3 KB                 │
+│  ↑ report.pdf                   paused            0.6/1.2 MB                 │
+│  ↑ done.txt                     done                  5/5 KB                 │
+│  ↑ secret.key                   failed: permi…       0/400 B                 │
+│  ↓ big.iso                      cancelled             0/4 GB                 │
+│  ↓ link@                        skipped: syml…                               │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+ ↓ backup.tar.gz  412/840 MB  █████░░░░░ 49%  12 MB/s  1 queued
+ x cancel · r retry · enter answer · C clear finished · t/esc back

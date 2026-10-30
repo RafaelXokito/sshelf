@@ -2,7 +2,6 @@ package ui
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -14,7 +13,6 @@ import (
 	"github.com/RafaelXokito/sshelf/internal/domain"
 	"github.com/RafaelXokito/sshelf/internal/ui/components"
 	"github.com/RafaelXokito/sshelf/internal/ui/keys"
-	"github.com/RafaelXokito/sshelf/internal/ui/modals/confirm"
 	"github.com/RafaelXokito/sshelf/internal/ui/modals/connecting"
 	"github.com/RafaelXokito/sshelf/internal/ui/screens/hostlist"
 	"github.com/RafaelXokito/sshelf/internal/ui/sftpview"
@@ -27,8 +25,10 @@ type sftpTab struct {
 	browser      app.Browser
 	view         sftpview.Model
 	disconnected bool
-	failure      string // a failed reconnect
-	seenDone     int    // finished transfers when last focused; activity = more since
+	seenDone     int  // finished transfers when last seen focused; activity = more since
+	ticking      bool // a progress tick is on its way
+	gen          int  // the listener generation; a reconnect starts a new one
+	stop         chan struct{}
 }
 
 // ConnectedSFTPMsg carries a browser opened by OpenSFTP (through the
@@ -128,10 +128,10 @@ func (m Model) openSFTPTab(hostID domain.ID, label string, b app.Browser) (Model
 	if m.width > 0 {
 		v = v.SetSize(m.width, m.height)
 	}
-	t := &sessionTab{num: m.nextNum, hostID: hostID, label: label, started: m.now(), sftp: &sftpTab{browser: b, view: v}}
+	t := &sessionTab{num: m.nextNum, hostID: hostID, label: label, started: m.now(), sftp: &sftpTab{browser: b, view: v, stop: make(chan struct{})}}
 	m.tabs = append(m.tabs, t)
 	m, cmd := m.focusTab(len(m.tabs))
-	return m, tea.Batch(v.Init(), cmd)
+	return m, tea.Batch(v.Init(), m.listenTab(t), cmd)
 }
 
 // updateSFTP handles the SFTP messages; ok is false for others.
@@ -186,22 +186,17 @@ func failedStatusNoLabel(err error) string {
 // prefix key's (design §9.6).
 func (m Model) sftpKey(t *sessionTab, k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	st := t.sftp
-	if st.disconnected && !st.view.Filtering() {
+	if st.disconnected && !st.view.Filtering() && !st.view.ShowingTransfers() {
 		switch {
+		case key.Matches(k, keys.Reconnect):
+			return m.reconnectSFTP(t)
 		case key.Matches(k, keys.CloseTab):
-			return m.closeSFTPAsk(t)
+			return m.closeSFTPAsk(t, true)
 		}
 	}
 	var cmd tea.Cmd
 	st.view, cmd = st.view.Update(k)
 	return m, cmd
-}
-
-// closeSFTPAsk asks before closing SFTP tab t (FR-SFTP-025).
-func (m Model) closeSFTPAsk(t *sessionTab) (tea.Model, tea.Cmd) {
-	q := fmt.Sprintf("Close SFTP tab %d?", t.num)
-	m.modals = append(m.modals, confirm.New(q, closeTabMsg{Num: t.num}))
-	return m, nil
 }
 
 // sftpView draws an SFTP tab: the header, the panes with the modals over
@@ -270,7 +265,7 @@ func sftpEntry(t *sessionTab, focused bool) tabs.Entry {
 
 // activity reports a transfer that finished or failed while the tab was
 // in the background (FR-TAB-003 M3 revision).
-func (s *sftpTab) activity() bool { return false }
+func (s *sftpTab) activity() bool { return s.view.Finished() > s.seenDone }
 
-// seen clears the activity marker when the tab is focused.
-func (s *sftpTab) seen() {}
+// seen clears the activity marker while the tab is focused.
+func (s *sftpTab) seen() { s.seenDone = s.view.Finished() }

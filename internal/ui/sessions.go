@@ -225,10 +225,13 @@ func (m Model) focusTab(i int) (Model, tea.Cmd) {
 		t.seq = t.sess.Snapshot().Seq
 		t.seenSeq = t.seq
 	}
+	var progress tea.Cmd
 	if t := m.focusedSFTP(); t != nil {
 		t.sftp.seen()
+		progress = m.ensureProgress(t)
 	}
-	return m.ensureTick()
+	m, cmd := m.ensureTick()
+	return m, tea.Batch(cmd, progress)
 }
 
 // focusNum focuses session tab number num, if there is one.
@@ -258,6 +261,9 @@ func (m Model) closeTab(num int) (Model, tea.Cmd) {
 	t := m.tabs[i]
 	m.tabs = append(m.tabs[:i:i], m.tabs[i+1:]...)
 	c := t.closer()
+	if t.sftp != nil {
+		close(t.sftp.stop) // ends its listener
+	}
 	closeCmd := func() tea.Msg { _ = c.Close(); return nil }
 	switch {
 	case m.focus == i+1:
@@ -462,7 +468,7 @@ func (m Model) runPrefix(r keys.PrefixResult) (tea.Model, tea.Cmd) {
 		}
 	case keys.PrefixDoDisconnect:
 		if st := m.focusedSFTP(); st != nil {
-			return m.closeSFTPAsk(st)
+			return m.closeSFTPAsk(st, false)
 		}
 		if t != nil {
 			sftp := 0
