@@ -152,10 +152,13 @@ func (m Model) rowText(p *pane, idx, inner int) string {
 // ProgressLine is the line under the panes: the message slot
 // (FR-SFTP-014, FR-SFTP-024).
 func (m Model) ProgressLine() string {
+	w, _ := m.size()
+	if c := m.counting; c != nil {
+		return msgStyle.Render(" " + cut("Counting "+c.label+"… esc cancel", w-1))
+	}
 	if m.msg == "" {
 		return ""
 	}
-	w, _ := m.size()
 	return msgStyle.Render(" " + cut(m.msg, w-1))
 }
 

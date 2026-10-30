@@ -1,0 +1,24 @@
+sshelf │ Hosts │ 1 raspberrypi4 │[2 sftp: raspberrypi4]│
+┌ Local: ~/Downloads ──────────────────┐┌ Remote: /home/pi ────────────────────┐
+│   ..                                 ││   ..                                 │
+│ ▸ photos/                     4 items││ ▸ scripts/                   12 items│
+│   notes.txt                      3 KB││   .bashrc                        4 KB│
+│>  report.pdf                   1.2 MB││   backup.tar.gz                840 MB│
+│                                      ││                                      │
+│                                      ││                                      │
+│                                      ││                                      │
+│                                      ││                                      │
+│                                      ││                                      │
+│                                      ││                                      │
+│                                      ││                                      │
+│                                      ││                                      │
+
+╭────────────────────────────╮
+│ Rename report.pdf to:      │
+│                            │
+│ > report.pdf_              │
+│                            │
+│ [enter] OK    [esc] Cancel │
+╰────────────────────────────╯
+
+enter submit • esc cancel

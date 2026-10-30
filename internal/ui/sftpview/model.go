@@ -96,6 +96,9 @@ type Model struct {
 
 	msg   string // the progress line's message slot
 	msgAt time.Time
+
+	counting *counting // a delete counting what it will delete; nil if none
+	countSeq int
 }
 
 // New returns the view of SFTP tab number tab, browsing with b. The
@@ -248,6 +251,16 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		m = m.counted(msg)
 	case statMsg:
 		m, cmd = m.statted(msg)
+	case renameMsg:
+		cmd = m.runRename(msg)
+	case mkdirMsg:
+		cmd = m.runMkdir(msg)
+	case deleteCountedMsg:
+		m, cmd = m.deleteCounted(msg)
+	case deleteMsg:
+		cmd = m.runDelete(msg, m.panes[msg.side].deleteWant(msg.names))
+	case opDoneMsg:
+		m, cmd = m.opDone(msg)
 	default:
 		return m, nil
 	}
@@ -421,6 +434,10 @@ func (m Model) key(k tea.KeyPressMsg) (Model, tea.Cmd) {
 		}
 		return m, nil
 	}
+	if m.counting != nil && key.Matches(k, keys.Cancel) {
+		m.stopCounting() // FR-SFTP-011: esc cancels the count, nothing is deleted
+		return m, nil
+	}
 	m.expireMessage()
 	if m.disconnected && !m.browsable(k) {
 		m.setMessage(ErrorMark + " not connected")
@@ -492,6 +509,12 @@ func (m Model) paneKey(p *pane, k tea.KeyPressMsg) (Model, tea.Cmd) {
 	case key.Matches(k, keys.SFTPHelp):
 		modal := help.NewList("SFTP tab keys", keys.SFTPPaneKeys())
 		return m, func() tea.Msg { return components.ShowModalMsg{Modal: modal} }
+	case key.Matches(k, keys.Rename):
+		return m, m.rename(p)
+	case key.Matches(k, keys.Mkdir):
+		return m, m.mkdir(p)
+	case key.Matches(k, keys.Delete):
+		return m.delete(p)
 	case key.Matches(k, keys.EditLocally):
 		if r, ok := p.current(); ok && !r.parent && p.side == app.Remote {
 			tab, dir, name := m.tab, p.dir, r.e.Name

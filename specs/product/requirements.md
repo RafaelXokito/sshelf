@@ -1133,7 +1133,7 @@ When the user presses `space` on an entry, the system shall mark or unmark it an
 ### FR-SFTP-010 · Rename
 When the user presses `r` on an entry and enters a new name, the system shall rename that entry within its directory.
 
-- **Priority:** M3 · **Status:** Draft · **Source:** D-018
+- **Priority:** M3 · **Status:** Implemented · **Source:** D-018
 - **Acceptance:**
   - The modal "Rename report.pdf to:" opens with the current name filled in. Enter renames; Esc cancels.
   - A name that is empty, `.` or `..`, or contains `/`, NUL or a control character is refused in the modal with a reason.
@@ -1143,7 +1143,7 @@ When the user presses `r` on an entry and enters a new name, the system shall re
 ### FR-SFTP-011 · Delete with confirmation
 When the user presses `d`, the system shall ask for confirmation, stating how many entries will be deleted including the contents of directories, and delete the marked entries or the entry under the cursor only after `y`.
 
-- **Priority:** M3 · **Status:** Draft · **Source:** D-018
+- **Priority:** M3 · **Status:** Implemented · **Source:** D-018
 - **Acceptance:**
   - One file: "Delete notes.txt?". A directory: sshelf first counts its contents in the background ("Counting photos/… esc cancel"), then asks "Delete photos/ and the 1,234 entries in it? This cannot be undone." Several: "Delete 3 items and the 1,234 entries in them?". Counting stops at 100,000 ("more than 100,000 entries").
   - The confirmation defaults to No (`n`, Enter and Esc keep everything).
@@ -1154,7 +1154,7 @@ When the user presses `d`, the system shall ask for confirmation, stating how ma
 ### FR-SFTP-012 · Make a directory
 When the user presses `m` and enters a name, the system shall create a directory with that name in the focused pane's current directory and put the cursor on it.
 
-- **Priority:** M3 · **Status:** Draft · **Source:** D-018
+- **Priority:** M3 · **Status:** Implemented · **Source:** D-018
 - **Acceptance:**
   - The name rules of FR-SFTP-010 apply. An existing name is refused with "already exists".
   - The new directory has mode 0755 before the umask (local) or the server's default (remote).
@@ -1278,7 +1278,7 @@ While the terminal is at least 80 columns by 24 rows, the system shall show both
 ### FR-SFTP-024 · Errors and warnings
 If an SFTP operation fails or skips entries, then the system shall say so on the progress line with the entry's name and the server's or the OS's reason, without closing the tab.
 
-- **Priority:** M3 · **Status:** Draft · **Source:** D-018
+- **Priority:** M3 · **Status:** Implemented · **Source:** D-018
 - **Acceptance:**
   - Permission denied, no such file, disk full (local `ENOSPC`) and a server failure status each produce one line such as `✕ cannot open /root: permission denied`, with the `✕` prefix (NFR-UX-003). Server text is sanitised and cut (SEC-SFTP-008).
   - Entries skipped for unsafe names (SEC-SFTP-001) or listing limits (SEC-SFTP-004) are counted in one warning per listing: `⚠ 2 entries with unsafe names not shown`.

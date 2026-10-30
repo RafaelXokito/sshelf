@@ -123,7 +123,7 @@ func hiddenName(name string) bool { return strings.HasPrefix(name, ".") }
 // shown.
 func (p *pane) rebuild(hidden bool) {
 	keep, hadParent := p.cursorName()
-	p.rows = p.rows[:0]
+	p.rows = nil
 	if p.loaded && !p.atRoot() {
 		p.rows = append(p.rows, row{parent: true})
 	}
