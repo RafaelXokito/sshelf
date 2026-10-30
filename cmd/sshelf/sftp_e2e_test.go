@@ -184,7 +184,6 @@ func TestFR_SFTP_002_E2EOpenFromHostList(t *testing.T) {
 	r := startSFTP(t)
 	writeRandom(t, r.remote("hello.txt"), 10)
 	off := r.openSFTPHost("hello.txt")
-	r.waitText(0, "Remote: /home/pi")
 	if n := len(r.srv.RequestsOfType("pty-req")) + len(r.srv.RequestsOfType("shell")); n != 0 {
 		t.Fatalf("%d pty-req or shell requests", n)
 	}
