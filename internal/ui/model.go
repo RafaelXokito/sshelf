@@ -154,10 +154,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.cancelAttempt()
 			return m, tea.Quit
 		}
-		if n := len(m.modals); n > 0 {
-			var cmd tea.Cmd
-			m.modals[n-1], cmd = m.modals[n-1].Update(msg)
-			return m, cmd
+		if len(m.modals) > 0 {
+			return m.updateTopModal(msg)
 		}
 		if m.screen == nil {
 			if key.Matches(msg, keys.Quit) {
@@ -338,22 +336,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case prompt.DoneMsg:
+		// The prompt was popped when it was answered (components.Closer).
 		// The connection goes on, or fails with ErrAuthCancelled;
 		// Connecting stays up until then.
-		m.popModal()
 		return m, nil
 
 	case tea.PasteMsg:
-		if n := len(m.modals); n > 0 {
-			var cmd tea.Cmd
-			m.modals[n-1], cmd = m.modals[n-1].Update(msg)
-			return m, cmd
+		if len(m.modals) > 0 {
+			return m.updateTopModal(msg)
 		}
 
 	case tofu.DoneMsg:
+		// The modal was popped when it was answered (components.Closer).
 		// The connection goes on (trusted) or fails with
 		// ErrHostKeyRejected; Connecting stays up until then.
-		m.popModal()
 		return m, nil
 
 	case ConnectedMsg:
@@ -469,6 +465,18 @@ func (m *Model) cancelAttempt() {
 		m.cancel()
 		m.cancel = nil
 	}
+}
+
+// updateTopModal sends msg to the top modal and pops it at once if that
+// answered it (components.Closer).
+func (m Model) updateTopModal(msg tea.Msg) (tea.Model, tea.Cmd) {
+	n := len(m.modals)
+	var cmd tea.Cmd
+	m.modals[n-1], cmd = m.modals[n-1].Update(msg)
+	if c, ok := m.modals[n-1].(components.Closer); ok && c.Closed() {
+		m.popModal()
+	}
+	return m, cmd
 }
 
 func (m *Model) popModal() {

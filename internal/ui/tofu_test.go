@@ -113,3 +113,24 @@ func TestTofuPromptAfterAttemptEnded(t *testing.T) {
 		t.Fatalf("stale prompt: trust = %v, modals = %d", trust, len(m.(Model).modals))
 	}
 }
+
+// TestFR_KH_001_PromptAfterTrustSurvivesLateDone: once the key is
+// trusted, authentication goes on and can open a password prompt before
+// the TOFU modal's DoneMsg reaches Update. The late DoneMsg must not
+// close that prompt.
+func TestFR_KH_001_PromptAfterTrustSurvivesLateDone(t *testing.T) {
+	m, reply := tofuModel(t)
+	m, cmd := m.Update(tea.KeyPressMsg{Code: 'y', Text: "y"})
+	if !<-reply {
+		t.Fatal("y did not trust")
+	}
+	pw := make(chan app.AuthReply, 1)
+	m, _ = m.Update(app.AuthPromptMsg{Kind: app.PromptPassword, Questions: []app.Question{{Text: "Password:"}},
+		Label: "web-prod", User: "ubuntu", Host: "10.0.0.10", Reply: pw})
+	if cmd != nil {
+		m, _ = m.Update(cmd()) // the TOFU modal's DoneMsg, late
+	}
+	if v := m.View().Content; len(m.(Model).modals) != 2 || !strings.Contains(v, "Password for ubuntu@10.0.0.10") {
+		t.Fatalf("%d modals, view:\n%s", len(m.(Model).modals), v)
+	}
+}

@@ -141,3 +141,39 @@ func TestAuthPromptAfterAttemptEnded(t *testing.T) {
 		t.Fatalf("stale prompt: %+v, modals = %d", r, len(m.(Model).modals))
 	}
 }
+
+// TestFR_CONN_003_NextPromptSurvivesLateDone: after a wrong typed
+// password, the next prompt can reach Update before the first prompt's
+// DoneMsg (the server answers on loopback while the DoneMsg command is
+// still being scheduled). The late DoneMsg must not close the new prompt,
+// which would leave Connecting up with the attempt waiting for an answer
+// that can never be typed.
+func TestFR_CONN_003_NextPromptSurvivesLateDone(t *testing.T) {
+	m, reply := promptModel(t, passwordPrompt)
+	m = typeText(m, "wrong")
+	m, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if r := <-reply; r.Cancelled {
+		t.Fatal("enter cancelled")
+	}
+	reply2 := make(chan app.AuthReply, 1)
+	next := passwordPrompt
+	next.Label, next.User, next.Host, next.Reply = "web-prod", "ubuntu", "10.0.0.10", reply2
+	next.Note = "Permission denied, please try again."
+	m, _ = m.Update(next)
+	if cmd != nil {
+		m, _ = m.Update(cmd()) // the first prompt's DoneMsg, late
+	}
+	if n := len(m.(Model).modals); n != 2 {
+		t.Fatalf("%d modals, want Connecting and the second prompt", n)
+	}
+	m = typeText(m, "right")
+	_, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	select {
+	case r := <-reply2:
+		if r.Cancelled || !slices.Equal(r.Answers, []string{"right"}) {
+			t.Fatalf("second prompt reply = %+v", r)
+		}
+	default:
+		t.Fatal("the second prompt got no answer")
+	}
+}

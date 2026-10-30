@@ -35,6 +35,7 @@ type Model struct {
 	prompt app.AuthPromptMsg
 	inputs []*components.TextInput
 	focus  int
+	done   bool // answered or cancelled; see components.Closer
 }
 
 // New returns the modal for p, with the first field focused.
@@ -67,6 +68,7 @@ func (m Model) Update(msg tea.Msg) (components.Modal, tea.Cmd) {
 	case key.Matches(k, keys.Cancel):
 		m.prompt.Cancel()
 		m.clear()
+		m.done = true
 		return m, func() tea.Msg { return DoneMsg{Cancelled: true} }
 	case key.Matches(k, keys.Submit):
 		if m.focus < len(m.inputs)-1 {
@@ -79,6 +81,7 @@ func (m Model) Update(msg tea.Msg) (components.Modal, tea.Cmd) {
 		}
 		m.prompt.Answer(answers) // a buffered channel: never blocks
 		m.clear()
+		m.done = true
 		return m, func() tea.Msg { return DoneMsg{} }
 	case key.Matches(k, keys.NextField):
 		m.move(1)
@@ -92,6 +95,9 @@ func (m Model) Update(msg tea.Msg) (components.Modal, tea.Cmd) {
 	}
 	return m, m.inputs[m.focus].Update(k)
 }
+
+// Closed implements components.Closer.
+func (m Model) Closed() bool { return m.done }
 
 func (m *Model) move(d int) {
 	if len(m.inputs) > 0 {
