@@ -15,7 +15,7 @@ Set Theme "Catppuccin Mocha"
 Set CursorBlink false
 
 Hide
-Type `HOME="$DEMO_HOME" XDG_CONFIG_HOME="$DEMO_HOME/xdg" "$SSHELF_BIN"` Enter
+Type `cd "$DEMO_HOME" && HOME="$DEMO_HOME" XDG_CONFIG_HOME="$DEMO_HOME/xdg" "$SSHELF_BIN"` Enter
 Sleep 1.5s
 Show
 
@@ -53,14 +53,16 @@ Type "echo hi from the pi"
 Enter
 Sleep 1.5s
 
-# Back to tab 1, then disconnect it: sshelf returns to the Hosts tab.
+# Back to tab 1, then an SFTP tab on its connection: copy a remote
+# file to the local pane.
 Ctrl+]
 Type "1"
-Sleep 1.5s
-Ctrl+]
-Type "q"
 Sleep 1.2s
-Type "y"
-Sleep 1.5s
-Escape
+Ctrl+]
+Type "s"
+Sleep 2s
+Down
+Down
+Sleep 600ms
+Type "c"
 Sleep 2.5s

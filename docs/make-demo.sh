@@ -32,21 +32,32 @@ go build -tags sshelf_faultinject -o "$work/bin/sshelf" ./cmd/sshelf
 go build -o "$work/bin/sshtestd" ./internal/testutil/sshtest/cmd/sshtestd
 
 # The servers run from $work/srv so that the demo can type "replay htop.bin".
-mkdir -p "$work/srv" "$work/home/xdg/sshelf"
+mkdir -p "$work/srv" "$work/home/xdg/sshelf" "$work/home/notes"
+# The tape starts sshelf in the demo HOME, so the SFTP tab's local pane
+# shows it.
+printf 'todo: rotate certs\n' >"$work/home/notes/todo.txt"
 cp internal/session/testdata/replay/htop.bin "$work/srv/"
 
-start_server() { # name port
-	(cd "$work/srv" && exec "$work/bin/sshtestd" -dir "$work/$1" -port "$2") >"$work/$1.out" 2>&1 &
+start_server() { # name port [sshtestd flags...]
+	local name=$1 port=$2
+	shift 2
+	(cd "$work/srv" && exec "$work/bin/sshtestd" -dir "$work/$name" -port "$port" "$@") >"$work/$name.out" 2>&1 &
 	pids+=($!)
 	for _ in $(seq 100); do
-		grep -q '^demo key' "$work/$1.out" 2>/dev/null && return 0
+		grep -q '^demo key' "$work/$name.out" 2>/dev/null && return 0
 		sleep 0.1
 	done
-	echo "sshtestd $1 did not start:" >&2
-	cat "$work/$1.out" >&2
+	echo "sshtestd $name did not start:" >&2
+	cat "$work/$name.out" >&2
 	exit 1
 }
-start_server a "$PORT_A"
+# Server A also serves SFTP, from a home with a few files to copy.
+remote_home="$work/sftp/home/pi"
+mkdir -p "$remote_home/logs"
+printf 'server {\n  listen 443 ssl;\n}\n' >"$remote_home/nginx.conf"
+printf '#!/bin/sh\necho deploying\n' >"$remote_home/deploy.sh"
+head -c 48000 /dev/zero | tr '\0' 'x' >"$remote_home/logs/access.log"
+start_server a "$PORT_A" -sftp "$work/sftp"
 key="$work/a/demo_ed25519"
 # Server B reuses server A's demo key, so one identity logs in to both.
 mkdir -p "$work/b"
