@@ -16,6 +16,7 @@ var (
 	PrefixNext       = key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "next tab"))
 	PrefixPrev       = key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "previous tab"))
 	PrefixScrollback = key.NewBinding(key.WithKeys("["), key.WithHelp("[", "scrollback"))
+	PrefixSFTP       = key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "sftp tab"))
 	PrefixLiteral    = key.NewBinding(key.WithKeys("ctrl+]"), key.WithHelp("Ctrl+]", "send Ctrl+]"))
 	PrefixCancel     = key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "cancel"))
 
@@ -38,7 +39,7 @@ var (
 
 // PrefixCommands are the commands after the prefix key, in help order.
 func PrefixCommands() []key.Binding {
-	return []key.Binding{PrefixDisconnect, PrefixHelp, PrefixHosts, PrefixTab, PrefixNext, PrefixPrev, PrefixScrollback, PrefixLiteral, PrefixCancel}
+	return []key.Binding{PrefixDisconnect, PrefixHelp, PrefixHosts, PrefixTab, PrefixNext, PrefixPrev, PrefixScrollback, PrefixSFTP, PrefixLiteral, PrefixCancel}
 }
 
 // PrefixAction is what a key does to the prefix state machine.
@@ -57,6 +58,7 @@ const (
 	PrefixDoNext                           // n
 	PrefixDoPrev                           // p
 	PrefixDoScrollback                     // [
+	PrefixDoSFTP                           // s
 )
 
 // PrefixResult is one step of the state machine.
@@ -92,6 +94,8 @@ func PrefixStep(armed bool, k tea.KeyPressMsg) (bool, PrefixResult) {
 		return false, PrefixResult{Action: PrefixDoPrev}
 	case key.Matches(k, PrefixScrollback):
 		return false, PrefixResult{Action: PrefixDoScrollback}
+	case key.Matches(k, PrefixSFTP):
+		return false, PrefixResult{Action: PrefixDoSFTP}
 	}
 	return false, PrefixResult{Action: PrefixCancelled}
 }

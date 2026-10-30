@@ -137,8 +137,8 @@ var textInput = []key.Binding{CursorLeft, CursorRight, CursorHome, CursorEnd, De
 // Maps returns the keymap of every view. The help overlay (FR-NAV-006,
 // v1) is generated from it; footers show a subset.
 func Maps() []Map {
-	return []Map{
-		{Name: "host list", Bindings: []key.Binding{Up, Down, First, Last, Search, Connect, AddHost, EditHost, DeleteHost, Identities, Import, Quit, ForceQuit}},
+	return append([]Map{
+		{Name: "host list", Bindings: []key.Binding{Up, Down, First, Last, Search, Connect, OpenSFTP, AddHost, EditHost, DeleteHost, Identities, Import, Quit, ForceQuit}},
 		{Name: "search", Bindings: append([]key.Binding{SearchUp, SearchDown, Connect, ClearSearch, ForceQuit}, textInput...)},
 		{Name: "welcome", Bindings: []key.Binding{WelcomeImport, WelcomeAdd, Quit, ForceQuit}},
 		{Name: "form", Bindings: []key.Binding{NextField, PrevField, Save, Cancel, ForceQuit}},
@@ -159,5 +159,5 @@ func Maps() []Map {
 		{Name: "prefix help", Bindings: []key.Binding{CloseHelp, ForceQuit}},
 		{Name: "ended session", Bindings: []key.Binding{Reconnect, CloseTab, Prefix}},
 		{Name: "scrollback", Bindings: []key.Binding{ScrollUp, ScrollDown, ScrollPageUp, ScrollPageDown, ScrollTop, ScrollBottom, ScrollExit, Prefix}},
-	}
+	}, sftpMaps()...)
 }

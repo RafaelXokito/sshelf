@@ -1699,17 +1699,18 @@ type Browser interface {
 	ConnID() uint64
 	Start(side Side) string                                   // FR-SFTP-005
 	List(ctx context.Context, side Side, dir string) (Listing, error)
-	Count(ctx context.Context, side Side, dir string) (int, error) // the view: dir's own entries, stops at 10,001; delete: every entry below (no links, 64 levels), stops at 100,001
+	Count(ctx context.Context, side Side, dir string, deep bool) (int, error) // deep false: direct children, stops at 10,001 (the view); deep true: every entry below (links not followed, 64 levels), stops at 100,001 (delete)
 	Stat(ctx context.Context, side Side, path string) (Entry, error) // follows a link (enter, e)
 	Rename(ctx context.Context, side Side, dir, from, to string) error
 	Mkdir(ctx context.Context, side Side, dir, name string) error
 	Delete(ctx context.Context, side Side, dir string, names []string) (deleted int, err error)
 
 	Copy(from Side, srcDir string, names []string, dstDir string) BatchID // queues; returns at once
-	Transfers() []Transfer                 // snapshot: id, batch, direction, name, state, done, total, rate, ETA, reason, question
+	Transfers() []Transfer                 // snapshot: id, batch, direction (From), name, state, done, total, rate, ETA, reason, target dir, conflict
 	Answer(id TransferID, a Answer, all bool)
 	Cancel(id TransferID)
 	Retry(id TransferID)
+	Clear()                                 // drops the finished rows (C in the transfers view)
 	Updates() <-chan struct{}               // state changes, coalesced (ARCH-SFTP-003)
 
 	EditFetch(ctx context.Context, dir, name string) (*EditCopy, error)
@@ -1721,6 +1722,20 @@ type Browser interface {
 	Close() error          // cancels every transfer, closes both channels, releases the lease
 }
 ```
+
+**As built for the UI (T-049, T-050, T-053).** The UI lanes were built
+against `apptest.FakeBrowser` before `internal/files` existed, so the types
+above (`Side`, `Kind`, `Entry`, `Listing`, `Transfer`, `TransferState`,
+`Conflict`, `Answer`, `ConnState`, `ErrNoSFTP`, `ErrNotConnected`) are
+defined in `internal/app/browser.go`; T-054 turns each into an alias of
+the `internal/files` type of the same name and fields. `Transfer.From` is
+the source side (Remote = download, ↓); `Transfer.DstDir` is the target
+directory, so a finished transfer refreshes the pane showing it;
+`Transfer.Conflict` holds both sides' size and mtime while `Waiting`
+(FR-SFTP-016). The edit-locally methods arrive with T-055. The three
+service methods below are `app.SFTPService`, which the root model finds on
+its `Service` with a type assertion until T-054 adds them to `Service`
+(T-048's `App.OpenSFTPOn` returns the lease that `files.Open` will wrap).
 
 `app.Service` gains `OpenSFTP(ctx, hostID) (Browser, error)`,
 `OpenSFTPOn(s Session) (Browser, error)` and `ReconnectSFTP(ctx, b
@@ -2097,7 +2112,7 @@ slice with one numbering (ADR-020).
 filter (`/ text`) and the mark count. Inside, each row is: cursor column
 (`>` on the focused pane's cursor row), mark column (`*` marked, `▸`
 directory, space), the name (cut with `…`), the size or item count
-right-aligned in 9 columns, and from 50 inner columns the mtime in 12. Row
+right-aligned in 11 columns (`10000 items`), and from 50 inner columns the mtime in 12. Row
 `height − 2` is the progress line (FR-SFTP-014); row `height − 1` is the
 footer, generated from `ui/keys`, dropping hints from the right to fit. The
 transfers view replaces the two boxes with one full-width box. At 80×24 each

@@ -515,7 +515,7 @@ While a session tab is focused, when the user presses the prefix key followed by
   - `Ctrl+]` `q` opens "Disconnect web-prod?" defaulting to No. `y` closes the SSH connection and the tab and focuses the tab to its left; `n`, Enter and Esc keep the session.
   - sshtest records the channel close within 1 s.
   - Typing `~.` at the start of a line is sent to the remote like any other text.
-- **M3 revision** · Priority: M3 · Status: Draft · Source: D-018 (the SFTP tab reuses the session's connection)
+- **M3 revision** · Priority: M3 · Status: Implemented · Source: D-018 (the SFTP tab reuses the session's connection)
   - *Revised:* While a session tab is focused, when the user presses the prefix key followed by `q` and confirms, the system shall close that session and its tab, and shall close its SSH connection unless an SFTP tab still uses it.
   - *Acceptance:*
     - With no SFTP tab on the connection: `Ctrl+]` `q` opens "Disconnect web-prod?" defaulting to No; `y` closes the session channel, the SSH connection and the tab, and focuses the tab to its left; `n`, Enter and Esc keep the session.
@@ -1092,7 +1092,7 @@ When an SFTP tab opens, the system shall show the directory sshelf was started i
 ### FR-SFTP-006 · Listing columns and order
 The system shall list each directory with a `..` row first (except at `/`), then directories, then all other entries, each group sorted by name, showing for every row its name, its size (files) or item count (directories), and, where the pane is at least 50 columns wide, its modification time.
 
-- **Priority:** M3 · **Status:** Draft · **Source:** D-017, the approved layout
+- **Priority:** M3 · **Status:** Implemented · **Source:** D-017, the approved layout
 - **Acceptance:**
   - Names sort case-insensitively, ties by byte order. Directory names end with `/` and carry `▸`; symbolic links end with `@`, sort among the files, and show the size of the link entry.
   - Sizes use 1000-based units with at most one decimal below 10: `999 B`, `3 KB`, `1.2 MB`, `840 MB`, `12 GB`.
@@ -1104,7 +1104,7 @@ The system shall list each directory with a `..` row first (except at `/`), then
 ### FR-SFTP-007 · Moving around
 While an SFTP tab is focused, the system shall move the cursor with ↑/↓ or `k`/`j`, `pgup`/`pgdn` and `g`/`G`, switch the focused pane with `tab`, open the directory under the cursor with `enter`, go to the parent directory with `backspace` or `h`, and go to the pane's starting home directory with `~`.
 
-- **Priority:** M3 · **Status:** Draft · **Source:** D-017
+- **Priority:** M3 · **Status:** Implemented · **Source:** D-017
 - **Acceptance:**
   - `enter` on a directory, on `..`, or on a symlink whose target is a directory opens it; the new path is the link's path (`/srv/www`, not its target), so `h` returns to where the user came from. `enter` on a file does nothing (the footer suggests `c` and `e`).
   - After `h`, the cursor is on the directory just left. Each pane keeps its own cursor, scroll position and path when focus moves away and back.
@@ -1115,16 +1115,16 @@ While an SFTP tab is focused, the system shall move the cursor with ↑/↓ or `
 ### FR-SFTP-008 · Hidden files and filter
 While a pane is focused, when the user presses `.`, the system shall hide or show entries whose names start with `.` in both panes, and when the user presses `/`, the system shall filter the focused pane's current listing by the text typed, case-insensitively, until Esc clears it.
 
-- **Priority:** M3 · **Status:** Draft · **Source:** D-017
+- **Priority:** M3 · **Status:** Implemented · **Source:** D-017
 - **Acceptance:**
   - Hidden entries are shown when a tab opens (the approved layout shows `.bashrc`); `.` toggles, and the pane titles show `(hidden off)` while they are hidden.
   - The filter is a substring match on the displayed name. While typing, the pane's bottom border shows `/ rep`; `enter` keeps the filter and returns keys to the list; Esc clears it. Changing directory clears it.
-  - Marks on entries the filter hides are kept, and the footer counts them ("3 marked").
+  - Marks on entries the filter hides are kept, and the pane's bottom border counts them ("3 marked", design §9.6).
 
 ### FR-SFTP-009 · Marking several entries
 When the user presses `space` on an entry, the system shall mark or unmark it and move the cursor down one row, and file operations shall then act on every marked entry of the focused pane.
 
-- **Priority:** M3 · **Status:** Draft · **Source:** D-017
+- **Priority:** M3 · **Status:** Implemented · **Source:** D-017
 - **Acceptance:**
   - A marked row shows `*` before its name (not colour alone, NFR-UX-003). `..` cannot be marked.
   - Marks belong to one pane and one directory: changing directory, or refreshing after the entry is gone, drops them.
@@ -1162,7 +1162,7 @@ When the user presses `m` and enters a name, the system shall create a directory
 ### FR-SFTP-013 · Refresh
 When the user presses `R`, the system shall list both panes' current directories again, keeping each cursor on the same name where it still exists.
 
-- **Priority:** M3 · **Status:** Draft · **Source:** D-017
+- **Priority:** M3 · **Status:** Implemented · **Source:** D-017
 - **Acceptance:**
   - A file created by another process appears after `R`. sshelf does not watch directories; it refreshes only on `R` and after its own operations (rename, delete, mkdir, a finished transfer into the shown directory).
 
@@ -1269,7 +1269,7 @@ When the user presses the left button on an entry in one pane and releases it ov
 ### FR-SFTP-023 · Layout at 80×24
 While the terminal is at least 80 columns by 24 rows, the system shall show both panes side by side, each half the width, with at least 18 rows of entries, the progress line and the footer.
 
-- **Priority:** M3 · **Status:** Draft · **Source:** D-017, NFR-UX-002
+- **Priority:** M3 · **Status:** Implemented · **Source:** D-017, NFR-UX-002
 - **Rationale:** side by side keeps local on the left and remote on the right (D-017) and keeps dragging horizontal. At 80 columns each pane has 38 columns inside its border, enough for a 24-column name and the size; the mtime column appears from 50 inner columns (a terminal of 104 or more). Stacking the panes would halve the rows for little gain.
 - **Acceptance:**
   - Goldens of the approved layout at 80×24 and 120×40, checked by the NFR-UX-002 helper (no line wider than the terminal; the last line is the footer).

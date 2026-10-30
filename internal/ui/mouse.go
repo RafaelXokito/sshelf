@@ -70,6 +70,10 @@ func (m Model) layout() frameLayout {
 		_, _, lay := m.sessionFrame(t, t.sess.Snapshot())
 		return lay
 	}
+	if t := m.focusedSFTP(); t != nil {
+		_, lay := m.sftpFrame(t)
+		return lay
+	}
 	_, lay := m.hostsFrame()
 	return lay
 }
@@ -220,8 +224,8 @@ func (m Model) mouseClick(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	if m.screen == nil {
-		return m, nil
+	if m.screen == nil || m.focusedSFTP() != nil {
+		return m, nil // the SFTP tab's rows are T-056's
 	}
 	x, y, ok := lay.screen.local(ms.X, ms.Y)
 	if !ok {
@@ -243,7 +247,7 @@ func (m Model) mouseWheel(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	default:
 		return m, nil
 	}
-	if len(m.modals) > 0 || m.focused() != nil || m.screen == nil {
+	if len(m.modals) > 0 || m.focused() != nil || m.focusedSFTP() != nil || m.screen == nil {
 		return m, nil
 	}
 	x, y, ok := m.layout().screen.local(ms.X, ms.Y)

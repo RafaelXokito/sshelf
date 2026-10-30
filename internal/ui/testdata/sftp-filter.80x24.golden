@@ -1,0 +1,24 @@
+sshelf │ Hosts │ 1 raspberrypi4 │[2 sftp: raspberrypi4]│
+┌ Local: ~/Downloads ──────────────────┐┌ Remote: /home/pi ────────────────────┐
+│>  ..                                 ││   ..                                 │
+│   report.pdf                   1.2 MB││ ▸ scripts/                   12 items│
+│                                      ││   .bashrc                        4 KB│
+│                                      ││   backup.tar.gz                840 MB│
+│                                      ││                                      │
+│                                      ││                                      │
+│                                      ││                                      │
+│                                      ││                                      │
+│                                      ││                                      │
+│                                      ││                                      │
+│                                      ││                                      │
+│                                      ││                                      │
+│                                      ││                                      │
+│                                      ││                                      │
+│                                      ││                                      │
+│                                      ││                                      │
+│                                      ││                                      │
+│                                      ││                                      │
+│                                      ││                                      │
+└ / rep_ ──────────────────────────────┘└──────────────────────────────────────┘
+
+ enter keep filter · esc clear filter

@@ -1,5 +1,6 @@
-// Package help is the prefix-key help overlay (FR-TAB-005): every command
-// after Ctrl+], generated from ui/keys (ARCH-UI-004).
+// Package help is the help overlay, generated from ui/keys (ARCH-UI-004):
+// every command after Ctrl+] (FR-TAB-005), or the keys of a view such as
+// the SFTP tab (FR-SFTP-007).
 package help
 
 import (
@@ -21,10 +22,24 @@ var (
 
 // Model is the help overlay. ? or Esc closes it; it is popped at once
 // (components.Closer).
-type Model struct{ closed bool }
+type Model struct {
+	closed   bool
+	title    string        // "" for the prefix help
+	bindings []key.Binding // the keys listed with NewList
+}
 
-// New returns the overlay.
+// New returns the prefix-key overlay.
 func New() Model { return Model{} }
+
+// NewList returns an overlay titled title listing bindings, in two
+// columns when there are more than listColumnsFrom.
+func NewList(title string, bindings []key.Binding) Model {
+	return Model{title: title, bindings: bindings}
+}
+
+// listColumnsFrom is the number of bindings from which NewList uses two
+// columns, so the overlay fits 24 rows.
+const listColumnsFrom = 10
 
 // Update implements components.Modal.
 func (m Model) Update(msg tea.Msg) (components.Modal, tea.Cmd) {
@@ -56,15 +71,36 @@ func (m Model) View() string {
 // render builds the View and the place of its button together.
 func (m Model) render() (string, components.ModalButtons) {
 	cmds := keys.PrefixCommands()
+	title := "Press " + keys.Prefix.Help().Key + ", then:"
+	if m.bindings != nil {
+		cmds, title = m.bindings, m.title
+	}
 	width := 0
 	for _, b := range cmds {
-		width = max(width, len(b.Help().Key))
+		width = max(width, lipgloss.Width(b.Help().Key))
 	}
-	prefix := keys.Prefix.Help().Key
-	lines := []string{titleStyle.Render("Press " + prefix + ", then:"), ""}
-	for _, b := range cmds {
+	entry := func(b key.Binding) string {
 		h := b.Help()
-		lines = append(lines, keyStyle.Render(h.Key+strings.Repeat(" ", width-len(h.Key)))+"  "+h.Desc)
+		return keyStyle.Render(h.Key+strings.Repeat(" ", width-lipgloss.Width(h.Key))) + "  " + h.Desc
+	}
+	lines := []string{titleStyle.Render(title), ""}
+	if m.bindings == nil || len(cmds) <= listColumnsFrom {
+		for _, b := range cmds {
+			lines = append(lines, entry(b))
+		}
+	} else {
+		half := (len(cmds) + 1) / 2
+		col := 0
+		for _, b := range cmds[:half] {
+			col = max(col, lipgloss.Width(entry(b)))
+		}
+		for i := range half {
+			l := entry(cmds[i])
+			if j := i + half; j < len(cmds) {
+				l += strings.Repeat(" ", col-lipgloss.Width(l)+3) + entry(cmds[j])
+			}
+			lines = append(lines, l)
+		}
 	}
 	var b strings.Builder
 	b.WriteString(strings.Join(lines, "\n") + "\n\n")

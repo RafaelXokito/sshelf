@@ -63,6 +63,21 @@ func SessionEntry(num int, label string, activity, ended bool) Entry {
 	return e
 }
 
+// SFTPEntry is the tab of SFTP tab number num (FR-TAB-003 M3 revision):
+// "<num> sftp: <label>", the text after the number sanitised and cut to
+// LabelWidth columns, with the disconnected marker taking precedence over
+// the activity marker.
+func SFTPEntry(num int, label string, activity, disconnected bool) Entry {
+	e := Entry{Text: strconv.Itoa(num) + " " + ansi.Truncate("sftp: "+domain.Sanitize(label), LabelWidth, "…")}
+	switch {
+	case disconnected:
+		e.Marker = EndedMarker
+	case activity:
+		e.Marker = ActivityMarker
+	}
+	return e
+}
+
 // Kind says what a Span shows.
 type Kind int
 

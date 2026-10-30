@@ -125,6 +125,8 @@ type Model struct {
 
 	clicks components.ClickTracker // recognises double-clicks (ARCH-UI-007)
 
+	home string // the local home directory, where ~ goes in a local pane
+
 	now    func() time.Time                     // injectable clock
 	tick   func() tea.Cmd                       // the one-second clock; tests replace it
 	listen func(num int, s app.Session) tea.Cmd // waits for a session's next update; tests replace it
@@ -132,7 +134,7 @@ type Model struct {
 
 // New returns the root model. It does no I/O; Init loads the config.
 func New(svc app.Service) Model {
-	return Model{svc: svc, now: time.Now, tick: tickEverySecond, listen: listenSession}
+	return Model{svc: svc, now: time.Now, tick: tickEverySecond, listen: listenSession, home: localHome()}
 }
 
 // Init implements tea.Model. Besides loading the config it asks the
@@ -157,12 +159,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if next, cmd, ok := m.updateSessions(msg); ok {
 		return next, cmd
 	}
+	if next, cmd, ok := m.updateSFTP(msg); ok {
+		return next, cmd
+	}
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		m.screen = m.sized(m.screen)
 		for _, t := range m.tabs {
-			if !t.done {
+			switch {
+			case t.sftp != nil:
+				t.sftp.view = t.sftp.view.SetSize(m.width, m.height)
+			case !t.done:
 				t.sess.Resize(m.areaSize())
 			}
 		}
@@ -190,6 +198,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if t := m.focused(); t != nil {
 			return m.sessionKey(t, msg)
+		}
+		if t := m.focusedSFTP(); t != nil {
+			return m.sftpKey(t, msg)
 		}
 		if key.Matches(msg, keys.Quit) && m.quitKeyQuits() && m.liveSessions() > 0 {
 			return m.quit() // q on the host list or Welcome asks first (FR-TAB-009)
@@ -400,6 +411,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+		if t := m.focusedSFTP(); t != nil {
+			var cmd tea.Cmd
+			t.sftp.view, cmd = t.sftp.view.Update(msg)
+			return m, cmd
+		}
 
 	case tofu.DoneMsg:
 		// The modal was popped when it was answered (components.Closer).
@@ -600,6 +616,9 @@ func failedStatus(label string, err error) string {
 func (m Model) View() tea.View {
 	if t := m.focused(); t != nil {
 		return m.sessionView(t)
+	}
+	if t := m.focusedSFTP(); t != nil {
+		return m.sftpView(t)
 	}
 	out, _ := m.hostsFrame()
 	if m.width > 0 {

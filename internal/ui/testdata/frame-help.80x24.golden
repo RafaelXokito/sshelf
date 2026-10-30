@@ -5,7 +5,6 @@ screen of B
 
 
 
-
 ╭──────────────────────╮
 │ Press Ctrl+], then:  │
 │                      │
@@ -16,6 +15,7 @@ screen of B
 │ n       next tab     │
 │ p       previous tab │
 │ [       scrollback   │
+│ s       sftp tab     │
 │ Ctrl+]  send Ctrl+]  │
 │ esc     cancel       │
 │                      │

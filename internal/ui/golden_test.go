@@ -65,6 +65,13 @@ func checkLayout(t *testing.T, m Model, view string, w, h int) {
 	if st := m.focused(); st != nil {
 		foot = strings.TrimSpace(plain(m.sessionStatus(st)))
 	}
+	if st := m.focusedSFTP(); st != nil {
+		out, _ := m.sftpFrame(st)
+		foot = strings.TrimSpace(plain(st.sftp.view.Footer()))
+		if len(m.modals) > 0 || m.prefix {
+			foot = strings.TrimSpace(plain(out[len(out)-1]))
+		}
+	}
 	last := strings.TrimSpace(plain(lines[len(lines)-1]))
 	if foot == "" || (last != foot && !strings.HasPrefix(foot, strings.TrimSuffix(last, "…"))) {
 		t.Errorf("%dx%d: last line %q is not the footer %q", w, h, last, foot)

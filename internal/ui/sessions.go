@@ -55,6 +55,12 @@ type sessionTab struct {
 	ended   error  // the end cause; meaningful once done
 	done    bool
 	failure string // a failed or cancelled reconnect, shown instead of the end cause
+	// notice is a message the live status bar shows for sftpNoticeHold
+	// from noticeAt (FR-SFTP-003).
+	notice   string
+	noticeAt time.Time
+	// sftp is set on an SFTP tab, whose sess is nil (design §9.6).
+	sftp *sftpTab
 	// scroll is the top line of the scrollback view in scrollback mode,
 	// counted from the session's first line (top + Dropped()), so the view
 	// keeps its place while the cap drops old lines; nil otherwise.
@@ -133,12 +139,16 @@ func (m Model) tabIndex(num int) int {
 	return -1
 }
 
-// focused returns the focused session tab, or nil on the Hosts tab.
+// focused returns the focused session tab, or nil on the Hosts tab and
+// on an SFTP tab (focusedSFTP).
 func (m Model) focused() *sessionTab {
 	if m.focus <= 0 || m.focus > len(m.tabs) {
 		return nil
 	}
-	return m.tabs[m.focus-1]
+	if t := m.tabs[m.focus-1]; t.sftp == nil {
+		return t
+	}
+	return nil
 }
 
 // areaSize is the session area: the terminal minus the header and the
@@ -179,21 +189,29 @@ func (m Model) setColors(fg, bg color.Color) Model {
 		m.bg = bg
 	}
 	for _, t := range m.tabs {
-		if !t.done {
+		if t.sftp == nil && !t.done {
 			t.sess.SetDefaultColors(m.fg, m.bg)
 		}
 	}
 	return m
 }
 
-// CloseSessions closes every session. main calls it after the program
-// has ended, whatever ended it (a signal included), so that no
-// connection outlives the UI (ARCH-SESS-010). Close does not wait on
-// the network for long: it closes the connection.
+// CloseSessions closes every session and SFTP browser. main calls it
+// after the program has ended, whatever ended it (a signal included), so
+// that no connection outlives the UI (ARCH-SESS-010, ARCH-SFTP-007).
+// Close does not wait on the network for long: it closes the connection.
 func (m Model) CloseSessions() {
 	for _, t := range m.tabs {
-		_ = t.sess.Close()
+		_ = t.closer().Close()
 	}
+}
+
+// closer is what closing tab t closes: its session or its browser.
+func (t *sessionTab) closer() interface{ Close() error } {
+	if t.sftp != nil {
+		return t.sftp.browser
+	}
+	return t.sess
 }
 
 // focusTab focuses tab i: 0 is the Hosts tab, i is m.tabs[i-1]. Focusing
@@ -206,6 +224,9 @@ func (m Model) focusTab(i int) (Model, tea.Cmd) {
 	if t := m.focused(); t != nil {
 		t.seq = t.sess.Snapshot().Seq
 		t.seenSeq = t.seq
+	}
+	if t := m.focusedSFTP(); t != nil {
+		t.sftp.seen()
 	}
 	return m.ensureTick()
 }
@@ -236,7 +257,8 @@ func (m Model) closeTab(num int) (Model, tea.Cmd) {
 	}
 	t := m.tabs[i]
 	m.tabs = append(m.tabs[:i:i], m.tabs[i+1:]...)
-	closeCmd := func() tea.Msg { _ = t.sess.Close(); return nil }
+	c := t.closer()
+	closeCmd := func() tea.Msg { _ = c.Close(); return nil }
 	switch {
 	case m.focus == i+1:
 		m.focus = i
@@ -284,7 +306,7 @@ func (m Model) reconnected(t *sessionTab, s app.Session) (Model, tea.Cmd) {
 func (m Model) liveSessions() int {
 	n := 0
 	for _, t := range m.tabs {
-		if !t.done {
+		if t.sftp == nil && !t.done {
 			n++
 		}
 	}
@@ -322,13 +344,13 @@ func (m Model) quit() (tea.Model, tea.Cmd) {
 // quits.
 func (m Model) closeAllAndQuit() (tea.Model, tea.Cmd) {
 	m.cancelAttempt()
-	sessions := make([]app.Session, len(m.tabs))
+	closers := make([]interface{ Close() error }, len(m.tabs))
 	for i, t := range m.tabs {
-		sessions[i] = t.sess
+		closers[i] = t.closer()
 	}
 	return m, func() tea.Msg {
-		for _, s := range sessions {
-			_ = s.Close()
+		for _, c := range closers {
+			_ = c.Close()
 		}
 		return tea.QuitMsg{}
 	}
@@ -406,10 +428,13 @@ func disconnectQuestion(label string, sftpTab int) string {
 }
 
 // sftpTabOn returns the number of the open SFTP tab on connection id, or
-// 0 (ADR-017). SFTP tabs join the tab list with T-049, which makes this
-// look them up by app.Browser.ConnID; until then there are none.
+// 0 (ADR-017), found by app.Browser.ConnID.
 func (m Model) sftpTabOn(id uint64) int {
-	_ = id
+	for _, t := range m.tabs {
+		if t.sftp != nil && t.sftp.browser.ConnID() == id {
+			return t.num
+		}
+	}
 	return 0
 }
 
@@ -436,6 +461,9 @@ func (m Model) runPrefix(r keys.PrefixResult) (tea.Model, tea.Cmd) {
 			_ = t.sess.SendBytes([]byte{0x1d})
 		}
 	case keys.PrefixDoDisconnect:
+		if st := m.focusedSFTP(); st != nil {
+			return m.closeSFTPAsk(st)
+		}
 		if t != nil {
 			sftp := 0
 			if !t.done {
@@ -454,6 +482,14 @@ func (m Model) runPrefix(r keys.PrefixResult) (tea.Model, tea.Cmd) {
 		return m.focusNext(1)
 	case keys.PrefixDoPrev:
 		return m.focusNext(-1)
+	case keys.PrefixDoSFTP:
+		switch {
+		case t == nil:
+		case t.done:
+			return m.startSFTPConnect(t.hostID, t.label) // FR-TAB-005 M3 revision
+		default:
+			return m.openSFTPOn(t)
+		}
 	case keys.PrefixDoScrollback:
 		if t != nil && t.scroll == nil {
 			_, total := t.sess.Scrollback(0, 0)
@@ -532,6 +568,10 @@ func (m Model) headerSpans() []tabs.Span {
 	entries := make([]tabs.Entry, 0, len(m.tabs)+1)
 	entries = append(entries, tabs.HostsEntry())
 	for i, t := range m.tabs {
+		if t.sftp != nil {
+			entries = append(entries, sftpEntry(t, m.focus == i+1))
+			continue
+		}
 		entries = append(entries, tabs.SessionEntry(t.num, t.label, m.focus != i+1 && t.activity(), t.done))
 	}
 	return tabs.Layout(m.viewWidth(), entries, m.focus)
@@ -573,6 +613,9 @@ func (m Model) sessionStatus(t *sessionTab) string {
 			reason = t.failure
 		}
 		return tabs.EndedStatus(w, reason, hint(keys.Reconnect), hint(keys.CloseTab))
+	}
+	if t.notice != "" && m.now().Sub(t.noticeAt) < sftpNoticeHold {
+		return tabs.EndedStatus(w, t.notice)
 	}
 	return tabs.LiveStatus(w, t.addr, m.now().Sub(t.started), prefixHint(keys.PrefixHelp), prefixHint(keys.PrefixHosts))
 }

@@ -1,0 +1,24 @@
+sshelf │ Hosts │ 1 raspberrypi4 │[2 sftp: raspberrypi4]│
+┌ Local: ~/Downloads ──────────────────┐┌ Remote: /home/pi ────────────────────┐
+│   ..                                 ││>  ..                                 │
+│ ▸ photos/                     4 items││ ▸ scripts/                   12 items│
+
+╭───────────────────────────────────────────╮
+│ SFTP tab keys                             │
+│                                           │
+│ tab    switch pane    R      refresh      │
+│ c      copy           .      hidden files │
+│ r      rename         /      filter       │
+│ d      delete         ↑/k    up           │
+│ m      mkdir          ↓/j    down         │
+│ e      edit locally   PgUp   page up      │
+│ t      transfers      PgDn   page down    │
+│ enter  open           g      first        │
+│ h      parent         G      last         │
+│ ~      home           ?      help         │
+│ space  mark                               │
+│                                           │
+│ [esc] Close                               │
+╰───────────────────────────────────────────╯
+
+?/esc close

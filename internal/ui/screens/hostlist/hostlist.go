@@ -43,6 +43,13 @@ type ConnectRequestMsg struct {
 	Tab    int
 }
 
+// SFTPRequestMsg asks the root model to open an SFTP tab for a host
+// through the normal connect flow (FR-SFTP-002).
+type SFTPRequestMsg struct {
+	HostID domain.ID
+	Label  string
+}
+
 // AddHostMsg asks the root model to open the host form for a new host.
 type AddHostMsg struct{}
 
@@ -291,6 +298,10 @@ func (m Model) updateList(k tea.KeyPressMsg) (components.Screen, tea.Cmd) {
 		m.scroll()
 	case key.Matches(k, keys.Connect):
 		return m, m.connect()
+	case key.Matches(k, keys.OpenSFTP):
+		if h, ok := m.Selected(); ok {
+			return m, func() tea.Msg { return SFTPRequestMsg{HostID: h.ID, Label: h.Label} }
+		}
 	case key.Matches(k, keys.AddHost):
 		return m, func() tea.Msg { return AddHostMsg{} }
 	case key.Matches(k, keys.EditHost):
