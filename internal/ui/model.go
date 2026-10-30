@@ -131,6 +131,8 @@ type Model struct {
 	attemptTab int  // the ended tab the attempt in progress reconnects; 0 for a new tab
 	quitAsked  bool // the "Quit and close N sessions?" confirmation is open
 
+	clicks components.ClickTracker // recognises double-clicks (ARCH-UI-007)
+
 	now    func() time.Time                           // injectable clock
 	tick   func() tea.Cmd                             // the one-second clock; tests replace it
 	listen func(num int, s app.FramedSession) tea.Cmd // waits for a session's next update; tests replace it
@@ -152,6 +154,9 @@ func (m Model) Init() tea.Cmd {
 
 // Update implements tea.Model.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if next, cmd, ok := m.updateMouse(msg); ok {
+		return next, cmd
+	}
 	if next, cmd, ok := m.updateIdentities(msg); ok {
 		return next, cmd
 	}
@@ -605,24 +610,64 @@ func (m Model) View() tea.View {
 	if t := m.focused(); t != nil {
 		return m.sessionView(t)
 	}
+	out, _ := m.hostsFrame()
+	if m.width > 0 {
+		for i, l := range out {
+			out[i] = truncateLine(l, m.width)
+		}
+	}
+
+	v := tea.NewView(strings.Join(out, "\n"))
+	v.AltScreen = true
+	v.MouseMode = m.mouseMode()
+	return v
+}
+
+// hostsFrameTop is the first row of the Hosts tab's body: below the
+// header and a blank row.
+const hostsFrameTop = 2
+
+// hostsFrame lays out the Hosts tab: the lines of the frame, before
+// truncation to the width, and where the screen and each modal sit in
+// them. View and hit-testing share it (ARCH-UI-007).
+func (m Model) hostsFrame() ([]string, frameLayout) {
+	var lay frameLayout
 	body, foot := m.screenLines()
+	banner := len(m.withBanner(nil))
 	body = m.withBanner(body)
+	lay.screen = region{Y: hostsFrameTop + banner, W: m.viewWidth(), H: len(body) - banner}
 	if n := len(m.modals); n > 0 {
 		var ml []string
+		tops := make([]int, n)
 		for i, md := range m.modals {
 			if i > 0 {
 				ml = append(ml, "")
 			}
-			ml = append(ml, viewLines(md.View())...)
+			lines := viewLines(md.View())
+			tops[i] = len(ml)
+			lay.modals = append(lay.modals, region{W: linesWidth(lines), H: len(lines)})
+			ml = append(ml, lines...)
 		}
 		if h, ok := m.modals[n-1].(components.Hinter); ok {
 			foot = components.Help(h.Hints()...)
 		}
+		start := len(body) + 1
 		if m.height == 0 || len(body)+1+len(ml) <= m.bodyHeight() {
 			body = append(append(body, ""), ml...)
 		} else {
-			body = ml // the modals have the keyboard; the screen gives way
+			// The modals have the keyboard; the screen gives way, and if
+			// the stack is still too tall its bottom, with the top
+			// modal's buttons, stays in view.
+			cut := max(len(ml)-m.bodyHeight(), 0)
+			body = ml[cut:]
+			start, lay.screen.H = -cut, 0
 		}
+		for i := range lay.modals {
+			lay.modals[i].Y = hostsFrameTop + start + tops[i]
+		}
+	}
+	if m.height > 0 {
+		lay = lay.clip(hostsFrameTop, hostsFrameTop+m.bodyHeight())
 	}
 
 	out := []string{m.header(), ""}
@@ -641,15 +686,7 @@ func (m Model) View() tea.View {
 		}
 	}
 	out = append(out, foot)
-	if m.width > 0 {
-		for i, l := range out {
-			out[i] = truncateLine(l, m.width)
-		}
-	}
-
-	v := tea.NewView(strings.Join(out, "\n"))
-	v.AltScreen = true
-	return v
+	return out, lay
 }
 
 // truncateLine cuts l to width columns with "…" (NFR-UX-002).

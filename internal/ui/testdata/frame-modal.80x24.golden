@@ -16,9 +16,9 @@ ubuntu@web-prod:~$
 
 
 
-
-
 ╭──────────────────────╮
 │ Disconnect web-prod? │
+│                      │
+│ [y] Yes    [n] No    │
 ╰──────────────────────╯
 y yes • n/enter/esc no

@@ -533,6 +533,19 @@ func endedReason(err error) string {
 // sessionView draws a session tab: the header, the session area with
 // the modals over its lower part, and the status bar (ARCH-UI-005).
 func (m Model) sessionView(t *sessionTab) tea.View {
+	out, cursor, _ := m.sessionFrame(t)
+	v := tea.NewView(strings.Join(out, "\n"))
+	v.AltScreen = true
+	v.Cursor = cursor
+	v.MouseMode = m.mouseMode()
+	return v
+}
+
+// sessionFrame lays out a session tab: the lines of the frame, the
+// cursor, and where each modal sits. View and hit-testing share it
+// (ARCH-UI-007).
+func (m Model) sessionFrame(t *sessionTab) ([]string, *tea.Cursor, frameLayout) {
+	var lay frameLayout
 	w := m.viewWidth()
 	snap := t.sess.Snapshot()
 	rows := len(snap.Lines)
@@ -546,9 +559,13 @@ func (m Model) sessionView(t *sessionTab) tea.View {
 		lines, _ = t.sess.Scrollback(min(t.scrollTop(), max(total-rows, 0)), rows)
 	}
 	var ml []string
-	for _, md := range m.modals {
+	tops := make([]int, len(m.modals))
+	for i, md := range m.modals {
 		ml = append(ml, "")
-		ml = append(ml, viewLines(md.View())...)
+		box := viewLines(md.View())
+		tops[i] = len(ml)
+		lay.modals = append(lay.modals, region{W: linesWidth(box), H: len(box)})
+		ml = append(ml, box...)
 	}
 	if m.height == 0 {
 		rows = max(rows, len(ml)) // the size is not known yet: show the whole modal
@@ -557,11 +574,16 @@ func (m Model) sessionView(t *sessionTab) tea.View {
 
 	var cursor *tea.Cursor
 	if len(ml) > 0 {
-		ml = ml[max(len(ml)-rows, 0):]
+		cut := max(len(ml)-rows, 0)
+		ml = ml[cut:]
 		start := rows - len(ml)
 		for i, l := range ml {
 			area[start+i] = l
 		}
+		for i := range lay.modals {
+			lay.modals[i].Y = 1 + start + tops[i] - cut // below the header
+		}
+		lay = lay.clip(1, 1+rows)
 	} else if c := snap.Cursor; c != nil && !t.done && t.scroll == nil && c.Y >= 0 && c.Y < rows && c.X >= 0 && c.X < w {
 		cursor = tea.NewCursor(c.X, c.Y+1)
 	}
@@ -573,8 +595,5 @@ func (m Model) sessionView(t *sessionTab) tea.View {
 	for i, l := range out {
 		out[i] = truncateLine(l, w)
 	}
-	v := tea.NewView(strings.Join(out, "\n"))
-	v.AltScreen = true
-	v.Cursor = cursor
-	return v
+	return out, cursor, lay
 }

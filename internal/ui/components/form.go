@@ -353,6 +353,40 @@ func (f *Form) HitTest(x, y int) (field int, button Button) {
 	return -1, ButtonNone
 }
 
+// clickable is a FormField that reacts to the click that focused it:
+// x is the column in the field's View, or -1 for a click on the label,
+// and wasFocused says whether the field had focus before the click.
+type clickable interface {
+	click(x int, wasFocused bool)
+}
+
+// Click handles a left press at column x, line y of View
+// (FR-NAV-015): on a field's label or value it focuses the field (a text
+// field with its cursor at the end; on a focused choice, ‹ and › change
+// the option); on a button it focuses and presses it, returning
+// FormSubmit or FormCancel exactly like ctrl+s and esc. Anywhere else it
+// does nothing.
+func (f *Form) Click(x, y int) FormEvent {
+	field, b := f.HitTest(x, y)
+	if b != ButtonNone {
+		f.FocusButton(b)
+		return f.Press(b)
+	}
+	if field < 0 {
+		return FormNone
+	}
+	vx := -1
+	if v := f.Layout().Fields[field].Value; v.Contains(x, y) {
+		vx = x - v.X
+	}
+	was := f.focus == field
+	f.SetFocus(field)
+	if c, ok := f.rows[field].field.(clickable); ok {
+		c.click(vx, was)
+	}
+	return FormNone
+}
+
 // render builds the View and its layout together, so that they agree.
 func (f *Form) render() (string, FormLayout) {
 	lw := 0
@@ -496,6 +530,20 @@ func (c *Choice) Update(msg tea.Msg) tea.Cmd {
 		c.sel = (c.sel + 1) % len(c.options)
 	}
 	return nil
+}
+
+// click selects the previous option on a click on ‹ and the next one on
+// a click on ›; the arrows only show while the choice has focus.
+func (c *Choice) click(x int, wasFocused bool) {
+	if !wasFocused || len(c.options) == 0 || x < 0 {
+		return
+	}
+	switch x {
+	case 0:
+		c.sel = (c.sel - 1 + len(c.options)) % len(c.options)
+	case lipgloss.Width(c.View()) - 1:
+		c.sel = (c.sel + 1) % len(c.options)
+	}
 }
 
 // View implements FormField: "‹ label ›" when focused, else the label.

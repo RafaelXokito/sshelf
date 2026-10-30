@@ -28,17 +28,33 @@ func New() Model { return Model{} }
 
 // Update implements components.Modal.
 func (m Model) Update(msg tea.Msg) (components.Modal, tea.Cmd) {
-	if k, ok := msg.(tea.KeyPressMsg); ok && key.Matches(k, keys.CloseHelp) {
-		m.closed = true
+	switch msg := msg.(type) {
+	case tea.KeyPressMsg:
+		if key.Matches(msg, keys.CloseHelp) {
+			m.closed = true
+		}
+	case components.ClickMsg:
+		if _, b := m.render(); b.At(msg.X, msg.Y) == 0 {
+			m.closed = true
+		}
 	}
 	return m, nil
 }
+
+// CloseButton is the overlay's button (FR-NAV-016).
+const CloseButton = "[esc] Close"
 
 // Closed implements components.Closer.
 func (m Model) Closed() bool { return m.closed }
 
 // View implements components.Modal.
 func (m Model) View() string {
+	v, _ := m.render()
+	return v
+}
+
+// render builds the View and the place of its button together.
+func (m Model) render() (string, components.ModalButtons) {
 	cmds := keys.PrefixCommands()
 	width := 0
 	for _, b := range cmds {
@@ -50,7 +66,10 @@ func (m Model) View() string {
 		h := b.Help()
 		lines = append(lines, keyStyle.Render(h.Key+strings.Repeat(" ", width-len(h.Key)))+"  "+h.Desc)
 	}
-	return boxStyle.Render(strings.Join(lines, "\n"))
+	var b strings.Builder
+	b.WriteString(strings.Join(lines, "\n") + "\n\n")
+	btns := components.AddButtons(&b, CloseButton)
+	return boxStyle.Render(b.String()), btns
 }
 
 // Hints implements components.Hinter.

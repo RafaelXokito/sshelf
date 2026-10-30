@@ -47,14 +47,31 @@ func (m Model) WithStage(s app.Stage) Model {
 
 // Update implements components.Modal.
 func (m Model) Update(msg tea.Msg) (components.Modal, tea.Cmd) {
-	if k, ok := msg.(tea.KeyPressMsg); ok && key.Matches(k, keys.Cancel) {
-		return m, func() tea.Msg { return CancelMsg{} }
+	cancel := func() tea.Msg { return CancelMsg{} }
+	switch msg := msg.(type) {
+	case tea.KeyPressMsg:
+		if key.Matches(msg, keys.Cancel) {
+			return m, cancel
+		}
+	case components.ClickMsg:
+		if _, b := m.render(); b.At(msg.X, msg.Y) == 0 {
+			return m, cancel
+		}
 	}
 	return m, nil
 }
 
+// CancelButton is the modal's button (FR-NAV-016).
+const CancelButton = "[esc] Cancel"
+
 // View implements components.Modal.
 func (m Model) View() string {
+	v, _ := m.render()
+	return v
+}
+
+// render builds the View and the place of its button together.
+func (m Model) render() (string, components.ModalButtons) {
 	parts := make([]string, len(stages))
 	for i, s := range stages {
 		switch {
@@ -66,7 +83,12 @@ func (m Model) View() string {
 			parts[i] = dimStyle.Render("· " + string(s))
 		}
 	}
-	return boxStyle.Render("Connecting to " + m.label + "…\n\n" + strings.Join(parts, " → "))
+	var b strings.Builder
+	// The button shares the stages' line, so the modal stays short
+	// enough for the TOFU and prompt modals that open under it.
+	b.WriteString("Connecting to " + m.label + "…\n\n" + strings.Join(parts, " → "))
+	btns := components.AddButtons(&b, CancelButton)
+	return boxStyle.Render(b.String()), btns
 }
 
 // Hints implements components.Hinter.

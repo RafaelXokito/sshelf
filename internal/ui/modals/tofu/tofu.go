@@ -36,15 +36,26 @@ func New(p app.HostKeyPromptMsg) Model { return Model{prompt: p} }
 
 // Update implements components.Modal.
 func (m Model) Update(msg tea.Msg) (components.Modal, tea.Cmd) {
-	k, ok := msg.(tea.KeyPressMsg)
-	if !ok {
-		return m, nil
-	}
 	var trust bool
-	switch {
-	case key.Matches(k, keys.TrustAndSave):
-		trust = true
-	case key.Matches(k, keys.TOFUCancel):
+	switch msg := msg.(type) {
+	case tea.KeyPressMsg:
+		switch {
+		case key.Matches(msg, keys.TrustAndSave):
+			trust = true
+		case key.Matches(msg, keys.TOFUCancel):
+		default:
+			return m, nil
+		}
+	case components.ClickMsg:
+		// Only a click on [y] Trust and save trusts (SEC-HOSTKEY-004).
+		_, b := m.render()
+		switch b.At(msg.X, msg.Y) {
+		case 0:
+			trust = true
+		case 1:
+		default:
+			return m, nil
+		}
 	default:
 		return m, nil
 	}
@@ -56,8 +67,20 @@ func (m Model) Update(msg tea.Msg) (components.Modal, tea.Cmd) {
 // Closed implements components.Closer.
 func (m Model) Closed() bool { return m.done }
 
+// Button labels (FR-NAV-016).
+const (
+	TrustButton  = "[y] Trust and save"
+	CancelButton = "[enter/esc] Cancel"
+)
+
 // View implements components.Modal.
 func (m Model) View() string {
+	v, _ := m.render()
+	return v
+}
+
+// render builds the View and the place of its buttons together.
+func (m Model) render() (string, components.ModalButtons) {
 	p := m.prompt
 	var b strings.Builder
 	b.WriteString(titleStyle.Render("Unknown host key"))
@@ -68,9 +91,9 @@ func (m Model) View() string {
 	fmt.Fprintf(&b, "  Port:         %d\n", p.Port)
 	fmt.Fprintf(&b, "  Key type:     %s\n", p.KeyType)
 	fmt.Fprintf(&b, "  Fingerprint:  %s\n\n", p.Fingerprint)
-	b.WriteString("[y] Trust and save    [enter/esc] Cancel\n")
-	b.WriteString(dimStyle.Render("No credentials are sent until you choose."))
-	return boxStyle.Render(b.String())
+	btns := components.AddButtons(&b, TrustButton, CancelButton)
+	b.WriteString("\n" + dimStyle.Render("No credentials are sent until you choose."))
+	return boxStyle.Render(b.String()), btns
 }
 
 // Hints implements components.Hinter.
