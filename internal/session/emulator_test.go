@@ -243,6 +243,48 @@ func TestARCH_SESS_011_NoLinksRendered(t *testing.T) {
 	checkRendered(t, lines)
 }
 
+// TestSEC_SESSION_005_TitleIgnored: titles set with OSC 0, 1 and 2, in
+// 7- and 8-bit forms, leave no trace on the screen or in the history, and
+// a title report request gets no answer (D-014). The hostile corpus then
+// prints nothing of its titles, and its queries get exactly the
+// emulator's own answers, which go to the remote.
+func TestSEC_SESSION_005_TitleIgnored(t *testing.T) {
+	s, r := drainScreen(t, 80, 5)
+	s.write([]byte("\x1b]0;evil 0\x07\x1b]1;evil 1\x07\x1b]2;evil 2\x1b\\\x9d2;evil c1\x9c\x1b[21t\x1b[20t"))
+	if got := r.take(t, s); len(got) != 0 {
+		t.Fatalf("title requests were answered with %q", got)
+	}
+	for _, l := range s.snapshot().Lines {
+		if plainLine(l) != "" {
+			t.Fatalf("a title reached the screen: %q", l)
+		}
+	}
+
+	for _, h := range sshtest.HostileCorpus {
+		s.write([]byte(h))
+	}
+	lines, _ := s.scrollback(0, 100)
+	checkRendered(t, lines)
+	text := ""
+	for _, l := range lines {
+		text += plainLine(l)
+	}
+	// ESC c clears the hyperlink's text. UTF-8 encoded U+009B is a
+	// character, not a CSI, so the "31m" after it is text.
+	if text != "31m" {
+		t.Errorf("the hostile corpus left %q on the screen, want only \"31m\"", text)
+	}
+	got := string(r.take(t, s))
+	if strings.Contains(got, "evil") || strings.Contains(got, "\x1b]") || strings.Contains(got, "\x1bP") {
+		t.Errorf("the emulator answered with a title, colour or DCS report: %q", got)
+	}
+	for _, want := range []string{"\x1b[?62;1;6;22c", "\x1b[>1;10;0c", "0n", "R"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the replies %q lack %q", got, want)
+		}
+	}
+}
+
 func FuzzSEC_SESSION_005_RenderOnlySGR(f *testing.F) {
 	for _, h := range sshtest.HostileCorpus {
 		f.Add([]byte(h))

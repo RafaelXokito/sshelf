@@ -1068,7 +1068,7 @@ While a live session tab is focused and neither the prefix key, an overlay nor s
 ### FR-TAB-007 · Session status bar
 While a session tab is focused, the system shall show a one-line status bar with the session state, `user@host:port`, the connected duration and the main prefix-key hints.
 
-- **Priority:** M2 · **Status:** Draft · **Source:** D-009
+- **Priority:** M2 · **Status:** Implemented · **Source:** D-009
 - **Acceptance:**
   - A live session shows `● connected · ubuntu@10.0.0.10:22 · 01:02:03 · Ctrl+] ? help · Ctrl+] h hosts`. The duration updates once a second. When the line does not fit, the hints are dropped first, then the duration.
   - An ended session shows its reason instead (FR-CONN-005 revision); scrollback mode shows its own hints (FR-TAB-010).

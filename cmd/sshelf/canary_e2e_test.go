@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -32,11 +33,18 @@ func paste(s string) string { return "\x1b[200~" + s + "\x1b[201~" }
 
 // canaryRun is sshelf, built with sshelf_faultinject so that its
 // credential store is an in-memory one, running in a PTY with its own
-// HOME, XDG_CONFIG_HOME and TMPDIR.
+// HOME, XDG_CONFIG_HOME and TMPDIR. The build records the header and the
+// bottom line of every frame in framesFile (frames_fault.go), inside
+// TMPDIR, so that check scans sshelf's own chrome on its own too.
 type canaryRun struct {
 	*slice
-	tmp string
-	cs  canaries
+	tmp    string
+	frames string
+	cs     canaries
+	// echoed are canaries the remote was sent and printed back in the
+	// session area: the remote's choice (T-042). The terminal output is
+	// not scanned for them; the chrome, the log and every file still are.
+	echoed canaries
 }
 
 // startCanary starts the fault-injection build with env added. setup,
@@ -45,6 +53,7 @@ type canaryRun struct {
 func startCanary(t *testing.T, cs canaries, setup func(home, cfgDir string), env ...string) *canaryRun {
 	t.Helper()
 	tmp := t.TempDir()
+	frames := filepath.Join(tmp, "frames.txt")
 	s := startFreshBin(t, faultBinary(t), func(home, xdg string) {
 		cfgDir := filepath.Join(xdg, "sshelf")
 		if _, err := paths.EnsureDir(cfgDir); err != nil {
@@ -53,8 +62,27 @@ func startCanary(t *testing.T, cs canaries, setup func(home, cfgDir string), env
 		if setup != nil {
 			setup(home, cfgDir)
 		}
-	}, append([]string{"TMPDIR=" + tmp}, env...)...)
-	return &canaryRun{slice: s, tmp: tmp, cs: cs}
+	}, append([]string{"TMPDIR=" + tmp, "SSHELF_FAULT_FRAMES=" + frames}, env...)...)
+	return &canaryRun{slice: s, tmp: tmp, frames: frames, cs: cs}
+}
+
+// chrome returns the headers and the bottom lines of the frames sshelf
+// drew, as recorded in the frames file.
+func (c *canaryRun) chrome() (headers, bars []string) {
+	c.t.Helper()
+	b, err := os.ReadFile(c.frames)
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	for l := range strings.SplitSeq(string(b), "\n") {
+		switch {
+		case strings.HasPrefix(l, "H "):
+			headers = append(headers, l[2:])
+		case strings.HasPrefix(l, "S "):
+			bars = append(bars, l[2:])
+		}
+	}
+	return headers, bars
 }
 
 // writeKnownHosts writes sshelf's known_hosts with lines.
@@ -136,17 +164,28 @@ func (c *canaryRun) typeUntil(srv *sshtest.Server, keys string, done func() bool
 }
 
 // check scans every sink: the terminal output (stdout and stderr share
-// the PTY), and every file under HOME (the state dir with the debug log
-// and crash reports is in it), the config dir (config.json, known_hosts)
-// and TMPDIR. sshelf's environment is fixed at exec and holds no canary;
-// TestARCH_SEC_001_CanaryScan checks os.Environ() in process.
+// the PTY) for every canary the remote did not echo, and every file under
+// HOME (the state dir with the debug log and crash reports is in it), the
+// config dir (config.json, known_hosts) and TMPDIR (with the chrome of
+// every frame) for every canary. sshelf's environment is fixed at exec and
+// holds no canary; TestARCH_SEC_001_CanaryScan checks os.Environ() in
+// process.
 func (c *canaryRun) check() {
 	c.t.Helper()
 	time.Sleep(50 * time.Millisecond) // let the drain collect the last output
-	hits := c.cs.hits("the terminal output", c.out.From(0))
+	var screen canaries
+	for _, cn := range c.cs {
+		if !slices.Contains(c.echoed, cn) {
+			screen = append(screen, cn)
+		}
+	}
+	hits := screen.hits("the terminal output", c.out.From(0))
 	fileHits, files := c.cs.fileHits(c.t, c.home, c.cfgDir, c.tmp)
 	if files == 0 {
 		c.t.Error("no file was scanned")
+	}
+	if st, err := os.Stat(c.frames); err != nil || st.Size() == 0 {
+		c.t.Errorf("no frame was recorded: %v", err)
 	}
 	for _, h := range append(hits, fileHits...) {
 		c.t.Error(h)
