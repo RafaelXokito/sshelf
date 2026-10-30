@@ -128,6 +128,9 @@ type Model struct {
 	ticking bool          // a tickMsg is on its way
 	prefix  bool          // ctrl+] seen, waiting for the command key (design §8.5)
 
+	attemptTab int  // the ended tab the attempt in progress reconnects; 0 for a new tab
+	quitAsked  bool // the "Quit and close N sessions?" confirmation is open
+
 	now    func() time.Time                           // injectable clock
 	tick   func() tea.Cmd                             // the one-second clock; tests replace it
 	listen func(num int, s app.FramedSession) tea.Cmd // waits for a session's next update; tests replace it
@@ -176,8 +179,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.modals = nil
 				return m.Update(fs.Cancel())
 			}
-			m.cancelAttempt()
-			return m, tea.Quit
+			return m.quit()
 		}
 		if len(m.modals) > 0 {
 			m.prefix = false // the prefix key is off while a modal is open
@@ -189,6 +191,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if t := m.focused(); t != nil {
 			return m.sessionKey(t, msg)
+		}
+		if key.Matches(msg, keys.Quit) && m.quitKeyQuits() && m.liveSessions() > 0 {
+			return m.quit() // q on the host list or Welcome asks first (FR-TAB-009)
 		}
 		if m.screen == nil {
 			if key.Matches(msg, keys.Quit) {
@@ -323,6 +328,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case confirm.DoneMsg:
 		m.popModal()
+		m.quitAsked = false
 		if msg.Then != nil {
 			then := msg.Then
 			return m, func() tea.Msg { return then }
@@ -333,7 +339,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.cancel != nil {
 			return m, nil // one attempt at a time
 		}
-		m.attemptAddr = ""
+		m.attemptAddr, m.attemptTab = "", msg.Tab
+		if t := m.attemptTabPtr(); t != nil {
+			m.attemptAddr = t.addr
+		}
 		if h, ok := m.hostByID(msg.HostID); ok {
 			m.attemptAddr = sessionAddr(h)
 		}
@@ -345,7 +354,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.cancelAttempt()
 		m.modals = nil
-		m.status = "connection cancelled"
+		if t := m.attemptTabPtr(); t != nil {
+			t.failure = "connection cancelled" // the tab stays ended (FR-CONN-010)
+		} else {
+			m.status = "connection cancelled"
+		}
 		return m, nil
 
 	case app.HostKeyPromptMsg:
@@ -406,6 +419,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.modals = nil
 		m.status = ""
 		if fs, ok := msg.Session.(app.FramedSession); ok {
+			if t := m.attemptTabPtr(); t != nil {
+				return m.reconnected(t, fs)
+			}
 			return m.openTab(msg.HostID, msg.Label, m.attemptAddr, fs)
 		}
 		hostID, label := msg.HostID, msg.Label
@@ -419,7 +435,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.cancelAttempt()
 		m.modals = nil
-		m.status = components.ErrorPrefix + failedStatus(msg.Label, msg.Err)
+		if t := m.attemptTabPtr(); t != nil {
+			t.failure = failedStatus(msg.Label, msg.Err) // the tab stays ended (FR-CONN-010)
+		} else {
+			m.status = components.ErrorPrefix + failedStatus(msg.Label, msg.Err)
+		}
 		if me, ok := errors.AsType[*app.HostKeyMismatchError](msg.Err); ok {
 			m.modals = append(m.modals, keychanged.New(msg.Label, me))
 		}

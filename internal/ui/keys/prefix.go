@@ -19,6 +19,19 @@ var (
 	PrefixLiteral    = key.NewBinding(key.WithKeys("ctrl+]"), key.WithHelp("Ctrl+]", "send Ctrl+]"))
 	PrefixCancel     = key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "cancel"))
 
+	// Ended session tab (FR-CONN-005 revision, FR-CONN-010).
+	Reconnect = key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "reconnect"))
+	CloseTab  = key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "close"))
+
+	// Scrollback mode (FR-TAB-010).
+	ScrollUp       = key.NewBinding(key.WithKeys("up"), key.WithHelp("↑", "line up"))
+	ScrollDown     = key.NewBinding(key.WithKeys("down"), key.WithHelp("↓", "line down"))
+	ScrollPageUp   = key.NewBinding(key.WithKeys("pgup"), key.WithHelp("PgUp", "page up"))
+	ScrollPageDown = key.NewBinding(key.WithKeys("pgdown"), key.WithHelp("PgDn", "page down"))
+	ScrollTop      = key.NewBinding(key.WithKeys("g"), key.WithHelp("g", "top"))
+	ScrollBottom   = key.NewBinding(key.WithKeys("G"), key.WithHelp("G", "bottom"))
+	ScrollExit     = key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back"))
+
 	// CloseHelp closes the prefix help overlay.
 	CloseHelp = key.NewBinding(key.WithKeys("?", "esc"), key.WithHelp("?/esc", "close"))
 )

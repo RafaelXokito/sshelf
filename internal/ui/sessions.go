@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"net"
 	"strconv"
 	"strings"
@@ -17,6 +18,7 @@ import (
 	"github.com/RafaelXokito/sshelf/internal/ui/modals/confirm"
 	"github.com/RafaelXokito/sshelf/internal/ui/modals/help"
 	"github.com/RafaelXokito/sshelf/internal/ui/screens/hostlist"
+	"github.com/RafaelXokito/sshelf/internal/ui/screens/welcome"
 	"github.com/RafaelXokito/sshelf/internal/ui/tabs"
 )
 
@@ -51,7 +53,13 @@ type sessionTab struct {
 	seenSeq uint64 // Snapshot.Seq when last focused; activity = seq > seenSeq
 	ended   error  // the end cause; meaningful once done
 	done    bool
+	failure string // a failed or cancelled reconnect, shown instead of the end cause
+	scroll  *int   // top line of the scrollback view in scrollback mode; nil otherwise
 }
+
+// quitMsg closes every session and quits; the quit confirmation delivers
+// it on y (FR-TAB-009).
+type quitMsg struct{}
 
 // activity reports output that arrived while the tab was in the
 // background (FR-TAB-004).
@@ -196,6 +204,87 @@ func (m Model) closeTab(num int) (Model, tea.Cmd) {
 	return m, tea.Batch(closeCmd, cmd)
 }
 
+// attemptTabPtr is the ended tab the connection attempt in progress
+// reconnects, or nil.
+func (m Model) attemptTabPtr() *sessionTab {
+	if m.attemptTab == 0 {
+		return nil
+	}
+	if i := m.tabIndex(m.attemptTab); i >= 0 {
+		return m.tabs[i]
+	}
+	return nil
+}
+
+// reconnected runs s in the ended tab t, keeping its number and position;
+// the old screen and scrollback go with the old session (FR-CONN-010).
+func (m Model) reconnected(t *sessionTab, s app.FramedSession) (Model, tea.Cmd) {
+	old := t.sess
+	t.sess, t.started = s, m.now()
+	t.done, t.ended, t.failure, t.scroll = false, nil, "", nil
+	t.seq, t.seenSeq = 0, 0
+	if m.width > 0 {
+		s.Resize(m.areaSize())
+	}
+	m.ticking = m.ticking && m.focused() != t // the clock may have stopped on the ended tab
+	m, cmd := m.focusTab(m.tabIndex(t.num) + 1)
+	return m, tea.Batch(func() tea.Msg { _ = old.Close(); return nil }, m.listen(t.num, s), cmd)
+}
+
+// liveSessions counts the tabs whose session has not ended.
+func (m Model) liveSessions() int {
+	n := 0
+	for _, t := range m.tabs {
+		if !t.done {
+			n++
+		}
+	}
+	return n
+}
+
+// quitKeyQuits reports whether q quits on the Hosts tab's screen: the
+// host list outside its search field, and the Welcome screen.
+func (m Model) quitKeyQuits() bool {
+	switch s := m.screen.(type) {
+	case hostlist.Model:
+		return !s.Searching()
+	case welcome.Model:
+		return true
+	}
+	return false
+}
+
+// quit quits sshelf, asking first while sessions are live (FR-TAB-009).
+func (m Model) quit() (tea.Model, tea.Cmd) {
+	n := m.liveSessions()
+	if n == 0 {
+		m.cancelAttempt()
+		return m, tea.Quit
+	}
+	if !m.quitAsked {
+		m.quitAsked = true
+		q := fmt.Sprintf("Quit and close %d session%s?", n, map[bool]string{true: "", false: "s"}[n == 1])
+		m.modals = append(m.modals, confirm.New(q, quitMsg{}))
+	}
+	return m, nil
+}
+
+// closeAllAndQuit closes every session off the Update goroutine, then
+// quits.
+func (m Model) closeAllAndQuit() (tea.Model, tea.Cmd) {
+	m.cancelAttempt()
+	sessions := make([]app.FramedSession, len(m.tabs))
+	for i, t := range m.tabs {
+		sessions[i] = t.sess
+	}
+	return m, func() tea.Msg {
+		for _, s := range sessions {
+			_ = s.Close()
+		}
+		return tea.QuitMsg{}
+	}
+}
+
 // ensureTick starts the one-second clock while a live session is focused.
 func (m Model) ensureTick() (Model, tea.Cmd) {
 	if t := m.focused(); t == nil || t.done || m.ticking {
@@ -233,6 +322,10 @@ func (m Model) updateSessions(msg tea.Msg) (Model, tea.Cmd, bool) {
 	case closeTabMsg:
 		m, cmd := m.closeTab(msg.Num)
 		return m, cmd, true
+
+	case quitMsg:
+		next, cmd := m.closeAllAndQuit()
+		return next.(Model), cmd, true
 
 	case tickMsg:
 		m.ticking = false
@@ -283,18 +376,67 @@ func (m Model) runPrefix(r keys.PrefixResult) (tea.Model, tea.Cmd) {
 		return m.focusNext(1)
 	case keys.PrefixDoPrev:
 		return m.focusNext(-1)
+	case keys.PrefixDoScrollback:
+		if t != nil && t.scroll == nil {
+			_, total := t.sess.Scrollback(0, 0)
+			top := max(total-m.areaRows(t), 0)
+			t.scroll = &top
+		}
 	}
 	return m, nil
 }
 
 // sessionKey handles a key on a session tab that is neither a modal's nor
-// the prefix key's: a live session gets it, encoded by the session
-// (FR-TAB-006).
+// the prefix key's. In scrollback mode it moves the view (FR-TAB-010); an
+// ended tab takes only r and x (FR-CONN-005 revision); a live session gets
+// everything else, encoded by the session (FR-TAB-006).
 func (m Model) sessionKey(t *sessionTab, k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	if !t.done {
+	switch {
+	case t.scroll != nil:
+		m.scrollKey(t, k)
+	case t.done && key.Matches(k, keys.Reconnect):
+		hostID, label, num := t.hostID, t.label, t.num
+		return m, func() tea.Msg { return hostlist.ConnectRequestMsg{HostID: hostID, Label: label, Tab: num} }
+	case t.done && key.Matches(k, keys.CloseTab):
+		return m.closeTab(t.num)
+	case !t.done:
 		_ = t.sess.SendKey(toKeyEvent(k)) // never blocks; a full queue drops it (ARCH-SESS-014)
 	}
 	return m, nil
+}
+
+// scrollKey moves the scrollback view; no key reaches the remote.
+func (m Model) scrollKey(t *sessionTab, k tea.KeyPressMsg) {
+	rows := m.areaRows(t)
+	_, total := t.sess.Scrollback(0, 0)
+	top := *t.scroll
+	switch {
+	case key.Matches(k, keys.ScrollExit):
+		t.scroll = nil
+		return
+	case key.Matches(k, keys.ScrollUp):
+		top--
+	case key.Matches(k, keys.ScrollDown):
+		top++
+	case key.Matches(k, keys.ScrollPageUp):
+		top -= rows
+	case key.Matches(k, keys.ScrollPageDown):
+		top += rows
+	case key.Matches(k, keys.ScrollTop):
+		top = 0
+	case key.Matches(k, keys.ScrollBottom):
+		top = total
+	}
+	top = min(max(top, 0), max(total-rows, 0))
+	t.scroll = &top
+}
+
+// areaRows is the number of rows of the session area.
+func (m Model) areaRows(t *sessionTab) int {
+	if m.height > 0 {
+		return max(m.height-2, 1)
+	}
+	return len(t.sess.Snapshot().Lines)
 }
 
 // toKeyEvent converts a Bubble Tea key press to the ultraviolet event the
@@ -339,8 +481,22 @@ func (m Model) sessionStatus(t *sessionTab) string {
 			return components.Help(h.Hints()...)
 		}
 	}
+	if t.scroll != nil {
+		_, total := t.sess.Scrollback(0, 0)
+		last := min(*t.scroll+m.areaRows(t), total)
+		hints := []string{
+			keys.ScrollUp.Help().Key + keys.ScrollDown.Help().Key,
+			keys.ScrollPageUp.Help().Key, keys.ScrollPageDown.Help().Key,
+			keys.ScrollTop.Help().Key, keys.ScrollBottom.Help().Key,
+		}
+		return tabs.Fit(w, []string{fmt.Sprintf("scrollback %d/%d", last, total)}, strings.Join(hints, " "), hint(keys.ScrollExit))
+	}
 	if t.done {
-		return tabs.EndedStatus(w, endedReason(t.ended))
+		reason := endedReason(t.ended)
+		if t.failure != "" {
+			reason = t.failure
+		}
+		return tabs.EndedStatus(w, reason, hint(keys.Reconnect), hint(keys.CloseTab))
 	}
 	return tabs.LiveStatus(w, t.addr, m.now().Sub(t.started), prefixHint(keys.PrefixHelp), prefixHint(keys.PrefixHosts))
 }
@@ -349,6 +505,9 @@ func (m Model) sessionStatus(t *sessionTab) string {
 func prefixHint(b key.Binding) string {
 	return keys.Prefix.Help().Key + " " + b.Keys()[0] + " " + b.Help().Desc
 }
+
+// hint is a status-bar hint: "r reconnect".
+func hint(b key.Binding) string { return b.Help().Key + " " + b.Help().Desc }
 
 // endedReason is why a session ended, as its tab shows it: "exited (3)"
 // or "connection lost: <reason>" (FR-CONN-005 revision).
@@ -368,21 +527,30 @@ func (m Model) sessionView(t *sessionTab) tea.View {
 	if m.height > 0 {
 		rows = max(m.height-2, 1)
 	}
-	area := tabs.Area(snap.Lines, w, rows)
+	lines := snap.Lines
+	if t.scroll != nil {
+		// The view keeps its top line while output arrives (FR-TAB-010).
+		_, total := t.sess.Scrollback(0, 0)
+		lines, _ = t.sess.Scrollback(min(*t.scroll, max(total-rows, 0)), rows)
+	}
+	var ml []string
+	for _, md := range m.modals {
+		ml = append(ml, "")
+		ml = append(ml, viewLines(md.View())...)
+	}
+	if m.height == 0 {
+		rows = max(rows, len(ml)) // the size is not known yet: show the whole modal
+	}
+	area := tabs.Area(lines, w, rows)
 
 	var cursor *tea.Cursor
-	if len(m.modals) > 0 {
-		var ml []string
-		for _, md := range m.modals {
-			ml = append(ml, "")
-			ml = append(ml, viewLines(md.View())...)
-		}
+	if len(ml) > 0 {
 		ml = ml[max(len(ml)-rows, 0):]
 		start := rows - len(ml)
 		for i, l := range ml {
 			area[start+i] = l
 		}
-	} else if c := snap.Cursor; c != nil && !t.done && c.Y >= 0 && c.Y < rows && c.X >= 0 && c.X < w {
+	} else if c := snap.Cursor; c != nil && !t.done && t.scroll == nil && c.Y >= 0 && c.Y < rows && c.X >= 0 && c.X < w {
 		cursor = tea.NewCursor(c.X, c.Y+1)
 	}
 

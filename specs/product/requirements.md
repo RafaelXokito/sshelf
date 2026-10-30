@@ -416,7 +416,7 @@ When an interactive session ends, the system shall restore the host list with th
 - **Acceptance:**
   - `exit 3` shows "web-prod: exited (3)". A server shutdown shows "web-prod: connection lost: <reason>".
   - The terminal is fully restored, with no raw mode and no remote screen remnants.
-- **M2 revision** · Priority: M2 · Status: Draft · Source: D-010
+- **M2 revision** · Priority: M2 · Status: Implemented · Source: D-010
   - *Revised:* When a session ends, the system shall keep its tab open with the last remote screen, show the remote exit status or the disconnect reason in that tab's status bar together with `r` reconnect and `x` close, and, when the user presses `x`, close the tab.
   - *Acceptance:*
     - `exit 3` shows `✕ exited (3) · r reconnect · x close` in that tab's status bar; a server shutdown shows `✕ connection lost: <reason> · r reconnect · x close`. The last remote screen stays visible above it.
@@ -461,7 +461,7 @@ While a session is active, the system shall send a keepalive request at the effe
 ### FR-CONN-010 · Reconnect from an ended tab
 While a tab shows an ended session, when the user presses `r`, the system shall connect to the same host again and run the new session in the same tab.
 
-- **Priority:** M2 · **Status:** Draft · **Source:** Tabby, Termius, D-010 (was v1 "Reconnect after a drop")
+- **Priority:** M2 · **Status:** Implemented · **Source:** Tabby, Termius, D-010 (was v1 "Reconnect after a drop")
 - **Acceptance:**
   - `r` is offered after a drop and after a normal `exit` alike (FR-CONN-005 revision). The host is connected exactly as from the host list, with the same modals, shown over the ended tab.
   - The new session keeps the tab's number and position; the old screen and scrollback are discarded once the new session is established.
@@ -1085,7 +1085,7 @@ While a session tab is not focused, the system shall keep reading that session's
 ### FR-TAB-009 · Quit with open sessions
 When the user quits sshelf (`q` on the host list or the Welcome screen, or Ctrl+C on the Hosts tab) while at least one session is live, the system shall ask "Quit and close N sessions?" and quit only on `y`.
 
-- **Priority:** M2 · **Status:** Draft · **Source:** D-010
+- **Priority:** M2 · **Status:** Implemented · **Source:** D-010
 - **Acceptance:**
   - The confirmation defaults to No: `n`, Enter and Esc keep sshelf running with every session intact.
   - Ended tabs do not count. With no live session, `q` quits at once as in the MVP.
@@ -1094,7 +1094,7 @@ When the user quits sshelf (`q` on the host list or the Welcome screen, or Ctrl+
 ### FR-TAB-010 · Scrollback mode
 While a session tab is focused, when the user presses the prefix key followed by `[`, the system shall show the session's scrollback and screen as one view that PgUp, PgDn, the arrow keys, `g` and `G` move, until the user presses Esc.
 
-- **Priority:** M2 · **Status:** Draft · **Source:** D-010, tmux copy mode
+- **Priority:** M2 · **Status:** Implemented · **Source:** D-010, tmux copy mode
 - **Acceptance:**
   - The scrollback keeps the last 2,000 lines that scrolled off the main screen (NFR-SIZE-003). The alternate screen used by `vim` or `htop` adds nothing to it.
   - The status bar shows `scrollback 120/2000 · ↑↓ PgUp PgDn g G · esc back`. Keys are not sent to the remote; output keeps arriving, and the view stays on the same lines until the user moves it or those lines leave the scrollback.
