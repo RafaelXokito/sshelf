@@ -52,6 +52,7 @@ func (s *slice) waitExit() int {
 	case <-time.After(10 * time.Second):
 		s.t.Fatalf("sshelf did not exit; output:\n%q", s.out.From(0))
 	}
+	s.drainAfterExit()
 	if ee, ok := errors.AsType[*exec.ExitError](s.exitErr); ok {
 		return ee.ExitCode()
 	}

@@ -360,8 +360,33 @@ func (s *slice) waitQuit() {
 		if s.exitErr != nil {
 			s.t.Fatalf("sshelf exited with %v; output:\n%q", s.exitErr, s.out.From(0))
 		}
+		s.drainAfterExit()
 	case <-time.After(10 * time.Second):
 		s.t.Fatalf("sshelf did not quit; output:\n%q", s.out.From(0))
+	}
+}
+
+// drainEnd is what drainAfterExit writes after sshelf's last output.
+const drainEnd = "[e2e: end of output]"
+
+// drainAfterExit returns once everything sshelf wrote before it exited is
+// in s.out. The test keeps the PTY's terminal side open, so the reader
+// never sees EOF, and on exit sshelf's last bytes (the sequences that turn
+// mouse tracking off and leave the alternate screen) can still be in the
+// PTY when the test reads s.out: TestNFR_UX_001_NoMouseTrackingInPlainSession
+// then saw tracking still on (macOS CI). A marker written to the terminal
+// side queues behind them, so once it arrives they have too.
+func (s *slice) drainAfterExit() {
+	s.t.Helper()
+	if _, err := s.tty.WriteString(drainEnd); err != nil {
+		s.t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for !bytes.Contains(s.out.From(0), []byte(drainEnd)) {
+		if time.Now().After(deadline) {
+			s.t.Fatalf("the output after exit was not drained; output:\n%q", s.out.From(0))
+		}
+		time.Sleep(time.Millisecond)
 	}
 }
 
