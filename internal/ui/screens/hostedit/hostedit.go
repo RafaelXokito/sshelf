@@ -299,6 +299,8 @@ func (m Model) View() string {
 	}
 	help := components.Help(keys.NextField, keys.PrevField, keys.Save, keys.Cancel)
 	switch m.form.Focused() {
+	case -1: // a button
+		help = components.Help(keys.PressButton, keys.NextField, keys.PrevField)
 	case rowIdentity:
 		help = components.Help(keys.ChoicePrev, keys.ChoiceNext, keys.NextField, keys.Save, keys.Cancel)
 	case rowPassword, rowKey, rowPassphrase:

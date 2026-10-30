@@ -258,6 +258,8 @@ func (m Model) View() string {
 // help is the key hint line for the focused field; it fits 80 columns.
 func (m Model) help() []key.Binding {
 	switch m.form.Focused() {
+	case -1: // a button
+		return []key.Binding{keys.PressButton, keys.NextField, keys.PrevField}
 	case rowPassword, rowPassphrase, rowKey:
 		return []key.Binding{keys.NextField, keys.Save, keys.Cancel, keys.ClearSecret}
 	case rowKeyPath:

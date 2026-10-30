@@ -1,0 +1,24 @@
+sshelf
+
+Add host
+
+  Label
+  Hostname    name, IPv4 or IPv6
+  Port        22
+  Username    optional
+  Identity    (none)
+  Password    (not set)
+  Key file    optional
+  Stored key  (not set)
+  Passphrase  (not set)
+
+            > [ Save ]   [ Cancel ]
+
+
+
+
+
+
+
+
+enter/space press button • tab next field • shift+tab previous field
