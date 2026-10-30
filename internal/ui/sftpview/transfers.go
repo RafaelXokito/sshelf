@@ -184,7 +184,13 @@ func (m Model) copyNames(p *pane, names []string) tea.Cmd {
 		return nil
 	}
 	tab, b, from, src, dst := m.tab, m.b, p.side, p.dir, other.dir
+	prev, done := m.copies.last, make(chan struct{})
+	m.copies.last = done
 	return func() tea.Msg {
+		defer close(done)
+		if prev != nil {
+			<-prev // Copy returns at once, so this wait is short
+		}
 		b.Copy(from, src, names, dst)
 		return SnapshotMsg{Tab: tab, Transfers: b.Transfers()}
 	}

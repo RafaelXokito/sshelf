@@ -108,7 +108,16 @@ type Model struct {
 
 	drag      drag   // a press on a row and the drag it may start (FR-SFTP-022)
 	lastPress *press // the last press on a row, for double-clicks
+
+	// copies orders the copy commands: Bubble Tea runs commands
+	// concurrently, so each copy waits for the one queued before it and
+	// the transfers keep the order of the key presses.
+	copies *copyChain
 }
+
+// copyChain is the done channel of the last copy command, closed once
+// that copy is queued. Only Update touches it.
+type copyChain struct{ last chan struct{} }
 
 // New returns the view of SFTP tab number tab, browsing with b. The
 // remote pane is focused (FR-SFTP-005). Init lists both panes.
@@ -120,6 +129,7 @@ func New(tab int, b app.Browser, opts Options) Model {
 		tab: tab, b: b, opts: opts, focus: app.Remote,
 		panes:    [2]*pane{newPane(app.Local), newPane(app.Remote)},
 		doneSeen: map[app.TransferID]bool{}, reported: map[app.BatchID]bool{},
+		copies: &copyChain{},
 	}
 }
 

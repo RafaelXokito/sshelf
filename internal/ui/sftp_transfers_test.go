@@ -344,6 +344,36 @@ func TestFR_SFTP_025_CloseConfirmCountsTransfers(t *testing.T) {
 	}
 }
 
+// TestFR_SFTP_001_CopiesKeepKeyOrder: Bubble Tea runs commands
+// concurrently, yet copies queued by quick key presses are queued in the
+// order of the presses, so the transfers view lists them that way.
+func TestFR_SFTP_001_CopiesKeepKeyOrder(t *testing.T) {
+	d, b := approvedTab(t)
+	d.keys("g")
+	var cmds []tea.Cmd
+	for range 3 {
+		d.keys("j")
+		var cmd tea.Cmd
+		d.m, cmd = d.m.Update(tea.KeyPressMsg{Code: 'c', Text: "c"})
+		cmds = append(cmds, cmd)
+	}
+	done := make(chan struct{})
+	for _, cmd := range slices.Backward(cmds) { // the last press runs first
+		go func() { cmd(); done <- struct{}{} }()
+		time.Sleep(10 * time.Millisecond)
+	}
+	for range cmds {
+		<-done
+	}
+	var got []string
+	for _, c := range b.Copies() {
+		got = append(got, c.Names...)
+	}
+	if want := []string{"scripts", ".bashrc", "backup.tar.gz"}; !slices.Equal(got, want) {
+		t.Fatalf("copied %q, want %q", got, want)
+	}
+}
+
 func TestFR_SFTP_001_CopyQueuesAndClearsMarks(t *testing.T) {
 	d, b := approvedTab(t)
 	d.keys("g", "c") // c on .. does nothing
