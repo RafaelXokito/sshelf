@@ -505,7 +505,8 @@ them in dependency order and rebase rather than resolve by hand.
   - Every M2 requirement set to `Implemented`; the requirement counts in each spec file updated.
   - The M2 section of [`acceptance.md`](acceptance.md) run and signed off on macOS and Linux; `docs/release-checklist.md` gains its manual items (vim, htop, less and tmux in the frame against a real `sshd`; mouse in vim and htop; native selection in a plain shell; the named terminals of NFR-PORT-002 with tabs).
   - ADR-013's limitation list and the open questions in `product/requirements.md` §22 updated with the product owner's answers and the upstream status of limitations 1 and 2.
-- **Satisfies:** NFR-QUAL-001 (M2 extension), ARCH-UI-001 (M2 revision complete), FR-CONN-001 (manual: real `sshd`)
+  - Session end reasons (signal name, disconnect message) are sanitised, folded to one line and cut to 80 columns before they are shown or logged (SEC-SESSION-006).
+- **Satisfies:** NFR-QUAL-001 (M2 extension), ARCH-UI-001 (M2 revision complete), FR-CONN-001 (manual: real `sshd`), SEC-SESSION-006
 - **Depends on:** T-031 … T-042
 - **Tests:** `TestNFR_QUAL_001_EveryMVPAndM2IDTraced`, `TestNFR_QUAL_001_RevisionBlockFails` (tracecheck fixture), `TestNFR_QUAL_001_M2MatrixRead` (fixture), and the existing tracecheck tests.
 - **Done when:** `go run ./scripts/tracecheck` reports zero problems over MVP and M2, no `M2 revision` block remains, coverage still meets NFR-QUAL-003, and the M2 checklist is signed off.
@@ -812,6 +813,7 @@ heading is deliberately different; T-043 extends the tool to read it.
 | ID | Tasks |
 |---|---|
 | SEC-SESSION-005 | T-031, T-032, T-042 |
+| SEC-SESSION-006 | T-043 |
 
 ### Architecture (`ARCH-*`)
 

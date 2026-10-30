@@ -8,6 +8,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/RafaelXokito/sshelf/internal/app"
 	"github.com/RafaelXokito/sshelf/internal/app/apptest"
@@ -366,4 +367,36 @@ func TestFR_TAB_010_Golden(t *testing.T) {
 	d.press(tea.KeyPgUp, "") // 22 rows up: lines 59 to 80
 	d.press(tea.KeyPgUp, "") // lines 37 to 58
 	golden(t, "scrollback", d.m)
+}
+
+// TestSEC_SESSION_006_EndedTabReasonSafe: a disconnect message from the
+// server with escapes, a newline and 200 extra columns ends the tab with
+// a one-line status bar whose reason is clean and at most
+// session.MaxReasonWidth columns, on a terminal wide enough to show more.
+func TestSEC_SESSION_006_EndedTabReasonSafe(t *testing.T) {
+	s := apptest.NewFakeSession(shellScreen...)
+	d := framedDriver(t, testHosts, s)
+	d.resize(200, 30)
+	connectHost(t, d, "h2")
+	msg := "ssh: disconnect, reason 11: bye\x1b]52;c;ZXZpbA==\x07\x1b]0;evil\x07\nsecond line " + strings.Repeat("y", 200)
+	endTab(d, 1, s, &session.DisconnectError{Err: errors.New(msg)})
+
+	raw := d.view()
+	if strings.Contains(raw, "\x1b]") || strings.Contains(raw, "ZXZpbA") || strings.Contains(raw, "evil") {
+		t.Fatalf("the view holds the server's escapes: %q", raw)
+	}
+	if lines := strings.Split(plain(raw), "\n"); len(lines) != 30 {
+		t.Fatalf("the frame has %d lines, want 30", len(lines))
+	}
+	bar := statusBar(d)
+	reason, _, ok := strings.Cut(strings.TrimPrefix(bar, "✕ "), " · r reconnect")
+	if !ok {
+		t.Fatalf("status bar %q lacks the reconnect hint", bar)
+	}
+	if !strings.HasPrefix(reason, "connection lost: ssh: disconnect, reason 11: bye second line yyy") || !strings.HasSuffix(reason, "…") {
+		t.Fatalf("reason %q", reason)
+	}
+	if w := ansi.StringWidth(reason); w > session.MaxReasonWidth {
+		t.Fatalf("reason is %d columns, want at most %d", w, session.MaxReasonWidth)
+	}
 }

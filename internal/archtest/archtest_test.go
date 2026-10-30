@@ -39,7 +39,7 @@ var rules = []rule{
 	{pkg: "internal/sshclient", allow: []string{"internal/domain"}, forbid: append([]string{"internal/secrets", "internal/store", "internal/ui/...", "internal/app"}, bubbleTea...)},
 	// The session never touches the local terminal: no raw mode, no
 	// cancelable stdin (ARCH-SESS-003 revision).
-	{pkg: "internal/session", allow: []string{"internal/sshclient", "internal/term"}, forbid: append([]string{"internal/secrets", "internal/store", "internal/ui/...", "internal/app", "golang.org/x/term", "github.com/muesli/cancelreader"}, bubbleTea...)},
+	{pkg: "internal/session", allow: []string{"internal/domain", "internal/sshclient", "internal/term"}, forbid: append([]string{"internal/secrets", "internal/store", "internal/ui/...", "internal/app", "golang.org/x/term", "github.com/muesli/cancelreader"}, bubbleTea...)},
 	{pkg: "internal/ui/...", allow: []string{"internal/app", "internal/domain", "internal/search", "internal/session", "internal/ui/..."}, forbid: []string{"internal/secrets", "internal/store", "internal/sshclient", "golang.org/x/crypto/ssh/..."}},
 	{pkg: "internal/app", forbid: []string{"internal/ui/..."}},
 }

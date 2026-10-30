@@ -806,6 +806,7 @@ flowchart TD
     secrets --> term
     sshclient --> domain
     session --> sshclient
+    session --> domain
     session --> term
     sshconfig --> domain
     search --> domain
@@ -817,7 +818,7 @@ flowchart TD
 | `store` | `domain` | `ui`, `app`, `sshclient`, `session` |
 | `secrets` | `domain`, `term` | `ui`, `app`, `sshclient`, `session` |
 | `sshclient` | `domain` | `secrets`, `store`, `ui`, `app`, Bubble Tea |
-| `session` | `sshclient`, `term` | `secrets`, `store`, `ui`, `app`, Bubble Tea. In the MVP it satisfies `tea.ExecCommand` structurally. From M2 it imports `github.com/charmbracelet/x/vt` and `github.com/charmbracelet/ultraviolet` (key and mouse event types) and no longer imports `golang.org/x/term` (ARCH-SESS-003 revision). |
+| `session` | `sshclient`, `term`, `domain` (`Sanitize` for end reasons, SEC-SESSION-006) | `secrets`, `store`, `ui`, `app`, Bubble Tea, `golang.org/x/term`. It imports `github.com/charmbracelet/x/vt` (in `emulator.go` only) and `github.com/charmbracelet/ultraviolet` (key and mouse event types), and has no raw-mode code (ARCH-SESS-003). |
 | `ui/...` | `app` (interfaces), `domain`, `search`, `session` (the handle type only), `ui/*` | `secrets`, `store`, `sshclient`, `x/crypto/ssh` |
 | `app` | everything except `ui` | `ui` |
 | `sshconfig`, `search` | `domain` | (no extra rule; not checked by `archtest`) |
