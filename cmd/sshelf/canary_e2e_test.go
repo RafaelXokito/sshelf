@@ -326,9 +326,14 @@ func mainFlows(t *testing.T, env ...string) *canaryRun {
 	off = c.waitText(off, "zz-imported")
 
 	// The list is in last-use order (FR-NAV-018): find h1-password, and
-	// Esc leaves it selected.
+	// Esc leaves it selected. Filtering is synchronous and keys are read in
+	// order, so Esc acts on the whole query; the delete prompt below proves
+	// the selection. Do not wait for the query line itself: the renderer
+	// redraws only the cells that changed, so "/ h1-pas" and "sword" can
+	// arrive in separate writes with a cursor move between them, and the
+	// whole query is then never on the screen in one piece (this flaked).
 	c.typeKeys("/h1-password")
-	off = c.waitText(off, "/ h1-password")
+	off = c.waitText(off, "esc clear search")
 	c.typeKeys(keyEsc)
 	off = c.waitText(off, "zz-imported") // the whole list is back
 	c.typeKeys("d")

@@ -74,10 +74,13 @@ func startFreshBin(t *testing.T, bin string, setup func(home, xdg string), env .
 }
 
 func TestFR_CFG_001_StartsWithoutConfigDir(t *testing.T) {
-	s := startFresh(t, nil)
-	if _, err := os.Stat(s.cfgDir); !os.IsNotExist(err) {
-		t.Fatalf("config dir exists before launch: %v", err)
-	}
+	// The absence is checked in setup, before the launch: after it, sshelf
+	// may already have created the directory (this raced on CI).
+	s := startFreshBin(t, sshelfBinary(t), func(_, xdg string) {
+		if _, err := os.Stat(filepath.Join(xdg, "sshelf")); !os.IsNotExist(err) {
+			t.Fatalf("config dir exists before launch: %v", err)
+		}
+	})
 	s.waitText(0, "Import from ~/.ssh/config")
 	s.waitText(0, "Add host")
 	st, err := os.Stat(s.cfgDir)
