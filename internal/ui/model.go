@@ -594,7 +594,7 @@ func (m Model) View() tea.View {
 
 	v := tea.NewView(strings.Join(out, "\n"))
 	v.AltScreen = true
-	v.MouseMode = m.mouseMode()
+	v.MouseMode = m.mouseMode(app.MouseNone)
 	return v
 }
 

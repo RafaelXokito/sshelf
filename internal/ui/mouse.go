@@ -2,8 +2,10 @@ package ui
 
 import (
 	tea "charm.land/bubbletea/v2"
+	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/RafaelXokito/sshelf/internal/app"
 	"github.com/RafaelXokito/sshelf/internal/ui/components"
 	"github.com/RafaelXokito/sshelf/internal/ui/tabs"
 )
@@ -65,7 +67,7 @@ func linesWidth(lines []string) int {
 // layout is the layout of the frame View draws now.
 func (m Model) layout() frameLayout {
 	if t := m.focused(); t != nil {
-		_, _, lay := m.sessionFrame(t)
+		_, _, lay := m.sessionFrame(t, t.sess.Snapshot())
 		return lay
 	}
 	_, lay := m.hostsFrame()
@@ -97,35 +99,101 @@ func mouseModeFor(s mouseState) tea.MouseMode {
 	return s.requested
 }
 
-// mouseMode is the mouse mode of the frame View draws now.
-func (m Model) mouseMode() tea.MouseMode {
+// mouseMode is the mouse mode of the frame View draws now. requested is
+// the mouse reporting the focused session's remote asked for, from the
+// snapshot that frame is drawn from; it is ignored on the Hosts tab.
+func (m Model) mouseMode(requested app.MouseMode) tea.MouseMode {
 	s := mouseState{modal: len(m.modals) > 0}
 	if t := m.focused(); t != nil {
 		s.session, s.scrollback, s.ended = true, t.scroll != nil, t.done
-		s.requested = remoteMouseMode(t)
+		s.requested = remoteMouseMode(requested)
 	}
 	return mouseModeFor(s)
 }
 
-// remoteMouseMode is the mouse mode the remote app of t asked for. Until
-// sessions forward the mouse (T-041, FR-TAB-011) it is always none, so a
-// focused session never has mouse tracking.
-func remoteMouseMode(*sessionTab) tea.MouseMode { return tea.MouseModeNone }
+// remoteMouseMode is the terminal mouse mode that delivers what a remote
+// app asked for (FR-TAB-011, NFR-UX-001 M2 revision): cell motion for
+// presses (?9, ?1000) and button motion (?1002), since Bubble Tea has no
+// press-only mode and the session drops the motion the app did not ask
+// for; all motion for ?1003; none when the app asked for nothing.
+func remoteMouseMode(requested app.MouseMode) tea.MouseMode {
+	switch requested {
+	case app.MousePress, app.MouseDrag:
+		return tea.MouseModeCellMotion
+	case app.MouseAny:
+		return tea.MouseModeAllMotion
+	}
+	return tea.MouseModeNone
+}
+
+// sessionArea is where the focused session's screen sits in the frame:
+// below the header row, above the status bar, as wide as the terminal.
+// It is the size the session's PTY was given (areaSize).
+func (m Model) sessionArea() region {
+	sz := m.areaSize()
+	return region{Y: 1, W: sz.Cols, H: sz.Rows}
+}
 
 // updateMouse handles the mouse messages; ok is false for other messages.
-// Releases and motion are ignored on sshelf's screens (ARCH-UI-007).
+// While a session is focused and no modal is open, every mouse event
+// belongs to the session (forwardMouse). Releases and motion are ignored
+// on sshelf's screens (ARCH-UI-007).
 func (m Model) updateMouse(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
-	switch msg := msg.(type) {
-	case tea.MouseClickMsg:
-		next, cmd := m.mouseClick(msg.Mouse())
-		return next, cmd, true
-	case tea.MouseWheelMsg:
-		next, cmd := m.mouseWheel(msg.Mouse())
-		return next, cmd, true
-	case tea.MouseReleaseMsg, tea.MouseMotionMsg:
+	mm, ok := msg.(tea.MouseMsg)
+	if !ok {
+		return m, nil, false
+	}
+	if t := m.focused(); t != nil && len(m.modals) == 0 {
+		m.forwardMouse(t, msg)
 		return m, nil, true
 	}
-	return m, nil, false
+	switch msg.(type) {
+	case tea.MouseClickMsg:
+		next, cmd := m.mouseClick(mm.Mouse())
+		return next, cmd, true
+	case tea.MouseWheelMsg:
+		next, cmd := m.mouseWheel(mm.Mouse())
+		return next, cmd, true
+	}
+	return m, nil, true
+}
+
+// forwardMouse sends a mouse event to the focused session t, in the
+// coordinates of the session area (FR-TAB-011, ADR-014). Events on the
+// header row (the tab bar included, D-012) and on the status bar are
+// neither forwarded nor acted on; nothing is forwarded in scrollback mode
+// or once the session has ended. The session encodes the event as the
+// remote asked (X10 or SGR) and drops what the remote's mode does not
+// report, such as motion under ?1000 (ADR-013).
+func (m Model) forwardMouse(t *sessionTab, msg tea.Msg) {
+	if t.done || t.scroll != nil {
+		return
+	}
+	mm, ok := msg.(tea.MouseMsg)
+	if !ok {
+		return
+	}
+	ms := mm.Mouse()
+	x, y, ok := m.sessionArea().local(ms.X, ms.Y)
+	if !ok {
+		return
+	}
+	in := uv.Mouse{X: x, Y: y, Button: ms.Button, Mod: ms.Mod}
+	var ev uv.MouseEvent
+	switch msg.(type) {
+	case tea.MouseClickMsg:
+		ev = uv.MouseClickEvent(in)
+	case tea.MouseReleaseMsg:
+		ev = uv.MouseReleaseEvent(in)
+	case tea.MouseWheelMsg:
+		ev = uv.MouseWheelEvent(in)
+	case tea.MouseMotionMsg:
+		ev = uv.MouseMotionEvent(in)
+	default:
+		return
+	}
+	// A full input queue drops the event, as it does a key (ARCH-SESS-014).
+	_ = t.sess.SendMouse(ev)
 }
 
 // mouseClick sends a left press to the component under it, in its own
@@ -144,9 +212,6 @@ func (m Model) mouseClick(ms tea.Mouse) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m.updateTopModal(components.ClickMsg{X: x, Y: y, Double: double})
-	}
-	if m.focused() != nil {
-		return m, nil // T-041 forwards presses to a session that asked for the mouse
 	}
 	if ms.Y == 0 {
 		// The tab bar (FR-NAV-017): the title and separators do nothing.

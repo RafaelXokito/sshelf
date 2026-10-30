@@ -1104,7 +1104,7 @@ While a session tab is focused, when the user presses the prefix key followed by
 ### FR-TAB-011 · Mouse in a session only on request
 While a session tab is focused, the system shall enable mouse tracking only while that session's remote app has mouse reporting on, and shall then forward each mouse event inside the session area to the remote, with coordinates relative to the session area and encoded as the app requested.
 
-- **Priority:** M2 · **Status:** Draft · **Source:** D-012
+- **Priority:** M2 · **Status:** Implemented · **Source:** D-012
 - **Acceptance:**
   - Until the remote enables mouse reporting, sshelf writes no mouse-tracking sequence while the session is focused, so the terminal's own selection works (PTY output scan, NFR-UX-001 revision).
   - After the remote sends `ESC [ ? 1000 h ESC [ ? 1006 h`, a left press at terminal cell x=10, y=5 (zero-based, header on row 0) reaches the remote as `ESC [ < 0 ; 11 ; 5 M`. After `ESC [ ? 1000 l`, tracking is off again in the next frame.
