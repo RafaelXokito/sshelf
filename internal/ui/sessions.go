@@ -574,21 +574,21 @@ func endedReason(err error) string {
 // sessionView draws a session tab: the header, the session area with
 // the modals over its lower part, and the status bar (ARCH-UI-005).
 func (m Model) sessionView(t *sessionTab) tea.View {
-	out, cursor, _ := m.sessionFrame(t)
+	snap := t.sess.Snapshot()
+	out, cursor, _ := m.sessionFrame(t, snap)
 	v := tea.NewView(strings.Join(out, "\n"))
 	v.AltScreen = true
 	v.Cursor = cursor
-	v.MouseMode = m.mouseMode()
+	v.MouseMode = m.mouseMode(snap.Mouse) // the mode of the screen drawn (ARCH-UI-006)
 	return v
 }
 
-// sessionFrame lays out a session tab: the lines of the frame, the
-// cursor, and where each modal sits. View and hit-testing share it
-// (ARCH-UI-007).
-func (m Model) sessionFrame(t *sessionTab) ([]string, *tea.Cursor, frameLayout) {
+// sessionFrame lays out a session tab from snap, its snapshot: the lines
+// of the frame, the cursor, and where each modal sits. View and
+// hit-testing share it (ARCH-UI-007).
+func (m Model) sessionFrame(t *sessionTab, snap app.Snapshot) ([]string, *tea.Cursor, frameLayout) {
 	var lay frameLayout
 	w := m.viewWidth()
-	snap := t.sess.Snapshot()
 	rows := len(snap.Lines)
 	if m.height > 0 {
 		rows = max(m.height-2, 1)

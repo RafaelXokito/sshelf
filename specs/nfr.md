@@ -137,7 +137,7 @@ The system shall make every action reachable from the keyboard and shall never e
 
 - **Priority:** MVP · **Status:** Implemented · **Source:** FR-NAV-012 (mouse is `Later` and off by default)
 - **Check:** `TestNFR_UX_001_EveryActionBound` asserts that every action of every screen in `ui/keys` has at least one key binding. `TestNFR_UX_001_NoMouseTracking` (PTY E2E) scans all output for `ESC[?1000h`, `ESC[?1002h`, `ESC[?1003h` and `ESC[?1006h` and finds none.
-- **M2 revision** · Priority: M2 · Status: Draft · Source: D-011, D-012
+- **M2 revision** · Priority: M2 · Status: Implemented · Source: D-011, D-012
   - *Revised:* The system shall make every action reachable from the keyboard, and shall enable cell-motion mouse tracking only while an sshelf screen is focused or the focused session's remote app has requested mouse reporting.
   - *Acceptance:*
     - `TestNFR_UX_001_EveryActionBound` still passes: every mouse action (FR-NAV-012, FR-NAV-014 … FR-NAV-017) has a key binding that does the same, including the form buttons (FR-NAV-015).

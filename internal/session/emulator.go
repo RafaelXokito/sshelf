@@ -45,6 +45,7 @@ type screen struct {
 
 	// Modes, tracked through the emulator's callbacks.
 	mouseX10, mouseNormal, mouseHighlight, mouseButton, mouseAny bool
+	mouseSGR                                                     bool // ?1006
 	appCursor, autowrap                                          bool
 
 	// The wide-character workaround (D-015, ADR-013 limitation 2): a
@@ -114,6 +115,8 @@ func (s *screen) setMode(m ansi.Mode, on bool) {
 		s.mouseButton = on
 	case ansi.ModeMouseAnyEvent:
 		s.mouseAny = on
+	case ansi.ModeMouseExtSgr:
+		s.mouseSGR = on
 	case ansi.ModeCursorKeys:
 		s.appCursor = on
 	case ansi.ModeAutoWrap:
@@ -408,12 +411,36 @@ func (s *screen) sendKey(k uv.KeyPressEvent) {
 	s.emu.SendKey(normalizeKey(k))
 }
 
-// sendMouse encodes a mouse event for the remote; the emulator drops it
-// unless the remote enabled a mouse mode.
+// sendMouse encodes a mouse event for the remote, X10 or SGR (?1006) as
+// the remote asked (ADR-013 limitation 7), and drops it unless the
+// remote's mouse mode reports it (wantsMouse).
 func (s *screen) sendMouse(m uv.MouseEvent) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if !s.wantsMouse(m) {
+		return
+	}
+	if r, ok := m.(uv.MouseReleaseEvent); ok && !s.mouseSGR {
+		// X10 encoding has no button in a release (button code 3); the
+		// emulator would send the pressed button, as for a press.
+		r.Button = uv.MouseNone
+		m = r
+	}
 	s.emu.SendMouse(m)
+}
+
+// wantsMouse reports whether the remote's mouse modes report m (FR-TAB-011):
+// presses and wheel notches in every mode; releases in all but X10 (?9);
+// motion with a button held under ?1002, and any motion under ?1003. The
+// emulator itself only checks that some mode is on.
+func (s *screen) wantsMouse(m uv.MouseEvent) bool {
+	switch m.(type) {
+	case uv.MouseMotionEvent:
+		return s.mouseAny || s.mouseButton && m.Mouse().Button != uv.MouseNone
+	case uv.MouseReleaseEvent:
+		return s.mouseNormal || s.mouseHighlight || s.mouseButton || s.mouseAny
+	}
+	return s.mouseMode() != MouseNone
 }
 
 // paste sends text, bracketed when the remote enabled ?2004.
