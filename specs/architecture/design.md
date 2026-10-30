@@ -3,10 +3,10 @@
 | | |
 |---|---|
 | **Owner** | Architecture |
-| **Status** | Draft (revision 2: aligned with `decisions.md` D-001…D-008, D-101…D-109) |
+| **Status** | Draft (revision 3: milestone M2, D-009…D-012: framed sessions, tabs, mouse; revision 2 aligned with D-001…D-008, D-101…D-109) |
 | **Requirement prefix** | `ARCH-*` |
 | **Depends on** | `decisions.md` (binding), `security/credential-storage.md` (keychain library, item naming), `product/requirements.md` (`FR-*`) |
-| **Last updated** | 2026-10-29 |
+| **Last updated** | 2026-10-30 |
 
 This document says **how** sshelf is built: the package layout, the domain data
 model, the UI state machine, the SSH connection and session lifecycle, and the
@@ -42,8 +42,9 @@ with `internal/domain` and grows the UI into a multi-screen app.
 | Tier | Features |
 |------|----------|
 | **MVP** | CRUD for hosts and identities (including credentials entered in the host form); a Welcome screen; a fuzzy-searchable host list; connect with a password or a private key (stored in the keychain or referenced as a file); password auth that also answers keyboard-interactive password prompts; known-hosts verification with a TOFU prompt; import from `~/.ssh/config` |
-| **v1** | groups; ssh-agent auth and agent forwarding (D-005); jump hosts (ProxyJump); local, remote and dynamic port forwarding; snippets; the `~.` escape; keepalive and reconnect; themes |
-| **Later** | Background sessions (detach and reattach), SFTP browser, Mosh, split panes, Windows, an opt-in plaintext secret fallback (D-101), a system `ssh` fallback (D-104) |
+| **M2** | Sessions inside sshelf's frame through an embedded terminal emulator (D-009, ADR-012, ADR-013); several sessions as tabs, background sessions, prefix key, scrollback, reconnect from an ended tab (D-010, ADR-015); mouse on sshelf's screens, and in sessions only when the remote app asks (D-011, D-012, ADR-014) |
+| **v1** | groups; ssh-agent auth and agent forwarding (D-005); jump hosts (ProxyJump); local, remote and dynamic port forwarding; snippets; keepalive; themes (the `~.` escape is replaced by the M2 prefix key, and reconnect moved to M2) |
+| **Later** | SFTP browser, Mosh, Windows, an opt-in plaintext secret fallback (D-101), a system `ssh` fallback (D-104). Not planned (D-007): split panes, detaching a session to the shell, sessions that survive an sshelf restart |
 
 ### 1.3 Goals
 
@@ -51,13 +52,15 @@ with `internal/domain` and grows the UI into a multi-screen app.
    passphrases go from the OS keychain to the SSH layer in memory only. sshelf
    writes no temporary files, environment variables or command-line arguments
    that contain them.
-2. **Native terminal fidelity.** An interactive session behaves exactly like
-   `ssh` in the user's terminal.
-3. **The TUI always comes back cleanly.** After a session ends or sshelf
-   panics, the terminal is usable: no raw mode, no leftover mouse tracking, and
-   no stolen keystrokes.
-4. **A path to multiple sessions and panes** that does not rewrite the SSH
-   layer.
+2. **Terminal fidelity.** An interactive session behaves like `ssh` in the
+   user's terminal: in the MVP by handing over the terminal, from M2 by
+   rendering an emulated `xterm-256color` screen inside the frame, where
+   `vim`, `htop`, `less` and `tmux` must render correctly (D-009).
+3. **The terminal always comes back cleanly.** After sshelf exits or panics,
+   the terminal is usable: no raw mode, no leftover mouse tracking, and no
+   stolen keystrokes. From M2 a session ending touches the terminal not at all.
+4. **Multiple sessions without rewriting the SSH layer.** M2 adds tabs on top
+   of the same `sshclient` (ADR-012).
 5. **Testable without a network or a real keychain.**
 6. **Small (D-007).** Every package, requirement and mechanism here must earn
    its place.
@@ -99,6 +102,17 @@ exactly the hook ADR-002 needs. The check covered the API and source only. No
 interactive tty run was done; task T-0 must cover that with the PTY test in
 §10.
 
+**Verified on 2026-10-30 (M2):** `go list -m -versions
+github.com/charmbracelet/x/vt` lists a single tag, `v0.1.0` (published
+2026-10-12, Go 1.24.2); before it the module had only pseudo-versions. Its
+`go.mod` needs `github.com/charmbracelet/ultraviolet` at a March 2026
+pseudo-version and `x/ansi v0.11.7`; sshelf already has a newer ultraviolet
+pseudo-version (through bubbletea v2.1.1) and ansi v0.11.9, and a probe
+program built and ran against exactly those versions. The probe measured
+throughput, memory, key encoding, query replies, the alternate screen and
+wide characters; the results and the limitations found are in ADR-013. The
+probe was a throwaway outside the repository.
+
 ---
 
 ## 3. Architecture decisions (ADRs)
@@ -117,11 +131,16 @@ sessions or embedding them later would be impossible.
 
 **Consequences.** Secrets stay in memory, and the TUI owns TOFU and
 keyboard-interactive prompts. We implement ProxyJump, forwarding and
-keepalives ourselves. OpenSSH-only features (`ProxyCommand`, `Match`,
+keepalives ourselves. (M2: unchanged. Owning the SSH client is what lets
+ADR-012 run several sessions in one process and render them in a frame.) OpenSSH-only features (`ProxyCommand`, `Match`,
 GSSAPI, ControlMaster, PKCS#11) are not supported, and the importer flags
 them.
 
 ### ADR-002: Session model, from terminal handover (MVP) to background sessions and embedded panes (Later)
+
+**Status:** superseded by ADR-012 in M2 (D-009). The handover below is the
+MVP's shipped behaviour until task T-037 removes it; the "Later" plans for a
+shadow emulator, detach and panes are replaced by ADR-012 and ADR-015.
 
 **Context.** We weighed three options: (a) suspend the TUI and give the raw
 terminal to an in-process session, (b) shell out to `ssh`, which ADR-001
@@ -295,6 +314,198 @@ never leaves an unzeroed copy behind, so it can hold a secret. Every form and
 modal (host form, identity form, prompt modal) uses it. Bubbles packages that
 need no clipboard, such as `key`, are still used.
 
+### ADR-012: Sessions render inside sshelf's frame through an embedded emulator (revises ADR-001 and ADR-002)
+
+**Status:** accepted for M2 (D-009, D-010). Supersedes ADR-002.
+
+**Context.** D-009 puts every session inside sshelf's frame, and D-010 asks for
+several sessions at once with the host list one key away. With the MVP
+handover (ADR-002 option a), the TUI is not drawn while a session runs, only
+one session can own the terminal, and nothing can show a tab bar. ADR-002
+rejected option (c), an embedded emulator, for the MVP because of fidelity
+and latency risk; D-009 accepts that risk, which ADR-013, ARCH-TEST-002 and
+NFR-PERF-004/005 now measure.
+
+**Decision.**
+- Each `session.Session` owns an in-process VT emulator (ADR-013) sized to the
+  session area: the terminal width by its height minus the header and status
+  rows. Every byte of remote output goes into that emulator; the root model
+  draws the focused session's emulator screen between the header and the
+  status bar (§9.4).
+- Input never touches the raw terminal. Bubble Tea decodes keys, pastes and
+  mouse events; the root model handles the prefix key (§8.5) and gives
+  everything else to the focused session, which encodes it according to the
+  emulator's modes (application cursor keys, bracketed paste, mouse modes)
+  and writes it to the SSH channel.
+- The emulator answers the remote's terminal queries itself (device
+  attributes, cursor position, colour queries), so a remote program never
+  queries or controls the user's real terminal.
+- The remote PTY's `TERM` is `xterm-256color`, the terminal the emulator
+  implements, not the local `TERM` (FR-CONN-001 revision).
+- **One path (D-007).** The MVP `tea.Exec` handover, `session.Run()`, raw
+  mode, the stdin pump with `cancelreader` and the SIGWINCH handler are
+  removed in T-037; `app.Session` stops satisfying `tea.ExecCommand`. There is
+  no "full-screen mode" switch.
+- ADR-001 stands unchanged: all SSH stays in process with
+  `golang.org/x/crypto/ssh`, which is what makes several sessions in one
+  process possible.
+
+**Consequences.**
+- Sessions survive tab switches and run in the background; reconnect and
+  close happen in the tab (FR-TAB-*, FR-CONN-005 revision).
+- **Security win (SEC-SESSION-005, threat T-15).** In the MVP, remote output
+  goes to the user's terminal unfiltered, as with `ssh`, so a hostile server
+  could set the clipboard (OSC 52), change the window title, inject
+  hyperlinks, query the terminal and read its replies, or exploit a bug in
+  the user's terminal emulator. From M2 the remote only ever talks to
+  sshelf's emulator; the real terminal receives what sshelf renders from
+  emulator cells (characters and SGR styles). OSC 52, titles, hyperlinks,
+  DCS, APC and terminal reports never reach it.
+- **Costs.** Fidelity now depends on a young emulator (ADR-013 lists its
+  gaps). Every keystroke goes through Bubble Tea's decoder and our encoder
+  (NFR-PERF-004 bounds it at 5 ms p99). Output throughput is bounded by the
+  emulator (NFR-PERF-005). The terminal's own scrollback no longer holds
+  session output; scrollback mode (FR-TAB-010) replaces it. Programs that
+  use protocols the emulator lacks (kitty graphics, sixel, the kitty keyboard
+  protocol) fall back to what `xterm-256color` offers.
+- Native text selection keeps working while the remote app has not asked for
+  the mouse (D-012, ADR-014).
+
+### ADR-013: The terminal emulator is `github.com/charmbracelet/x/vt` v0.1.0, pinned and wrapped
+
+**Status:** accepted for M2, with the limitations below tracked as risks.
+
+**Context.** ADR-012 needs an emulator that parses xterm output, keeps a
+main and an alternate screen with scrollback, renders cells with styles, and
+encodes keys and mouse events according to the modes the remote set. The
+architect proposed `charmbracelet/x/vt`, which also underlies the projects
+in §2. It was checked on 2026-10-30 (§2) with a probe program at sshelf's
+exact `ultraviolet` and `x/ansi` versions on an Apple M1 Pro.
+
+**What it offers.** `NewEmulator(w, h)`; `Write` (remote output); `Read` (an
+`io.Pipe` carrying the encoded input and the emulator's own replies, to be
+copied to the SSH channel); `Resize`; `Render` (styled lines), `CellAt`,
+`Draw` onto an ultraviolet screen; `CursorPosition`, `CursorHidden`,
+`CursorStyle`; `IsAltScreen`; `SendKey(uv.KeyEvent)` honouring application
+cursor and keypad modes; `SendMouse(uv.MouseEvent)` honouring the X10, normal
+(`?1000`), button (`?1002`) and any-event (`?1003`) modes with X10 or SGR
+(`?1006`) encoding, and dropping events when no mode is set; `Paste`, which
+adds the bracketed-paste markers when `?2004` is on; `SetScrollbackSize`,
+`Scrollback`, `ScrollbackLen`, `ScrollbackCellAt` (main screen only, default
+cap 10,000 lines); callbacks for title, bell, alt screen, cursor and every
+mode change; default colours settable. Measured: `ESC[c` is answered with
+`ESC[?62;1;6;22c`; `?1049h` switches to the alternate screen; grapheme
+clusters (flags, ZWJ sequences, VS16 emoji, combining accents) get the right
+width; CJK characters are two cells wide. A `SafeEmulator` wraps it with an
+RW mutex.
+
+**Maturity.** `v0.1.0` (2026-10-12) is the module's only tag, so the API is
+pre-1.0 and may change. It depends on an `ultraviolet` pseudo-version, which
+Bubble Tea v2.1.1 also uses (a newer one); the build is consistent today, but
+a future Bubble Tea upgrade can move `ultraviolet` under `vt`.
+
+**Limitations found (each with its mitigation).**
+1. **Modified special keys are dropped.** `SendKey` sends nothing for
+   Ctrl/Shift with arrows, Home, End, PgUp, PgDn, Insert, Delete and F1–F12
+   (measured: Ctrl+Up, Shift+Left, Ctrl+F5, Ctrl+Delete and Shift+Enter
+   produce zero bytes), and it has no kitty keyboard protocol, CSI u or
+   `modifyOtherKeys` (a TODO in its source). Alt works (ESC prefix).
+   *Mitigation:* sshelf's encoding shim produces the xterm forms
+   (`CSI 1;<mod> A`, `CSI <n>;<mod> ~`) for those keys before falling back to
+   `SendKey` (ARCH-SESS-017); upstream fix offered in T-031.
+2. **Wide characters at the right margin are lost.** A double-width
+   character that would occupy the last column, or the last two columns, is
+   dropped and the next character overwrites the last column instead of
+   wrapping (measured with `12345678日x` and `日本語ab👍x` at width 10).
+   *Mitigation:* a failing replay golden (`utf8-wide`) and an upstream fix in
+   T-031; open question 2 in `product/requirements.md` §22 if no release fixes
+   it by the gate.
+3. **Throughput is 2 to 5 MB/s.** 10 MiB of 100-column lines took 2.1–2.4 s
+   at 120×40 and 4.0–4.8 s at 200×50, with or without SGR colours; a native
+   terminal does well over 50 MB/s. *Mitigation:* NFR-PERF-005 sets a CI floor
+   of 1 MB/s and requires flow control instead of buffering (ARCH-SESS-014);
+   a fast `cat` of a large file is slower than in a native terminal, which is
+   accepted for M2.
+4. **Scrollback is expensive.** About 130 bytes per stored cell: 10,000 lines
+   cost about 66 MB at 80×24 and 134 MB of heap at 200×50; 2,000 lines at
+   120×40 cost about 31 MB. Eviction from a full buffer is
+   `slices.Delete(lines, 0, 1)`, O(lines) per scrolled line. *Mitigation:*
+   cap 2,000 lines (NFR-SIZE-003, open question 1); a compact scrollback is
+   an upstream improvement, not sshelf code.
+5. **`SafeEmulator` can freeze rendering.** Its `SendKey` holds the lock while
+   writing into the unbuffered reply pipe, and `Write` can block on a reply
+   (for example to `ESC[c`) while holding it; if nothing drains the pipe, the
+   UI's `Render` blocks. *Mitigation:* sshelf uses the plain `Emulator` with
+   its own mutex and a reply pump that never blocks on the network
+   (ARCH-SESS-014).
+6. **No reflow on resize**: lines are cut or padded, as in xterm. Accepted.
+7. **Mouse encodings** UTF-8 (`?1005`), urxvt (`?1015`) and SGR-pixel
+   (`?1016`) are not supported; apps fall back to X10 or SGR. Accepted.
+8. **Widths use grapheme width** and can disagree with a remote's `wcwidth`
+   for ambiguous-width characters, misaligning those lines, as in many
+   terminals. Accepted.
+9. **Default colours are white on black**, so a remote's OSC 10/11 colour
+   query gets those answers. *Mitigation:* sshelf sets the emulator's default
+   colours from the user's terminal when Bubble Tea reports them
+   (ARCH-SESS-016).
+10. **Hyperlinks (OSC 8) are kept in cells.** *Mitigation:* sshelf renders
+    without them (ARCH-SESS-011, SEC-SESSION-005).
+
+**Alternatives.** Other Go emulators known to us (`hinshun/vt10x`,
+parser-only packages) provide no key or mouse encoders and would move more
+code into sshelf; they were not benchmarked. Writing an emulator is out of
+scope (D-007).
+
+**Decision.** Use `github.com/charmbracelet/x/vt` **v0.1.0**, pinned exactly
+in `go.mod`. Only `internal/session/emulator.go` imports it, behind a small
+private type (`write`, `resize`, `snapshot`, `scrollback`, `sendKey`,
+`sendMouse`, `paste`), so a later version or another library touches one file.
+Upgrades need the replay goldens (ARCH-TEST-002) and NFR-PERF-005 green. Fixes
+for limitations 1 and 2 go upstream; the shim is deleted when a release
+includes them.
+
+### ADR-014: Mouse only where it does not cost the user their terminal's selection (D-011, D-012)
+
+**Decision.**
+- The root model's `View()` sets `tea.View.MouseMode` on every frame from
+  one function (ARCH-UI-006): cell motion on the Hosts tab and its screens
+  and modals; for a focused live session, the mode its remote app asked for,
+  or none; none in scrollback mode and on an ended session. Bubble Tea turns
+  modes on and off when the value changes, and off on exit.
+- Hit-testing needs no zone library: each component handles a
+  `components.ClickMsg{X, Y, Double}` or `components.WheelMsg{X, Y, Delta}`
+  in its own coordinates, from the same layout function its `View` uses. The
+  root model subtracts the rows it placed above the component (header, blank
+  line, the screen above a modal) before passing it on (ARCH-UI-007).
+- A double-click is two left presses on the same row within 400 ms, measured
+  with an injectable clock in the root model.
+- Mouse events for a session are converted to ultraviolet events with the
+  header row removed, and encoded by the emulator (ADR-013).
+
+**Consequences.** While the user is in a plain shell, the terminal's own
+selection and copy work as before; inside `vim` or `htop` with mouse
+support, the app gets the mouse as it would in a native terminal. No
+clipboard code is added (SEC-CLIP-005).
+
+### ADR-015: Tabs live in the root model; there is no session manager
+
+**Context.** ADR-002 planned a `session.Manager` for detach and reattach.
+M2 has tabs but no detach and no sessions outliving the UI.
+
+**Decision.** The root model holds `[]sessionTab` (number, host ID, label,
+`user@host:port`, start time, the `app.Session`, activity and end state,
+scrollback position). Each session runs its own goroutines (ARCH-SESS-010),
+so "background" needs no extra machinery: an unfocused tab is simply not
+drawn. The modal stack stays global: modals (Connecting, TOFU, prompts,
+confirmations, help) open over whichever tab is focused, and while one is
+open the prefix key is off. Only one connection attempt runs at a time, as in
+the MVP.
+
+**Consequences.** No new package or lifecycle owner (D-007). Quitting closes
+the sessions through the process exit and the root model's quit path. If a
+future feature needs sessions outside the UI (snippets on a live session,
+tunnels without a tab), a manager can be extracted then.
+
 ---
 
 ## 4. Architecture requirements
@@ -313,42 +524,54 @@ removed in revision 2.
 **ARCH-SESS-002**: When the user connects to a host, the system shall finish dialling, host-key verification and authentication before it releases the terminal to the session.
 - Priority: MVP · Status: Implemented
 - Acceptance: A keyboard-interactive prompt appears as a TUI modal (golden file). If auth fails, the user returns to the host list with an error, and `tea.Exec` is never invoked.
+- **M2 revision** · Priority: M2 · Status: Draft · Source: D-009, D-010
+  - *Revised:* When the user connects to a host, the system shall finish dialling, host-key verification and authentication before it opens the session's tab.
+  - *Acceptance:* Prompts appear as modals over the tab the connection was started from (goldens). If auth fails or is cancelled, no tab is opened and the status line shows the error. `session.New` is never called before `sshclient.Connect` returned a client.
 
 **ARCH-SESS-003**: While a session is attached, the system shall put the terminal into raw mode and relay input and output unchanged, except for the escape sequences in ARCH-SESS-006 (v1).
 - Priority: MVP · Status: Implemented
 - Acceptance: In an integration test, 256 random bytes (excluding the escape character at line start) arrive at the server unchanged, and binary output from the server reaches the writer unchanged.
+- **M2 revision** · Priority: M2 · Status: Draft · Source: D-009, ADR-012
+  - *Revised:* While a session is open, the system shall write to its SSH channel only the encoding of the user's input and the emulator's replies, and shall feed every byte the channel delivers to that session's emulator, without changing the local terminal's mode.
+  - *Acceptance:* 256 random bytes sent with `SendBytes` arrive at sshtest unchanged and in order. Binary output from sshtest reaches the emulator unchanged (a recording emulator double in `session` tests). The `session` package no longer imports `golang.org/x/term` and has no raw-mode code; archtest checks it.
 
 **ARCH-SESS-004**: When the local terminal is resized while a session is attached, the system shall send an SSH `window-change` request with the new size within 100 ms.
 - Priority: MVP · Status: Implemented
 - Acceptance: A fake `Terminal` emits a resize event, and the test server records the matching `window-change`. A burst of resize events within 50 ms produces at most 2 requests.
+- **M2 revision** · Priority: M2 · Status: Draft · Source: FR-CONN-004 revision
+  - *Revised:* When the root model receives a new terminal size, the system shall resize every open session's emulator at once and send each session's server one `window-change` with the new session area within 100 ms.
+  - *Acceptance:* With 3 sessions, a `tea.WindowSizeMsg` of 100×30 makes sshtest record `window-change 100×28` on each channel within 100 ms. A burst of 10 size messages within 50 ms produces at most 2 requests per session. An unchanged size sends nothing.
 
 **ARCH-SESS-005**: When an attached session ends for any reason (remote exit, network error, `~.`, or a panic in a session goroutine), the system shall restore the saved terminal state, write the reset sequence in §8.6, and return control to the TUI.
 - Priority: MVP · Status: Implemented
 - Acceptance: A PTY test (creack/pty) runs each case. Afterwards `stty -a` matches its value before the session, the host list redraws, and the next keystroke reaches the TUI.
+- **M2 revision** · Priority: M2 · Status: Draft · Source: D-009, D-010
+  - *Revised:* When a session ends for any reason (remote exit, network error, disconnect, or a panic in one of its goroutines), the system shall stop every goroutine of that session and keep sshelf and every other session running, without writing anything to the local terminal.
+  - *Acceptance:* Unit tests end a session each way and pass `goleak`. With two sessions open, a panic forced in one session's output goroutine (build tag `sshelf_faultinject`) ends that session with `ErrInternal` while the other still echoes input (PTY test). sshelf's own terminal restore happens only when it exits; that path is still checked by `stty -a` before and after (PTY test).
 
-**ARCH-SESS-006**: When the user types the escape character (default `~`) at the start of a line, the system shall treat the next character as a command: `.` disconnects, `?` shows help, `~` sends a literal `~`, and `d` detaches (Later).
-- Priority: v1 (`d` is Later) · Source: FR-CONN-014
-- Acceptance: Unit tests on the parser. "Line start" means the beginning of the session or right after `\r` or `\n`. Any other `~x` sends both characters. `Settings.EscapeChar = "none"` disables the parser.
+**ARCH-SESS-006**: The system shall recognise the prefix key and its command in the UI layer, on decoded key events and before any encoding, so that no byte of a prefix command reaches a session.
+- Priority: M2 · Status: Draft · Source: FR-TAB-005, FR-CONN-014 (replaces the v1 `~` escape parser, which is dropped)
+- Acceptance: A table test over the prefix state machine in `ui/keys` (idle → prefix → command or cancel) covers every command of FR-TAB-005, Esc, an unknown key and `Ctrl+]` twice. A root-model test with a recording session double shows that `Ctrl+]` `n` sends zero bytes and `Ctrl+]` `Ctrl+]` sends exactly `0x1d`.
 
 **ARCH-SESS-007**: While a connection is open, the system shall send `keepalive@openssh.com` requests every `ServerAliveInterval` (default 30 s) and close the connection after `ServerAliveCountMax` (default 3) unanswered requests in a row.
 - Priority: v1 · Source: FR-CONN-009
 - Acceptance: With a server that stops replying and a fake clock, the session ends with `ErrKeepaliveTimeout`. An interval of 0 disables keepalives.
 
-**ARCH-SESS-008**: If a session ends because of a network or keepalive error, then the system shall show a "Disconnected" modal with the cause and offer `r` to reconnect to the same host.
-- Priority: v1 · Source: FR-CONN-010
-- Acceptance: Golden file of the modal. Pressing `r` produces a `ConnectRequestMsg` with the same host ID.
+**ARCH-SESS-008**: When a session ends, the system shall report the cause to the UI exactly once, as `nil` (exit 0), `*ExitError`, `*DisconnectError` or `ErrInternal`, after its connection is closed.
+- Priority: M2 · Status: Draft · Source: FR-CONN-005 revision, FR-CONN-010 (replaces the v1 "Disconnected" modal: the ended tab shows the cause and offers `r`)
+- Acceptance: Table test over sshtest's `exit 0`, `exit 3`, signal, dropped connection and a forced panic: `Err()` returns the right type, `Updates()` is closed exactly once after `Done()`, and sshtest has seen the connection close. Pressing `r` on the ended tab produces a `ConnectRequestMsg` with the same host ID and the tab's number.
 
 **ARCH-SESS-009**: Where agent forwarding is enabled for a host, the system shall forward the local ssh-agent (`SSH_AUTH_SOCK`) to the server, and shall never forward an agent by default.
 - Priority: v1
 - Acceptance: In an integration test, with forwarding off no `auth-agent@openssh.com` channel opens. With it on, the server can list the local agent's keys.
 
-**ARCH-SESS-010**: The system shall keep sessions in a `session.Manager` that owns connection lifetimes independently of the UI, so that sessions can be detached and reattached.
-- Priority: Later · Source: FR-TAB-001
-- Acceptance: Open 3 sessions, detach them, then reattach each one: input reaches the right server. Quitting sshelf with sessions open asks for confirmation.
+**ARCH-SESS-010**: The system shall run each session's reading, writing and emulation inside its own `session.Session`, independently of which tab is focused or rendered, and shall close every session when sshelf exits.
+- Priority: M2 · Status: Draft · Source: FR-TAB-008, FR-TAB-009, ADR-015 (no `session.Manager` and no detach, D-007)
+- Acceptance: Open 3 sessions and focus only the first: sshtest output sent to the other two lands in their emulators. Input sent through each tab reaches the right server. Quitting closes all three connections (sshtest records each close), and `goleak` passes.
 
-**ARCH-SESS-011**: When a session is reattached, the system shall repaint the screen from that session's headless emulator before it resumes passthrough.
-- Priority: Later · Source: FR-TAB-001
-- Acceptance: The server writes a known screen while the session is detached. Feeding the bytes emitted on reattach into a reference emulator reproduces that screen.
+**ARCH-SESS-011**: The system shall feed remote output only into the session's emulator and shall write to the local terminal only what sshelf's renderer draws from emulator state.
+- Priority: M2 · Status: Draft · Source: D-009, SEC-SESSION-005 (replaces the Later "repaint on reattach")
+- Acceptance: Fuzz test: random bytes and a corpus of hostile sequences (OSC 52 clipboard, OSC 0/2 titles, OSC 8 links, DCS, APC, `ESC[21t` title report, DECRQSS, `ESC c`) written by sshtest end up only in the emulator. The rendered `View()` content contains no `ESC ]`, `ESC P`, `ESC _`, `ESC ^` or `ESC X`, only SGR and the characters of the screen; the session code holds no reference to `os.Stdout`.
 
 **ARCH-SESS-012**: Where a host has a jump chain, the system shall connect hop by hop over in-process `direct-tcpip` channels, with each hop's own identity and host-key verification.
 - Priority: v1
@@ -357,6 +580,23 @@ removed in revision 2.
 **ARCH-SESS-013**: The system shall support local, remote and dynamic (SOCKS5) forwarding with in-process listeners that are bound to `127.0.0.1` by default and closed with the connection.
 - Priority: v1
 - Acceptance: One integration test per kind sends an HTTP request through the forward. The listener is closed after the disconnect.
+
+**ARCH-SESS-014**: The system shall never block the UI goroutine on a session: input is queued in a per-session buffer of at most 1 MiB that a writer goroutine drains to the SSH channel, the emulator's replies are drained by a goroutine that never waits on the network, and output is read from the channel only as fast as the emulator processes it.
+- Priority: M2 · Status: Draft · Source: NFR-PERF-004, NFR-PERF-005, ADR-013 limitation 5
+- Acceptance: With sshtest not reading its channel (window full), 10,000 `SendKey` calls return within 1 s in total and the queue stops at 1 MiB with `ErrInputFull`; the root model shows "web-prod: remote is not reading input" once. During `flood 10M`, `Snapshot()` never waits more than 20 ms for the emulator lock. A remote `ESC[c` during a stalled writer does not block `Snapshot()`.
+
+**ARCH-SESS-015**: The system shall notify the UI of processed output through a per-session channel of capacity 1 that is written without blocking, so that notifications coalesce and the UI renders each session at most once per frame.
+- Priority: M2 · Status: Draft · Source: NFR-PERF-005, FR-TAB-004
+- Acceptance: 10,000 output chunks produce at most one pending notification at any time (unit test reading `Updates()` slowly). The channel is closed exactly once, after the session's end is recorded. Each `SessionUpdateMsg` re-arms one listening command; `goleak` finds no listener left after a tab closes.
+
+**ARCH-SESS-016**: The system shall let the emulator answer the remote's terminal queries (device attributes, cursor position reports, mode reports, colour queries) and shall set the emulator's default foreground and background colours from the user's terminal when Bubble Tea reports them.
+- Priority: M2 · Status: Draft · Source: ADR-012, ADR-013 limitation 9
+- Acceptance: sshtest's `query` script sends `ESC[c`, `ESC[6n` and `ESC]11;?ESC\` and receives the emulator's answers on the channel, including the cursor position within the session area. With a `tea.BackgroundColorMsg` of `#fdf6e3`, the OSC 11 answer is `rgb:fdfd/f6f6/e3e3`. Nothing is written to the local terminal in reply to a remote query (PTY output scan).
+
+**ARCH-SESS-017**: The system shall encode keys for the remote with the emulator's `SendKey`, except for the modified special keys the emulator drops, which sshelf encodes in xterm's `CSI 1;<mod> <final>` and `CSI <n>;<mod> ~` forms.
+- Priority: M2 · Status: Draft · Source: FR-TAB-006, ADR-013 limitation 1
+- Acceptance: A table test covers every row of the key table in §9.4 against `echo-hex`, in normal and application cursor mode. Ctrl+Up sends `ESC[1;5A`, Shift+Left `ESC[1;2D`, Ctrl+F5 `ESC[15;5~`, Ctrl+Delete `ESC[3;5~`, Alt+Shift+Right `ESC[1;4C`. No key that has an xterm encoding produces zero bytes.
+
 
 ### 4.2 Connection and authentication (`ARCH-CONN`)
 
@@ -430,6 +670,9 @@ removed in revision 2.
 - Priority: MVP · Status: Implemented
 - Acceptance: A walk-through (start, list, edit, save, connect, TOFU, stub session, back) matches its golden files. It drives the root model directly, the way `tea.Program` does, without `teatest` (see the golden convention in `tasks.md`).
 - Note: a modal that answers a running connection attempt (auth prompt, TOFU) is popped in the `Update` that delivers the answer, not when its `DoneMsg` arrives, so a late `DoneMsg` can never close the next prompt.
+- **M2 revision** · Priority: M2 · Status: Draft · Source: D-009, D-010, ADR-015
+  - *Revised:* The system shall run one root Bubble Tea model that holds the Hosts tab (one active screen, as in the MVP) and the session tabs, routes every message to the focused tab, the modal stack or the sessions as defined in §9, and draws the frame around them.
+  - *Acceptance:* An M2 walk-through (start, list, connect with a stub session, tab opens, `Ctrl+]` `h`, connect a second host, `Ctrl+]` `1`, remote `exit 3`, ended tab, `x`, list with the host selected) matches its golden files, driven without `teatest`. The MVP walk-through still passes with the header line in place of the title.
 
 **ARCH-UI-002**: The system shall perform all I/O (config, keychain, SSH, filesystem) in `tea.Cmd` values or goroutines that report back with messages, never inside `Update`.
 - Priority: MVP · Status: Implemented
@@ -443,11 +686,32 @@ removed in revision 2.
 - Priority: MVP · Status: Implemented
 - Acceptance: A test checks that every binding has help text and that no two bindings in the same screen share a key.
 
+**ARCH-UI-005**: The system shall draw every frame as one header row with the tab bar, then either the Hosts tab's MVP layout (blank row, screen and modals, status line, footer) or a session tab's area of `height − 2` rows, then the session's status bar, with no line wider than the terminal.
+- Priority: M2 · Status: Draft · Source: D-009, FR-TAB-003, FR-TAB-007, NFR-UX-002
+- Acceptance: Goldens at 80×24 and 120×40 of: the host list with no sessions, the host list with 3 tabs, a live session (replayed `htop`), a session with a modal open, an ended session, scrollback mode, the prefix help overlay, and 10 tabs with overflow markers. The NFR-UX-002 helper checks widths; for session tabs it checks that the last line is the status bar. The cursor reported in `tea.View.Cursor` is the remote cursor shifted down one row, or nil when the remote hides it or a modal is open.
+
+**ARCH-UI-006**: The system shall compute `tea.View.MouseMode` in one function of (focused tab, modal open, scrollback mode, session ended, the focused session's requested mouse mode), following ADR-014.
+- Priority: M2 · Status: Draft · Source: D-011, D-012, NFR-UX-001 revision
+- Acceptance: A table test covers every combination. A root-model test switches between the Hosts tab, a plain shell tab and a tab whose remote sent `?1003h`, and checks the mode of each next `View()`.
+
+**ARCH-UI-007**: The system shall route each mouse press and wheel event to the single component under it, in that component's own coordinates computed from the same layout function as its `View`, and shall recognise a double-click as two left presses on the same row within 400 ms.
+- Priority: M2 · Status: Draft · Source: D-011, ADR-014, FR-NAV-012, FR-NAV-014 … FR-NAV-017
+- Acceptance: Unit tests for each layout function compare the region reported for a target with the position of its text in `View()` (for example the column of `[ Save ]`). Double-click tests with an injected clock: 399 ms on the same row is a double-click, 401 ms is not, a different row is not, and a third press after a double-click starts over. Mouse releases and motion on sshelf screens are ignored.
+
+
 ### 4.6 Testing (`ARCH-TEST`)
 
 **ARCH-TEST-001**: The system shall have an in-process SSH test server (`internal/testutil/sshtest`) that supports password, public key, keyboard-interactive, PTY, window-change and exec requests (and `direct-tcpip`, `tcpip-forward` and agent forwarding in v1), and records every request.
 - Priority: MVP · Status: Implemented
 - Acceptance: CI runs the integration suite with `-race` on Linux and macOS, using loopback only and no real keychain.
+
+**ARCH-TEST-002**: The system shall have emulator golden tests that replay recorded output of `vim`, `htop` and `less` into a session's emulator and compare the resulting screen with a golden file.
+- Priority: M2 · Status: Draft · Source: D-009, FR-CONN-001 revision
+- Acceptance: `internal/session/testdata/replay/` holds at least `vim-edit`, `htop`, `less-search`, `tmux-split` and `utf8-wide` recordings (`.bin` raw output with the `TERM=xterm-256color` and size they were recorded at, `.golden` the expected screen as text plus a cursor line, and `.sgr.golden` the styled lines). `TestARCH_TEST_002_Replay` feeds each recording in 1-byte, 7-byte and 4 KiB chunks and every chunking matches the golden. `go test ./internal/session -update` rewrites them; the recording procedure (`script -q` on a real host, then trimming) is documented in `testdata/replay/README`.
+
+**ARCH-TEST-003**: The system's test SSH server shall support the M2 scripted commands `flood <size>`, `stream <rate>`, `replay <fixture>`, `modes <DECSET list>`, `query`, `hostile` and `echo-hex`, and shall record channel closes and every byte it receives.
+- Priority: M2 · Status: Draft · Source: NFR-PERF-005, NFR-PERF-006, FR-TAB-011, SEC-SESSION-005
+- Acceptance: One test per command. `flood 10M` sends exactly 10 MiB; `stream 100K` paces output at 100 KB/s ± 10 %; `modes 1000,1006` enables those modes; `query` sends `ESC[c`, `ESC[6n` and an OSC 11 colour query and records the replies; `hostile` sends the corpus of ARCH-SESS-011; `echo-hex` echoes each received byte as hex so tests can assert the exact encoding of keys, pastes and mouse events.
 
 ---
 
@@ -474,17 +738,24 @@ internal/
                             Exposes the UI-facing Service interface.
   sshclient/                Dial, jump chain (v1), host-key callback (knownhosts), auth methods,
                             keyboard-interactive bridge, keepalive, agent (v1), forwarding (v1).
-  session/                  Session (a channel with a PTY) implementing tea.ExecCommand: raw mode, pumps,
-                            SIGWINCH, escape parser (v1). Later: Manager, shadow emulator (x/vt).
+  session/                  Session (a channel with a PTY). MVP: implements tea.ExecCommand (raw mode, pumps,
+                            SIGWINCH). M2 (ADR-012, ADR-013): owns an x/vt emulator; output, reply and
+                            input goroutines; key-encoding shim; resize; snapshots and scrollback for
+                            rendering. Imports x/vt and ultraviolet, never Bubble Tea. Only emulator.go
+                            imports x/vt.
   sshconfig/                Parse ~/.ssh/config (Include, tokens) into an import plan. Own parser,
                             stdlib only (ADR-010).
   search/                   Fuzzy matching and ranking (sahilm/fuzzy).
   term/                     Terminal state save/restore, reset sequence, term.SafeGo (panic-safe
                             goroutines, ARCH-SEC-004).
   ui/                       Root model, router, modal stack.
-    keys/  theme/  components/        components holds TextInput, Form and the secret field (ADR-011).
-    screens/welcome|hostlist|hostedit|identities|identityedit|loaderror|groups(v1)|sessions(Later)|settings|import/
-    modals/connecting|tofu|prompt|keychanged|disconnected|confirm|help/
+    keys/  theme/  components/        components holds TextInput, Form (with its M2 buttons), the secret
+                                      field (ADR-011), ClickMsg/WheelMsg and the double-click tracker (M2).
+                                      keys holds the M2 prefix keymap and its state machine.
+    tabs/                   M2: tab bar and status bar layout (one pure layout function shared by
+                            View and hit-testing), the session view and the scrollback view.
+    screens/welcome|hostlist|hostedit|identities|identityedit|loaderror|groups(v1)|settings|import/
+    modals/connecting|tofu|prompt|keychanged|confirm|help/
   testutil/sshtest/         In-process SSH server for tests.
   archtest/                 Import rule test (ADR-009).
 ```
@@ -498,8 +769,9 @@ records go to `<stateDir>/` (ADR-005) in a 0600 file rotated at 5 MiB with one
 directory is created.
 
 `screens/import` is the directory; its package is named `importscreen`
-because `import` is a Go keyword. `screens/settings`, `modals/help` and
-`modals/disconnected` are empty placeholders until their v1 features.
+because `import` is a Go keyword. `screens/settings` is an empty placeholder until
+its v1 feature. M2 deletes `modals/disconnected` (an ended tab replaces it)
+and fills `modals/help` with the prefix-key help overlay (FR-TAB-005).
 
 ### 5.2 Dependency rules
 
@@ -537,7 +809,7 @@ flowchart TD
 | `store` | `domain` | `ui`, `app`, `sshclient`, `session` |
 | `secrets` | `domain`, `term` | `ui`, `app`, `sshclient`, `session` |
 | `sshclient` | `domain` | `secrets`, `store`, `ui`, `app`, Bubble Tea |
-| `session` | `sshclient`, `term` | `secrets`, `store`, `ui`, `app`. It satisfies `tea.ExecCommand` structurally, so it does not import Bubble Tea. |
+| `session` | `sshclient`, `term` | `secrets`, `store`, `ui`, `app`, Bubble Tea. In the MVP it satisfies `tea.ExecCommand` structurally. From M2 it imports `github.com/charmbracelet/x/vt` and `github.com/charmbracelet/ultraviolet` (key and mouse event types) and no longer imports `golang.org/x/term` (ARCH-SESS-003 revision). |
 | `ui/...` | `app` (interfaces), `domain`, `search`, `session` (the handle type only), `ui/*` | `secrets`, `store`, `sshclient`, `x/crypto/ssh` |
 | `app` | everything except `ui` | `ui` |
 | `sshconfig`, `search` | `domain` | (no extra rule; not checked by `archtest`) |
@@ -774,14 +1046,19 @@ sequenceDiagram
         end
     end
     C-->>App: *ssh.Client (+ keepalive goroutine)
-    App->>S: New(client, pty{term,w,h}, env)
+    App->>S: New(client, {size of the session area, TERM xterm-256color, env, scrollback})
     S->>R: session channel, pty-req, env, shell / RemoteCommand
+    Note over S: M2: start output, reply and input goroutines
     App-->>UI: ConnectedMsg{session}
-    UI->>UI: tea.Exec(session, toEndedMsg)
-    Note over UI,S: Bubble Tea releases tty → session.Run(): raw mode,<br/>pumps, SIGWINCH→window-change, escape parser
-    S-->>UI: Run() returns (exit / error / `~.` in v1)
-    Note over S: teardown: cancel stdin reader, restore termios,<br/>reset sequence, close channel and client
-    UI->>UI: SessionEndedMsg → host list / Disconnected modal (v1)
+    UI->>UI: open a tab, focus it, listen on session.Updates()
+    loop while the session is open (focused or not)
+        R-->>S: output → emulator (lock, Write, unlock) → Updates
+        UI->>S: SendKey / Paste / SendMouse / SendBytes / Resize
+        UI->>S: Snapshot() when the tab is drawn
+    end
+    S-->>UI: Updates closed → SessionEndedMsg{tab, err}
+    UI->>UI: ended tab: reason, r reconnect, x close
+    Note over UI,S: MVP until T-037: tea.Exec(session) hands the tty to session.Run()<br/>(raw mode, pumps, SIGWINCH), then SessionEndedMsg → host list
 ```
 
 ### 8.2 Notes on each step
@@ -829,7 +1106,72 @@ func (p *uiPrompter) Ask(ctx context.Context, q Prompt) (Answer, error) {
 }
 ```
 
-### 8.4 The attach pump (`session.Run()`)
+### 8.4 Session I/O (M2)
+
+`session.New(client, Options)` opens the channel, requests the PTY at
+`Options.Size` with `TERM` `xterm-256color` (or the host's `Term` option),
+starts the shell or command and four goroutines, all through `term.SafeGo`
+(ARCH-SEC-004). One `sync.Mutex` guards the emulator; nothing holds it while
+waiting on the network.
+
+```
+output:  channel stdout+stderr --read 32 KiB--> lock; emu.Write; seq++; unlock --> notify (non-blocking, cap 1)
+replies: emu.Read (pipe: encoded keys, pastes, mouse, query answers) --> input queue (≤ 1 MiB, never blocks)
+writer:  input queue --> channel stdin (may block on the SSH window; nothing else waits for it)
+waiter:  session.Wait | client.Wait --> classify (exit / drop / ErrInternal) --> close done, close Updates
+```
+
+The UI-facing API (also the shape of `app.Session` in M2; `app.Snapshot` is
+an alias of `session.Snapshot`):
+
+```go
+type Size struct{ Cols, Rows int }
+
+type Options struct {
+	Term       string            // "" = xterm-256color (ADR-012)
+	Env        map[string]string // env requests; rejections ignored
+	Command    string            // "" = login shell
+	Size       Size              // PTY and emulator size: the session area
+	Scrollback int               // lines kept; 0 = 2000 (NFR-SIZE-003)
+}
+
+func New(client *ssh.Client, opts Options) (*Session, error)
+
+// Input: never blocks; ErrInputFull when the queue holds 1 MiB (ARCH-SESS-014).
+func (s *Session) SendKey(k uv.KeyPressEvent) error // shim for modified keys (ARCH-SESS-017)
+func (s *Session) SendMouse(m uv.MouseEvent) error  // dropped unless the remote enabled a mouse mode
+func (s *Session) Paste(text string) error          // bracketed when ?2004 is on
+func (s *Session) SendBytes(b []byte) error         // literal bytes, e.g. 0x1d for ctrl+] ctrl+]
+func (s *Session) Resize(sz Size)                   // emulator at once; window-change debounced 30 ms
+func (s *Session) SetDefaultColors(fg, bg color.Color)
+
+// Rendering: copies under the lock, so the UI never sees a half-written screen.
+func (s *Session) Snapshot() Snapshot
+func (s *Session) Scrollback(top, rows int) (lines []string, total int)
+
+type Snapshot struct {
+	Lines  []string  // Size.Rows lines of Size.Cols cells, SGR styles only (no OSC, no links)
+	Cursor *Cursor   // nil when the remote hides it
+	Mouse  MouseMode // None, Press (?9/?1000), Drag (?1002), Any (?1003)
+	Alt    bool      // alternate screen active
+	Seq    uint64    // increases with every processed output chunk
+}
+
+// Lifecycle.
+func (s *Session) Updates() <-chan struct{} // coalesced; closed after the end (ARCH-SESS-015)
+func (s *Session) Done() <-chan struct{}
+func (s *Session) Err() error   // after Done: nil, *ExitError, *DisconnectError or ErrInternal
+func (s *Session) Close() error // idempotent; closes the channel and the client
+```
+
+`app.Service.Connect` gains the session area: `Connect(ctx, hostID, size)`.
+The UI converts `tea.KeyPressMsg` and `tea.Mouse*Msg` to ultraviolet events
+field by field; `session` imports no Bubble Tea.
+
+Activity (FR-TAB-004) is "the snapshot's `Seq` changed while the tab was not
+focused". Bytes the emulator sends to the remote do not change `Seq`.
+
+### 8.4a The MVP attach pump (`session.Run()`, removed by T-037)
 
 ```
 Run():
@@ -846,24 +1188,41 @@ Run():
 `Terminal` (raw mode, size and resize events) is an interface, so tests drive
 `Run()` with pipes and a fake.
 
-### 8.5 Escape sequences
+### 8.5 Prefix key (M2, replaces the v1 escape sequences)
 
-The escape sequences follow OpenSSH's, so muscle memory carries over. They are
-recognised at line start only.
+M2 drops the planned OpenSSH-style `~` escapes: inside a frame, a prefix key is
+simpler, works at any point in a line and is visible in the status bar.
+`~.` is just text sent to the remote (FR-CONN-014). The prefix is
+`Ctrl+]` (the byte telnet uses for its escape, rarely bound by remote apps);
+`Ctrl+]` `Ctrl+]` sends it to the remote. The state machine lives in
+`ui/keys` (ARCH-SESS-006):
 
-| Sequence | Action | Tier |
-|---|---|---|
-| `~.` | Disconnect and return to sshelf | v1 |
-| `~?` | Show escape help (local only) | v1 |
-| `~~` | Send a literal `~` | v1 |
-| `~d` | Detach; the session keeps running | Later |
+```
+idle --ctrl+]--> prefix
+prefix --q|?|h|0|1..9|n|p|[--> idle (run the command)
+prefix --ctrl+]--> idle (send 0x1d to the focused session)
+prefix --esc | any other key--> idle (nothing sent)
+```
 
-`Settings.EscapeChar` changes the character, which matters for nested `ssh`
-sessions or keyboard layouts where `~` is a dead key.
+A configurable prefix (`Settings.PrefixKey`) is v1 with the other key
+bindings (FR-CFG-007).
 
 ### 8.6 Terminal restore and edge cases
 
-| Situation | Handling |
+From M2 the local terminal belongs to Bubble Tea for the whole run: a session
+ending changes nothing but the frame, and only sshelf's exit (normal, signal or
+panic) restores the terminal. The MVP rows below apply until T-037; the M2
+rows replace them.
+
+| Situation (M2) | Handling |
+|---|---|
+| Session ends (exit, drop, `Ctrl+]` `q`) | Its goroutines stop (ARCH-SESS-005 revision); the tab shows the ended state. Nothing is written to the terminal. |
+| Panic in a session goroutine | `term.SafeGo` recovers it and ends that session with `ErrInternal`; other sessions and the UI keep running. |
+| Panic in `Update` or `View` | `main`'s `recover` restores the startup `term.State`, writes `term.ResetSequence` and a crash report, and exits 70 (unchanged). Open sessions die with the process. |
+| SIGTERM or SIGHUP | The program quits; Bubble Tea restores the terminal (alt screen, mouse modes, bracketed paste, cursor); the process exit closes every connection (FR-TAB-009). |
+| Ctrl-C or Ctrl-Z in a focused session | Encoded as `0x03` / `0x1a` and sent to the remote (FR-TAB-006). |
+
+| Situation (MVP) | Handling |
 |---|---|
 | Normal end | Restore termios, then write the reset sequence: `ESC[?1049l`, mouse off (`?1000l ?1002l ?1003l ?1006l`), `?2004l`, `?1l ESC>`, `?25h`, `ESC[0m` and `ESC[<u`. Then Bubble Tea's `RestoreTerminal` runs (§2). |
 | Panic in a session goroutine | `safego` recovers it and cancels the session. `Run()` returns `ErrInternal` through the normal restore path, and the app keeps running. |
@@ -875,10 +1234,10 @@ sessions or keyboard layouts where `~` is a dead key.
 ### 8.7 Keepalive and reconnect
 
 In v1, one goroutine per client sends `keepalive@openssh.com` with a timeout
-of one interval (ARCH-SESS-007). Reconnect is always user-initiated (`r` in the
-Disconnected modal), because an interactive shell cannot be resumed after a
-disconnect. sshelf does not auto-reconnect (D-007). Mosh (Later) is the answer
-to roaming.
+of one interval (ARCH-SESS-007). Reconnect is always user-initiated (`r` on an
+ended tab, M2, FR-CONN-010), because an interactive shell cannot be resumed
+after a disconnect. sshelf does not auto-reconnect (D-007). Mosh (Later) is
+the answer to roaming.
 
 ---
 
@@ -943,10 +1302,12 @@ stateDiagram-v2
   "`<label>`: host key revoked (`<file>` line `<n>`); connection refused",
   rather than a block screen, because there are no two fingerprints to
   compare and no action to offer (SEC-HOSTKEY-003 AC2).
-- **Session** is not rendered. It is the window during which `tea.Exec` holds
-  the terminal.
+- **Session** is not rendered in the MVP. It is the window during which
+  `tea.Exec` holds the terminal. From M2 it is a session tab; see §9.4.
 
 ### 9.2 Root model and messages
+
+The MVP root model is below. M2 changes it as described in §9.4.
 
 ```go
 type Root struct {
@@ -981,10 +1342,130 @@ defined in `ui/keys`. FR-NAV-003 is authoritative for the host list.
 | Host list | `↑`/`↓` or `k`/`j` move · `g`/`G` first/last · `/` search · `enter` connect · `a` add · `e` edit · `d` delete (confirm) · `i` identities · `I` import · `q` quit. v1: `y` duplicate · `f` favourite · `,` settings · groups (key to be assigned; `g` is taken) |
 | Forms | `tab`/`shift+tab` move between fields · `ctrl+s` save · `esc` cancel (confirm if there are unsaved changes) |
 | TOFU | `y` trust and save · `enter`/`esc` cancel. Enter never trusts a key. "Trust once" is v1 (FR-KH-007). |
-| Attached session | Everything goes to the remote, except the escapes in §8.5 |
-| Sessions (Later) | `enter` reattach · `x` close (confirm) |
+| Attached session (MVP) | Everything goes to the remote |
+| Any tab (M2) | `ctrl+]` then: `q` disconnect (confirm) · `?` help · `h`/`0` Hosts tab · `1`–`9` tab · `n`/`p` next/previous tab · `[` scrollback mode · `ctrl+]` literal `ctrl+]` (§8.5) |
+| Live session tab (M2) | Every other key and paste goes to the remote, encoded per the table in §9.4 |
+| Ended session tab (M2) | `r` reconnect · `x` close tab |
+| Scrollback mode (M2) | `↑`/`↓` line · `pgup`/`pgdown` page · `g`/`G` top/bottom · `esc` back |
+| Forms (M2 addition) | `tab` also reaches `[ Save ]` and `[ Cancel ]`; `enter`/`space` press the focused button |
 
 ---
+
+### 9.4 Tabs and the frame (M2)
+
+```mermaid
+stateDiagram-v2
+    [*] --> HostsTab
+    HostsTab --> SessionTab : ConnectedMsg (new tab, focused)
+    HostsTab --> SessionTab : ctrl+] 1-9 / n / p, click on a tab
+    SessionTab --> HostsTab : ctrl+] h / 0 / n / p
+    SessionTab --> SessionTab : ctrl+] 1-9 / n / p
+    SessionTab --> Scrollback : ctrl+] [
+    Scrollback --> SessionTab : esc
+    SessionTab --> Ended : SessionEndedMsg
+    Ended --> Connecting : r (same tab)
+    Connecting --> SessionTab : ConnectedMsg (same tab)
+    Connecting --> Ended : failure / esc
+    Ended --> [*] : x (tab closed, focus moves left)
+    SessionTab --> ConfirmDisconnect : ctrl+] q
+    ConfirmDisconnect --> SessionTab : n / enter / esc
+    ConfirmDisconnect --> [*] : y (session and tab closed)
+    HostsTab --> ConfirmQuit : q / ctrl+c with live sessions
+    ConfirmQuit --> HostsTab : n / enter / esc
+```
+
+The Hosts tab is the MVP state machine of §9.1, unchanged except that
+`Connecting → Session` now opens a tab instead of `tea.Exec`.
+
+**Root model (M2).**
+
+```go
+type Model struct {
+	svc     app.Service
+	hosts   hostsTab          // the MVP screen, prev screen, identities view, status line
+	tabs    []*sessionTab     // in opening order
+	focus   int               // 0 = Hosts tab, i = tabs[i-1]
+	nextNum int               // tab numbers are never reused while sshelf runs
+	modals  []components.Modal // global, drawn over the focused tab
+	prefix  bool              // ctrl+] seen, waiting for the command key
+	clicks  components.ClickTracker
+	now     func() time.Time  // injectable clock (durations, double-clicks)
+	fg, bg  color.Color       // reported by the terminal, passed to new sessions
+	width, height int
+	// connection attempt fields as in the MVP, plus the tab number for a reconnect
+}
+
+type sessionTab struct {
+	num      int
+	hostID   domain.ID
+	label    string    // sanitised host label
+	addr     string    // user@host:port
+	sess     app.Session
+	started  time.Time
+	seenSeq  uint64    // Snapshot.Seq when last focused; activity = Seq > seenSeq
+	ended    error     // set by SessionEndedMsg; nil and !done while live
+	done     bool
+	scroll   *int      // top line in scrollback mode; nil otherwise
+}
+```
+
+**New messages.**
+
+| Message | From | Effect |
+|---|---|---|
+| `SessionUpdateMsg{num}` | listener on `Updates()` | re-arm the listener; mark activity if the tab is not focused; redraw |
+| `SessionEndedMsg{num, err}` | listener, when `Updates()` closes | tab ended (`✕`), reason in its status bar |
+| `tickMsg` | `tea.Tick(1s)` while a live session tab is focused | redraw the duration |
+| `tea.BackgroundColorMsg`, `tea.ForegroundColorMsg` | Bubble Tea, requested in `Init` | store; `SetDefaultColors` on every session |
+| `components.ClickMsg{X, Y, Double}`, `components.WheelMsg{X, Y, Delta}` | root model, from `tea.MouseClickMsg`/`tea.MouseWheelMsg` | handled by the component under the pointer |
+
+**Layout.** Row 0 is the header (FR-TAB-003). On the Hosts tab, rows 1 to
+`height−1` are the MVP layout (blank row, body with modals, status line,
+footer), so MVP goldens change only in their first line. On a session tab,
+rows 1 to `height−2` are `Snapshot().Lines` (or the scrollback view), and the
+last row is the status bar (FR-TAB-007). Modals open over a session tab are
+drawn over the lower part of the session area, as they are drawn under the
+screen on the Hosts tab. The tab bar's layout is one pure function
+`tabs.Layout(width, entries, focus) []Span` used by both `View` and
+hit-testing.
+
+**Key routing (in order).** (1) `ctrl+c` on the Hosts tab: quit, confirming
+if any session is live (FR-TAB-009); `ctrl+c` in a form still cancels the
+form. (2) A modal is open: the top modal. (3) The prefix state machine
+(§8.5). (4) The focused tab: a Hosts-tab screen; a live session (scrollback
+keys in scrollback mode, otherwise encode and send); an ended session (`r`,
+`x`).
+
+**Key encoding for the remote (FR-TAB-006, ARCH-SESS-017).**
+
+| Key | Bytes (normal cursor mode) | Application cursor mode (`?1h`) | Encoded by |
+|---|---|---|---|
+| printable text, including non-ASCII | its UTF-8 | same | `SendKey` |
+| Enter / Tab / Backspace / Esc | `\r` / `\t` / `0x7f` / `0x1b` | same | `SendKey` |
+| Shift+Tab | `ESC[Z` | same | `SendKey` |
+| Ctrl+a … Ctrl+z, Ctrl+[ \ ] ^ _ , Ctrl+Space | `0x01` … `0x1a`, `0x1b`–`0x1f`, `0x00` | same | `SendKey` |
+| Alt+key | `ESC` then the key's bytes | same | `SendKey` |
+| ↑ ↓ → ← | `ESC[A` `ESC[B` `ESC[C` `ESC[D` | `ESC O A` … | `SendKey` |
+| Home / End | `ESC[H` / `ESC[F` | `ESC O H` / `ESC O F` | `SendKey` |
+| Insert / Delete / PgUp / PgDn | `ESC[2~` `ESC[3~` `ESC[5~` `ESC[6~` | same | `SendKey` |
+| F1–F4 / F5–F12 | `ESC O P`…`S` / `ESC[15~` … `ESC[24~` | same | `SendKey` |
+| Shift/Alt/Ctrl + arrows, Home, End | `ESC[1;<m>A` … (`m` = 1 + Shift 1 + Alt 2 + Ctrl 4) | same | shim |
+| Shift/Alt/Ctrl + Insert, Delete, PgUp, PgDn, F5–F12 | `ESC[<n>;<m>~` | same | shim |
+| Shift/Alt/Ctrl + F1–F4 | `ESC[1;<m>P` … `S` | same | shim |
+| Paste | text, or `ESC[200~` text `ESC[201~` with `?2004h` | same | `Paste` |
+
+### 9.5 Mouse (M2)
+
+| Where | Press (left) | Double-click | Wheel | Other buttons, release, motion |
+|---|---|---|---|---|
+| Tab bar (Hosts tab, no modal) | focus the tab | same as press | ignored | ignored |
+| Host list | select row; search field: focus search | connect (as Enter) | move selection ±3 | ignored |
+| Welcome | run the choice under the pointer | same as press | ignored | ignored |
+| Forms (host, identity, prompt modal) | focus field; `‹`/`›` change choice; `[ Save ]` / `[ Cancel ]` | same as press | ignored | ignored |
+| Modals | press the bracketed button under the pointer; outside the top modal: nothing | same as press | ignored | ignored |
+| Session area, remote requested mouse | forwarded (row − 1) | forwarded as two presses | forwarded | forwarded as the remote's mode allows |
+| Session area, no request; scrollback mode; ended tab | tracking off: the terminal selects text | – | – | – |
+| Header or status bar while a session is focused | ignored | ignored | ignored | ignored |
 
 ## 10. Testing strategy
 
@@ -995,6 +1476,9 @@ defined in `ui/keys`. FR-NAV-003 is authoritative for the host list.
 | UI | `testing` + golden files | every screen at 80×24 and 120×40 with a fake `app.Service`. The shared helper `golden(t, name, model)` in `internal/ui/golden_test.go` sends a `tea.WindowSizeMsg`, renders `View()`, strips ANSI sequences and trailing spaces (what the ASCII colour profile renders), checks the layout (NFR-UX-002) and compares with `internal/ui/testdata/<name>.<w>x<h>.golden`, for example `hostlist.80x24.golden`. `go test ./internal/ui -update` rewrites them. Implemented without `teatest` because rendering the root model directly is enough and adds no dependency (D-007). |
 | Integration | `internal/testutil/sshtest`, built directly on `golang.org/x/crypto/ssh` (no `charmbracelet/ssh` or `wish` dependency), using `secrets.MemStore` | auth methods, keyboard-interactive password and OTP, TOFU trust-and-save, cancel and mismatch, window-change, exit status. In v1: keepalive timeout, jump hosts, forwarding and agent. |
 | Terminal E2E | `creack/pty` on Linux and macOS | runs the real binary with only MVP features: the config directory comes from the default location or from an `XDG_CONFIG_HOME`/`HOME` override pointing at a temp dir. It connects to sshtest, ends the session with `exit` in the remote shell, then asserts that the `stty` state is restored and the next key reaches the TUI. Panic injection behind the `sshelf_faultinject` build tag. The same steps, run by hand in a real terminal, are the T-0 exit check for ADR-007. |
+| Emulator replay (M2) | `internal/session/testdata/replay`, ARCH-TEST-002 | recorded `vim`, `htop`, `less`, `tmux` and wide-character output replayed in several chunk sizes and compared with screen goldens |
+| Tabs, prefix and mouse (M2) | root model driven directly, a fake `app.Session` that records what it is sent and serves canned snapshots, an injected clock for double-clicks and durations | the prefix state machine, tab switching, activity and end markers, key and paste encoding, every mouse interaction with synthetic `tea.MouseClickMsg`/`tea.MouseWheelMsg`, the mouse-mode policy, goldens of the frame at 80×24 and 120×40 |
+| Multi-session E2E (M2) | `creack/pty` with the real binary and sshtest | 3 to 10 sessions: background output, switching, resize to all, ended tab, reconnect, quit confirmation, mouse-tracking output scan (NFR-UX-001 revision), NFR-PERF-006 |
 | Keychain | build tag `integration_keyring` | the real `secrets.NewOSStore` Set/Get/Delete round-trip on throwaway keychains, as specified in `security/credential-storage.md` §8. Never touches the user's login keychain. |
 | Architecture and hygiene | `archtest`, `-race`, `goleak`, `govulncheck`, `golangci-lint` | on every PR |
 
@@ -1010,6 +1494,16 @@ defined in `ui/keys`. FR-NAV-003 is authoritative for the host list.
 | 4 | Reference or copy imported keys | **Decided:** reference by path on import (ADR-010). D-004's "Store key in keychain" action is offered afterwards. |
 | 5 | System `ssh` fallback | **Decided by D-104:** none in MVP or v1. |
 | 6 | Bubble Tea v2 | **Verified and adopted** (ADR-007, §2). |
+
+**M2 (revision 3):**
+
+| # | Question | Resolution |
+|---|---|---|
+| 7 | Hand over the terminal or embed an emulator? | **Embed** (D-009, ADR-012). The MVP handover is removed so there is one path (D-007). |
+| 8 | Which emulator? | **`charmbracelet/x/vt` v0.1.0**, pinned and wrapped, with a key-encoding shim (ADR-013). |
+| 9 | A `session.Manager`? | **No.** The root model's tab list owns the sessions (ADR-015). |
+| 10 | Keep the `~` escapes? | **No.** The prefix key replaces them (§8.5). |
+| 11 | Scrollback size, wide characters at the margin, remote titles | Open with the product owner; defaults in `product/requirements.md` §22. |
 
 **Formerly remaining, now decided:**
 - Keychain re-prompts after unsigned updates: avoided by `zalando/go-keyring`,

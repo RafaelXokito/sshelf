@@ -1,12 +1,12 @@
 # sshelf non-functional requirements
 
-Status: Draft · Owner: orchestrator · Last updated: 2026-10-29
+Status: Draft · Owner: orchestrator · Last updated: 2026-10-30 (M2)
 
 This file is the single home of the non-functional requirements (`NFR-*`). It
 replaces the "Proposed NFRs" sections that used to sit in
 `product/requirements.md` §23 and `architecture/design.md` §11. Conventions are
-in [`README.md`](README.md): EARS syntax, a priority of `MVP`, `v1` or `Later`,
-and acceptance checks. [`decisions.md`](decisions.md) wins any conflict.
+in [`README.md`](README.md): EARS syntax, a priority of `MVP`, `M2`, `v1` or
+`Later`, and acceptance checks. [`decisions.md`](decisions.md) wins any conflict.
 
 Every check below can run unattended in CI. Unless stated otherwise, "the CI
 runner" means the GitHub-hosted `ubuntu-latest` (Linux amd64) runner, and
@@ -45,11 +45,23 @@ When the user presses Enter on a host, the system shall send the SSH client vers
 - **Priority:** MVP · **Status:** Implemented
 - **Check:** `TestNFR_PERF_003_ConnectOverhead` drives the root model with a host at `127.0.0.1` and `secrets.MemStore`. The time from `ConnectRequestMsg` to the in-process test server recording the client version banner is ≤ 100 ms (median of 10 runs).
 
-### NFR-PERF-004 · Session passthrough latency
-While a session is attached, the system shall add no more than 2 ms at the 99th percentile to keystroke echo latency compared with writing directly to the SSH channel.
+### NFR-PERF-004 · Keystroke overhead
+While a session tab is focused, when the root model receives a key press, the system shall write the encoded key to the session's SSH channel within 5 ms at the 99th percentile.
 
-- **Priority:** v1
-- **Check:** `BenchmarkNFR_PERF_004_EchoRTT` sends 1,000 single-byte keystrokes to an echoing in-process server once through `session.Run()` with pipe-backed terminals and once straight to the channel. The p99 difference is ≤ 2 ms. The baseline is in-process so that CI needs no OpenSSH.
+- **Priority:** M2 · **Status:** Draft · **Source:** D-009 (was v1 "Session passthrough latency", measured against the MVP's raw passthrough)
+- **Check:** `TestNFR_PERF_004_KeystrokeOverhead` drives the root model directly (as `tea.Program` would) with a real session connected to the in-process server, sends 1,000 `tea.KeyPressMsg` values for printable keys and arrows, and timestamps each from the call to `Update` until sshtest's channel reader has received the bytes. p99 ≤ 5 ms on the CI runner. A second run while another session streams output at 1 MB/s must meet the same bound (the input path never waits for output processing, ARCH-SESS-014).
+
+### NFR-PERF-005 · Output throughput
+When a session receives a burst of output, the system shall process at least 1 MB/s of it into the emulator while keeping the UI responsive and the memory held for unprocessed output bounded.
+
+- **Priority:** M2 · **Status:** Draft · **Source:** D-009, ADR-013 (x/vt v0.1.0 processes 2 to 5 MB/s on an Apple M1 Pro)
+- **Check:** `TestNFR_PERF_005_TenMegabytes` connects one session at 120×40 to sshtest's `flood 10M` command (10 MiB of 100-column text lines, half of them with SGR colours) and asserts on the CI runner: (1) the last line is on the emulator's screen within 10 s; (2) while the flood runs, `View()` is produced at least every 100 ms and Ctrl+C reaches sshtest within 100 ms; (3) the heap never exceeds NFR-SIZE-003's per-session bound plus 8 MiB during the flood: sshelf reads the channel only as fast as the emulator processes it, so x/crypto/ssh's channel window (2 MiB) slows the server instead of sshelf buffering (ARCH-SESS-014); (4) the session's input queue never exceeds its 1 MiB cap. `BenchmarkNFR_PERF_005_EmulatorWrite` reports MB/s for the emulator alone, for tracking regressions.
+
+### NFR-PERF-006 · Ten concurrent sessions
+While 10 sessions are open, each receiving output at 100 KB/s, the system shall render a newly focused tab's first frame within 50 ms and keep keystroke overhead within 20 ms at the 99th percentile.
+
+- **Priority:** M2 · **Status:** Draft · **Source:** D-010
+- **Check:** `TestNFR_PERF_006_TenSessions` (PTY E2E, Linux) runs the real binary against sshtest, opens 10 sessions to `stream 100K` shells, then: switching with `Ctrl+]` `n` produces the new tab's status bar in the PTY output within 50 ms (median of 10 switches); 200 keystrokes to the focused session have a p99 overhead ≤ 20 ms measured as in NFR-PERF-004; RSS stays within NFR-SIZE-003's bound times 10 plus NFR-SIZE-001's base.
 
 ---
 
@@ -60,6 +72,12 @@ While sshelf is idle with 5,000 hosts loaded and no session open, the system sha
 
 - **Priority:** v1
 - **Check:** `TestNFR_SIZE_001_IdleRSS` (Linux only) starts the binary in a PTY with a 5,000-host fixture, waits 1 s after the first frame and reads `VmRSS` from `/proc/<pid>/status`: ≤ 61,440 kB.
+
+### NFR-SIZE-003 · Memory per session
+While a session at 120×40 has a full scrollback of 100-column lines, the system shall use no more than 48 MB of heap for that session, and shall cap the scrollback at 2,000 lines.
+
+- **Priority:** M2 · **Status:** Draft · **Source:** D-010, ADR-013, open question 1 in `product/requirements.md` §22
+- **Check:** `TestNFR_SIZE_003_SessionHeap` measures `runtime.MemStats.HeapAlloc` (after `runtime.GC()`) before and after one session at 120×40 receives 5,000 lines of 100 columns with SGR colours: the difference is ≤ 48 MiB and `ScrollbackLen()` is 2,000. With x/vt v0.1.0 the measured cost is about 31 MB. Closing the session and running `runtime.GC()` returns the heap to within 2 MiB of the starting value.
 
 ### NFR-SIZE-002 · Binary size
 The system shall produce a release binary of no more than 20 MB for each supported target.
@@ -114,6 +132,13 @@ The system shall make every action reachable from the keyboard and shall never e
 
 - **Priority:** MVP · **Status:** Implemented · **Source:** FR-NAV-012 (mouse is `Later` and off by default)
 - **Check:** `TestNFR_UX_001_EveryActionBound` asserts that every action of every screen in `ui/keys` has at least one key binding. `TestNFR_UX_001_NoMouseTracking` (PTY E2E) scans all output for `ESC[?1000h`, `ESC[?1002h`, `ESC[?1003h` and `ESC[?1006h` and finds none.
+- **M2 revision** · Priority: M2 · Status: Draft · Source: D-011, D-012
+  - *Revised:* The system shall make every action reachable from the keyboard, and shall enable cell-motion mouse tracking only while an sshelf screen is focused or the focused session's remote app has requested mouse reporting.
+  - *Acceptance:*
+    - `TestNFR_UX_001_EveryActionBound` still passes: every mouse action (FR-NAV-012, FR-NAV-014 … FR-NAV-017) has a key binding that does the same, including the form buttons (FR-NAV-015).
+    - `TestNFR_UX_001_MouseModePolicy` (unit, root model): `View().MouseMode` is `MouseModeCellMotion` on the Hosts tab and on every sshelf screen and modal; `MouseModeNone` on a focused session whose remote has not requested mouse reporting, in scrollback mode and on an ended session; and the mode the remote asked for (cell motion for `?1000`/`?1002`, all motion for `?1003`) otherwise.
+    - `TestNFR_UX_001_NoMouseTrackingInPlainSession` (PTY E2E): from the frame after a session tab is focused until the remote enables mouse reporting, the output contains no `ESC[?1000h`, `ESC[?1002h` or `ESC[?1003h`, and it contains `ESC[?1002l` (or `?1000l`) when the session is focused after the Hosts tab.
+    - On exit, every mouse mode is turned off (Bubble Tea's restore, design §8.6).
 
 ### NFR-UX-002 · Layout at the minimum size
 While the terminal is at least 80 columns by 24 rows, the system shall render every screen and modal with no line wider than the terminal and with the key-hints footer visible.
@@ -191,11 +216,13 @@ Provisional IDs were never approved and are not kept.
 | NFR-PRIV-001 (req and design) | NFR-PRIV-001 | Merged. |
 | NFR-REL-001 (design: terminal restore) | none | Duplicate of ARCH-SESS-005 and ARCH-SEC-004, which already require the PTY suite. NFR-REL-001 now covers races and goroutine leaks. |
 | NFR-QUAL-001 (req: every MVP requirement), NFR-QUAL-001 (design: every ARCH and FR) | NFR-QUAL-001 | Union of prefixes, limited to MVP. NFR-QUAL-002 and NFR-QUAL-003 are new. |
+| M2 (2026-10-30) | NFR-PERF-004 (reworded), NFR-PERF-005, NFR-PERF-006, NFR-SIZE-003, NFR-UX-001 (revision) | Framed sessions (D-009) replace raw passthrough, so the latency check measures sshelf's own input path. The per-session memory figure dropped earlier comes back, measured against the chosen emulator (ADR-013). The M2 gate (T-043) extends NFR-QUAL-001's tracecheck to `M2`. |
 
 ## 10. Count
 
 | Priority | Count |
 |---|---|
-| MVP | 15 |
-| v1 | 4 |
-| **Total** | **19** |
+| MVP | 15 (NFR-UX-001 has an M2 revision) |
+| M2 | 4 (NFR-PERF-004 moved from v1, NFR-PERF-005, NFR-PERF-006, NFR-SIZE-003) |
+| v1 | 3 |
+| **Total** | **22** |

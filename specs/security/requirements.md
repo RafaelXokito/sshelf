@@ -80,7 +80,7 @@ connection" prompt (not achievable from a plain Go binary, see credential-storag
 | T-12 | S | **Host-key algorithm downgrade** that forces a TOFU prompt. | Pin to the algorithms of the stored keys (SEC-HOSTKEY-007). | None known. |
 | T-13 | E | **Forwarded agent abused** by a compromised server. | Off by default, per-host opt-in with a warning (SEC-AGENT-002). | Accepted while the user enables it. |
 | T-14 | S | **Server phishing** through keyboard-interactive prompts (asking for the macOS login password, say). | Prompts labelled as coming from the server, auto-answer rules (SEC-SESSION-002). | None known. |
-| T-15 | T | **Escape-sequence injection** through banners, errors or imported labels. | Sanitize before rendering (SEC-SESSION-003). | Session output goes to the user's terminal, as in `ssh`. Accepted. |
+| T-15 | T | **Escape-sequence injection** through banners, errors or imported labels, and (until M2) through session output. | Sanitize before rendering (SEC-SESSION-003). From M2, session output reaches only sshelf's emulator (SEC-SESSION-005). | MVP: session output goes to the user's terminal, as in `ssh`; accepted. M2: closed, except for bugs in sshelf's emulator, which runs in sshelf's process and has no access to the user's terminal. |
 | T-16 | I | **Credential sent to the wrong host**, or before verification. | SEC-SESSION-001. | None known. |
 | T-17 | I | **Secrets in logs, screen, clipboard, argv or env.** | SEC-LOG-*, SEC-CLIP-005, SEC-MEM-001/008. | None known. |
 | T-18 | D | **Config corruption** from a crash, two instances or an external edit. | Atomic write (SEC-FILE-003), change detection (SEC-FILE-005, v1). | None known. |
@@ -397,6 +397,18 @@ Priority: MVP · Status: Implemented · Threats: T-20
 - AC1: CI `govulncheck ./...` passes. A unit test asserts that the client config contains no `ssh-dss`, `3des-cbc`,
   `arcfour*` or `diffie-hellman-group1-sha1`.
 
+**SEC-SESSION-005: Session output never reaches the terminal raw.**
+The system shall pass remote session output only to sshelf's terminal emulator and shall write to the user's
+terminal only characters and SGR styles rendered from emulator cells, so that no OSC (titles, clipboard, hyperlinks,
+colour changes), DCS, APC, PM, SOS or terminal query from a server reaches the user's terminal.
+Priority: M2 · Status: Draft · Threats: T-15 · Source: D-009, ADR-012
+- AC1: sshtest's `hostile` script (OSC 52 clipboard write, OSC 0/2 titles, OSC 8 link, OSC 4/10/11 colour sets,
+  DCS, APC, `ESC[21t`, DECRQSS, `ESC c`, 8-bit C1 forms) runs in a session; the PTY output of sshelf contains
+  none of `ESC ]`, `ESC P`, `ESC _`, `ESC ^`, `ESC X` or a C1 byte, and the window title is unchanged.
+- AC2: A fuzz test feeds random bytes to a session's emulator and asserts the same property on the rendered view.
+- AC3: Tab labels and the status bar show the host label and address only, never a remote-set title, and never a
+  secret (canary harness, SEC-LOG-001).
+
 ---
 
 ## 5. Requirement count
@@ -404,9 +416,10 @@ Priority: MVP · Status: Implemented · Threats: T-20
 | Priority | Count |
 |----------|-------|
 | MVP | 31 |
+| M2 | 1 |
 | v1 | 4 |
 | Later | 2 |
-| **Total** | **37** |
+| **Total** | **38** |
 
 ## 6. Resolved decisions
 
