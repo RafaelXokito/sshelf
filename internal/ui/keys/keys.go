@@ -118,3 +118,10 @@ func Maps() []Map {
 		{Name: "form key file field", Bindings: append([]key.Binding{StoreKeyFile}, textInput...)},
 	}
 }
+
+// Prefix key (design §8.5, FR-TAB-005): ctrl+] then a command key.
+var (
+	Prefix      = key.NewBinding(key.WithKeys("ctrl+]"), key.WithHelp("Ctrl+]", "prefix"))
+	PrefixHelp  = key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help"))
+	PrefixHosts = key.NewBinding(key.WithKeys("h", "0"), key.WithHelp("h", "hosts"))
+)

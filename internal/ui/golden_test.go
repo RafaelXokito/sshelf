@@ -45,7 +45,8 @@ func golden(t *testing.T, name string, m tea.Model) {
 }
 
 // checkLayout fails unless view has exactly h lines, none wider than w,
-// and ends with the footer (NFR-UX-002).
+// and ends with the footer, or on a session tab with its status bar
+// (NFR-UX-002, ARCH-UI-005).
 func checkLayout(t *testing.T, m Model, view string, w, h int) {
 	t.Helper()
 	lines := strings.Split(view, "\n")
@@ -57,7 +58,13 @@ func checkLayout(t *testing.T, m Model, view string, w, h int) {
 			t.Errorf("%dx%d: line %d is %d columns wide: %q", w, h, i+1, lw, plain(l))
 		}
 	}
+	if !strings.HasPrefix(plain(lines[0]), "sshelf │") {
+		t.Errorf("%dx%d: first line %q is not the header", w, h, plain(lines[0]))
+	}
 	foot := strings.TrimSpace(plain(m.footer()))
+	if st := m.focused(); st != nil {
+		foot = strings.TrimSpace(plain(m.sessionStatus(st)))
+	}
 	last := strings.TrimSpace(plain(lines[len(lines)-1]))
 	if foot == "" || (last != foot && !strings.HasPrefix(foot, strings.TrimSuffix(last, "…"))) {
 		t.Errorf("%dx%d: last line %q is not the footer %q", w, h, last, foot)

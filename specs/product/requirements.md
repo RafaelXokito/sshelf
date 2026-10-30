@@ -1028,7 +1028,7 @@ When a connection started from the host list succeeds, the system shall open a n
 ### FR-TAB-003 · Tab bar
 The system shall show a one-line header that starts with `sshelf`, then the `Hosts` tab, then one entry `<number> <host label>` per session tab, separated by `│`, with the focused tab highlighted.
 
-- **Priority:** M2 · **Status:** Draft · **Source:** D-009, D-010
+- **Priority:** M2 · **Status:** Implemented · **Source:** D-009, D-010
 - **Acceptance:**
   - The focused tab is shown in reverse video, and its padding spaces are replaced by `[` and `]` (`│[2 web-prod]│`), so focus is not shown by colour alone (NFR-UX-003).
   - Labels are sanitised (SEC-SESSION-003) and cut to 20 columns with `…`. A tab shows the host label only; a window title set by the remote (OSC 0 or 2) is never shown (SEC-SESSION-005).
@@ -1038,7 +1038,7 @@ The system shall show a one-line header that starts with `sshelf`, then the `Hos
 ### FR-TAB-004 · Activity and end markers
 While a session tab is not focused, when its session receives output, the system shall mark that tab with `●` until it is focused; and when a session ends, the system shall mark its tab with `✕` until it is reconnected or closed.
 
-- **Priority:** M2 · **Status:** Draft · **Source:** D-010
+- **Priority:** M2 · **Status:** Implemented · **Source:** D-010
 - **Acceptance:**
   - Output in a background tab shows `1 raspberrypi4 ●`; focusing the tab removes the marker. Output in the focused tab never sets it.
   - An ended session shows `✕` instead of `●`, focused or not.
