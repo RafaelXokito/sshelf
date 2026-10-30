@@ -76,7 +76,13 @@ jobs:
       - name: Output throughput and session memory without -race (NFR-PERF-005, NFR-SIZE-003)
         shell: bash
         run: |
-          go test -count=1 -v -run 'TestNFR_PERF_005|TestNFR_SIZE_003' ./internal/session | tee perf.txt
+          # Shared runners stall now and then (one macOS run saw a single
+          # 159 ms frame gap; 20 local runs stay under 17 ms). Retry once;
+          # the first failure stays visible as a warning (specs/nfr.md §1).
+          if ! go test -count=1 -v -run 'TestNFR_PERF_005|TestNFR_SIZE_003' ./internal/session | tee perf.txt; then
+            echo "::warning::NFR-PERF-005/NFR-SIZE-003 failed once on this runner; retrying"
+            go test -count=1 -v -run 'TestNFR_PERF_005|TestNFR_SIZE_003' ./internal/session | tee perf.txt
+          fi
           grep 'emulator:' perf.txt >> "$GITHUB_STEP_SUMMARY"
       - name: Emulator benchmark (NFR-PERF-005)
         shell: bash

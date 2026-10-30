@@ -27,6 +27,11 @@ quality and CI.
 
 ## 1. Performance (`NFR-PERF`)
 
+Timing checks run without `-race`. Because hosted CI runners are shared and
+occasionally stall, a CI timing check that fails may be retried **once** in
+the same job; the first failure is kept as a visible warning, and a check that
+fails twice fails the build. Limits are never raised to absorb runner noise.
+
 ### NFR-PERF-001 · Startup time
 When sshelf starts with a `config.json` holding 1,000 hosts, the system shall render the interactive host list within 150 ms, without reading any secret from the OS credential store.
 
