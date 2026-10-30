@@ -167,9 +167,13 @@ Priority: Later · Status: Draft · Threats: T-9
 **SEC-CRED-009: No per-binary ACL prompts.**
 The system shall use a credential-store backend whose access does not depend on the sshelf binary's code
 signature, so that rebuilding or updating sshelf does not trigger new OS access prompts.
-Priority: MVP · Status: Draft · Threats: T-21
+Priority: MVP · Status: Implemented · Threats: T-21
 - AC1: Release checklist (manual, macOS): store a password with build N, install build N+1 (unsigned), connect.
   No Keychain dialog appears.
+- AC2 (automated, `TestSEC_CRED_009_BackendIsGoKeyring`): `secrets` uses go-keyring, and no cgo Keychain library is
+  linked on darwin or linux.
+- Note: AC1 cannot be automated (it needs two installed builds and the macOS Keychain UI). It is a manual step in
+  `specs/acceptance.md` and `docs/release-checklist.md`.
 - Note: a future native (cgo) backend binds the item ACL to the binary. That needs signed releases with a stable
   designated requirement before it can satisfy this requirement. That backend is `Later` (D-008).
 

@@ -25,6 +25,8 @@ jobs:
           go vet ./...
           go vet -tags devcheck ./...
           go vet -tags integration_keyring ./...
+      - name: Traceability gate (NFR-QUAL-001)
+        run: go run ./scripts/tracecheck
       - name: golangci-lint (NFR-QUAL-002)
         uses: golangci/golangci-lint-action@v9
         with:
@@ -45,11 +47,12 @@ jobs:
         with:
           go-version-file: go.mod
       - name: go test -race (NFR-PORT-001, NFR-REL-001)
-        run: go test -race -coverprofile=coverage.out ./...
+        run: go test -race -coverpkg=./... -coverprofile=coverage.out ./...
       - name: performance limits without -race (NFR-PERF-002)
         run: go test -count=1 -run 'TestNFR_PERF_' ./...
-      - name: Coverage report (NFR-QUAL-003, not gated yet)
-        run: go tool cover -func=coverage.out | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Coverage gate (NFR-QUAL-003)
+        shell: bash # -o pipefail, so a failing gate is not hidden by tee
+        run: go run ./scripts/covercheck coverage.out | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Fuzz config.json loading for 30 s (T-006)
         if: matrix.os == 'ubuntu-latest'
         run: go test -run '^$' -fuzz '^FuzzLoadConfig$' -fuzztime 30s ./internal/store

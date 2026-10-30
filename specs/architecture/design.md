@@ -383,7 +383,7 @@ removed in revision 2.
 ### 4.3 Secrets and safety (`ARCH-SEC`)
 
 **ARCH-SEC-001**: The system shall not write any secret to the config file, known_hosts, logs, crash reports, environment variables or temporary files.
-- Priority: MVP · Status: Draft
+- Priority: MVP · Status: Implemented
 - Acceptance: An integration test with `secrets.MemStore` holding a canary password and key does a connect, an edit and a save, then scans the config dir, the log dir, the temp dir and `os.Environ()`. The canary appears zero times.
 
 **ARCH-SEC-002**: The system shall give the SSH layer credentials only through the `CredentialSource` interface, and `internal/sshclient` shall not import `internal/secrets` or `internal/store`.
@@ -427,8 +427,9 @@ removed in revision 2.
 ### 4.5 UI (`ARCH-UI`)
 
 **ARCH-UI-001**: The system shall run one root Bubble Tea model that routes messages to one active screen and a stack of modal overlays, as defined in §9.
-- Priority: MVP · Status: Draft
-- Acceptance: A teatest walk-through (start, list, edit, save, connect, TOFU, stub session, back) matches its golden files.
+- Priority: MVP · Status: Implemented
+- Acceptance: A walk-through (start, list, edit, save, connect, TOFU, stub session, back) matches its golden files. It drives the root model directly, the way `tea.Program` does, without `teatest` (see the golden convention in `tasks.md`).
+- Note: a modal that answers a running connection attempt (auth prompt, TOFU) is popped in the `Update` that delivers the answer, not when its `DoneMsg` arrives, so a late `DoneMsg` can never close the next prompt.
 
 **ARCH-UI-002**: The system shall perform all I/O (config, keychain, SSH, filesystem) in `tea.Cmd` values or goroutines that report back with messages, never inside `Update`.
 - Priority: MVP · Status: Implemented

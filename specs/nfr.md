@@ -152,10 +152,10 @@ The system shall have no data races and no leaked goroutines in its test suite.
 ## 8. Quality (`NFR-QUAL`)
 
 ### NFR-QUAL-001 · Tests traced to requirements
-The system shall have, for every `MVP` requirement (`FR-*`, `SEC-*`, `ARCH-*`, `NFR-*`), at least one automated test whose name contains the requirement ID with `-` replaced by `_`, or an entry in the manual release checklist.
+The system shall have, for every `MVP` requirement (`FR-*`, `SEC-*`, `ARCH-*`, `NFR-*`), status `Implemented` and at least one automated test that references the requirement ID (usually in its name, with `-` replaced by `_`), unless `tasks.md` lists the requirement as manual-only.
 
-- **Priority:** MVP · **Status:** Draft
-- **Check:** `scripts/tracecheck` extracts the MVP IDs from the spec files and the test names from `go test -list . ./...`, plus the IDs in `docs/release-checklist.md`. CI fails on any MVP ID with neither.
+- **Priority:** MVP · **Status:** Implemented
+- **Check:** `go run ./scripts/tracecheck` (a CI step, wrapped by `TestNFR_QUAL_001_EveryMVPIDTraced`) reads the MVP IDs and their status from the spec files and searches every `*_test.go` file (outside `testdata`) for `FR-X-NNN` or `FR_X_NNN`. It fails on an MVP ID that is not `Implemented`, is missing from the traceability matrix, or is referenced by no test and not listed under "Manual-only requirements" in `tasks.md`. Manual-only steps are in `specs/acceptance.md`.
 
 ### NFR-QUAL-002 · Static analysis
 The system shall pass `gofmt`, `go vet`, `golangci-lint` (with at least `staticcheck`, `errcheck`, `gosec` and `govet` enabled) and `govulncheck` on every pull request.
@@ -166,8 +166,8 @@ The system shall pass `gofmt`, `go vet`, `golangci-lint` (with at least `staticc
 ### NFR-QUAL-003 · Test coverage
 The system shall keep statement coverage at 80 % or more in `domain`, `store`, `secrets`, `paths`, `sshclient`, `sshconfig` and `search`, and at 70 % or more across the module.
 
-- **Priority:** MVP · **Status:** Draft
-- **Check:** CI runs `go test -coverprofile` and a script reads `go tool cover -func` output and fails below either threshold.
+- **Priority:** MVP · **Status:** Implemented
+- **Check:** CI runs `go test -race -coverpkg=./... -coverprofile=coverage.out ./...` and `go run ./scripts/covercheck coverage.out`, which fails below either threshold. `-coverpkg` counts a statement as covered when any package's tests run it (the screens and modals are tested through the root model in `internal/ui`). The test helpers under `internal/testutil` are left out of the module total.
 
 ---
 

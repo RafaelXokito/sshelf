@@ -23,7 +23,8 @@ implemented, and code changes reference the requirement IDs they satisfy.
 | `security/credential-storage.md` | `config.json` format, OS credential store (keychain) library and item naming, `secrets` API |
 | `architecture/design.md` | Package layout, data model, UI state machine, SSH session flow (`ARCH-*`) |
 | `nfr.md` | Non-functional requirements (`NFR-*`): performance, portability, UX, quality |
-| `tasks.md` | Milestones and implementation tasks (`T-*`) |
+| `tasks.md` | Milestones and implementation tasks (`T-*`), traceability matrix, manual-only requirements |
+| `acceptance.md` | Manual MVP acceptance checklist (macOS and Linux) |
 | `glossary.md` | Shared terms |
 | `decisions.md` | Binding product-owner decisions (`D-*`); wins any conflict |
 
