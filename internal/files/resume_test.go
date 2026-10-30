@@ -150,6 +150,12 @@ func TestFR_SFTP_017_UploadResumesFromCheckpoint(t *testing.T) {
 	if cp.off < 16*mib || cp.off%checkpointEvery != 0 {
 		t.Fatalf("checkpoint at %d", cp.off)
 	}
+	// The dropped connection's request server may still apply writes
+	// that were in flight; count from when it has let go of the part
+	// file, or a late 32 KiB write is counted as sent again (seen on CI).
+	if !srv.WaitFor(5*time.Second, func() bool { return srv.SFTPOpenHandles() == 0 }) {
+		t.Fatalf("%d handles still open after the drop", srv.SFTPOpenHandles())
+	}
 	before := srv.SFTPBytesWritten(part)
 	attach(t, b, srv)
 	ts = waitSettled(t, b)

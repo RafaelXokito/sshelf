@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -331,6 +332,7 @@ func TestFR_SFTP_018_E2EResumeAfterDrop(t *testing.T) {
 		r.typeKeys("jc")
 		r.waitText(off, "1 transfer paused: connection lost · r reconnect")
 		r.waitText(off, "✕]") // the tab bar marks the lost connection
+		r.waitHandlesClosed()
 		first := r.srv.SFTPBytesRead("zero.bin")
 		r.typeKeys("r")
 		r.waitFile(filepath.Join(r.local, "zero.bin"), zeroSum(size), 60*time.Second)
@@ -351,7 +353,21 @@ func TestFR_SFTP_018_E2EResumeAfterDrop(t *testing.T) {
 		writeRandom(t, r.remote("hello.txt"), 10)
 		off := r.openSFTPHost("hello.txt")
 		r.typeKeys("\tjc")
-		r.waitText(off, "1 transfer paused: connection lost · r reconnect")
+		// sshtest closes the TCP connection in the middle of the upload's
+		// stream. On macOS the client then sometimes sees nothing until
+		// TCP keepalive (Go's default, 15 s idle) draws a reset: a
+		// goroutine dump during the stall shows sshelf's connection
+		// reader waiting in read and every write waiting for a reply, and
+		// the debug log has "connection reset by peer" 15 s after the
+		// drop (seen on CI and under load locally). A silent drop is
+		// detected that way on a real network too (ssh keepalives are
+		// v1, FR-CONN-009), so allow for it here.
+		paused := "1 transfer paused: connection lost · r reconnect"
+		r.srv.WaitFor(40*time.Second, func() bool {
+			return strings.Contains(screenText(r.out.From(off)), whitespace.ReplaceAllString(paused, ""))
+		})
+		r.waitText(off, paused)
+		r.waitHandlesClosed()
 		first := r.srv.SFTPBytesWritten(part)
 		r.typeKeys("r")
 		r.waitFile(r.remote("up.bin"), sum, 60*time.Second)
@@ -362,6 +378,18 @@ func TestFR_SFTP_018_E2EResumeAfterDrop(t *testing.T) {
 		r.quitAll("Quit and close 1 tab?")
 		r.waitDisconnects(2)
 	})
+}
+
+// waitHandlesClosed waits until sshtest's request server for the dropped
+// connection has applied the requests that were in flight and closed its
+// files, so that byte counts read afterwards count only what the
+// reconnect sends (a late write counted as resent failed the 48 MiB
+// bound under load).
+func (r *sftpRun) waitHandlesClosed() {
+	r.t.Helper()
+	if !r.srv.WaitFor(5*time.Second, func() bool { return r.srv.SFTPOpenHandles() == 0 }) {
+		r.t.Fatalf("%d SFTP handles still open after the drop", r.srv.SFTPOpenHandles())
+	}
 }
 
 // bigFile is a virtual remote file large enough to still be downloading
