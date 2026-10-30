@@ -122,7 +122,15 @@ type sessionCloser struct {
 
 func (c sessionCloser) Close() error {
 	_ = c.WriteCloser.Close()
-	return c.s.Close()
+	// Closing stdin sends EOF, and the server may end the subsystem and
+	// close the channel before this close is sent; x/crypto then reports
+	// io.EOF for a channel that is closed as asked. Closing a tab
+	// reported that EOF as an error (TestSEC_SFTP_005_RemovedOnEveryPath
+	// on CI).
+	if err := c.s.Close(); err != nil && !errors.Is(err, io.EOF) {
+		return err
+	}
+	return nil
 }
 
 // countingReader counts the bytes the browse channel delivers and
