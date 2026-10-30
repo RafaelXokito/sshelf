@@ -1692,7 +1692,7 @@ type Browser interface {
 	ConnID() uint64
 	Start(side Side) string                                   // FR-SFTP-005
 	List(ctx context.Context, side Side, dir string) (Listing, error)
-	Count(ctx context.Context, side Side, dir string) (int, error) // stops at 10,001 for the view, 100,001 for delete
+	Count(ctx context.Context, side Side, dir string) (int, error) // the view: dir's own entries, stops at 10,001; delete: every entry below (no links, 64 levels), stops at 100,001
 	Stat(ctx context.Context, side Side, path string) (Entry, error) // follows a link (enter, e)
 	Rename(ctx context.Context, side Side, dir, from, to string) error
 	Mkdir(ctx context.Context, side Side, dir, name string) error

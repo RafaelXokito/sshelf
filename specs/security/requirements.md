@@ -476,7 +476,7 @@ When the system creates, writes, renames or deletes a local file or directory fo
 fallback (FR-SFTP-019) or a pane operation, it shall resolve the path under the target directory opened as an
 `os.Root`, shall create files with `O_CREATE|O_EXCL` and open existing part files with `O_NOFOLLOW`, and shall never
 write through a symbolic link.
-Priority: M3 · Status: Draft · Threats: T-22, T-23 · Source: D-020
+Priority: M3 · Status: Implemented · Threats: T-22, T-23 · Source: D-020
 - AC1: With `notes.txt` in the download folder being a symlink to a file outside it, downloading `notes.txt` and
   choosing Overwrite replaces the link with a regular file; the link's former target is byte-for-byte unchanged.
 - AC2: With `photos` in the download folder being a symlink to another directory, a recursive download of a remote
