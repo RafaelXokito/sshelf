@@ -592,6 +592,10 @@ whole file system; `WithServerWorkingDirectory` is not a chroot) and
 7. Times are SFTP v3 attributes: whole seconds. `Client.Close` closes only its
    subsystem channel, never the `*ssh.Client`, which shared connections need
    (ADR-017).
+8. **Status messages are quoted, not cleaned.** `StatusError.Error()` is
+   `sftp: %q (code)`: the server's message is Go-quoted, so control bytes
+   arrive as escape text (`\x1b]52;…`) and a long message is not cut.
+   SEC-SFTP-008 still sanitises, folds and cuts it to 80 columns.
 
 **Test server.** sshtest serves `sftp` subsystem requests with
 `NewRequestServer` and a `Handlers` implementation over an `os.Root` opened
@@ -1021,8 +1025,8 @@ removed in revision 2.
 - Acceptance: One test per command. `flood 10M` sends exactly 10 MiB; `stream 100K` paces output at 100 KB/s ± 10 %; `modes 1000,1006` enables those modes; `query` sends `ESC[c`, `ESC[6n` and an OSC 11 colour query and records the replies; `hostile` sends the corpus of ARCH-SESS-011; `echo-hex` echoes each received byte as hex so tests can assert the exact encoding of keys, pastes and mouse events.
 
 **ARCH-TEST-004**: The system's test SSH server shall serve the `sftp` subsystem from a temp directory through `sftp.NewRequestServer` with handlers confined by `os.Root`, and shall offer a hostile mode and fault injection for SFTP.
-- Priority: M3 · Status: Draft · Source: ADR-016, FR-SFTP-017, SEC-SFTP-001, SEC-SFTP-004
-- Acceptance: One test per option. `WithSFTP(dir)` serves `dir` with a home of `/home/pi` mapped inside it, records each `subsystem` request and counts bytes read and written per file; a client cannot `Lstat` or open anything outside `dir`, through `..` or a symlink. `WithSFTPHostile(...)` lists the SEC-SFTP-001 names, a 150,000-entry directory, a 70-level chain, a file that returns data past its size, and status messages with escapes. `WithSFTPFault(after N bytes: drop the connection | fail the request)` fires once per configured file. `WithoutSFTP()` refuses the subsystem, and `WithMaxSessions(n)` refuses channels past `n`. `WithSFTPZeroFile(name, size)` serves a virtual file of zeros for memory tests. `sshtestd` gains `-sftp DIR`.
+- Priority: M3 · Status: Implemented · Source: ADR-016, FR-SFTP-017, SEC-SFTP-001, SEC-SFTP-004
+- Acceptance: One test per option. `WithSFTP(dir)` serves `dir` as the remote `/`, with the home `/home/pi` at `dir/home/pi` (the start directory), records each `subsystem` request and counts bytes read and written per file; a client cannot `Lstat` or open anything outside `dir`, through `..` or a symlink. `WithSFTPHostile(...)` lists the SEC-SFTP-001 names, a 150,000-entry directory, a 70-level chain, a file that returns data past its size, and status messages with escapes. `WithSFTPFault(after N bytes: drop the connection | fail the request)` fires once per configured file. `WithoutSFTP()` refuses the subsystem, and `WithMaxSessions(n)` refuses channels past `n`. `WithSFTPZeroFile(name, size)` serves a virtual file of zeros for memory tests. `sshtestd` gains `-sftp DIR`.
 
 ### 4.7 SFTP and transfers (`ARCH-SFTP`)
 

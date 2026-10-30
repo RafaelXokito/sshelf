@@ -34,11 +34,11 @@ type AuthAttempt struct {
 type Request struct {
 	Conn    int    // 1-based connection number
 	Channel int    // 1-based channel number within the connection; 0 for global requests
-	Type    string // "session" (channel open), "pty-req", "window-change", "env", "shell", "exec", or a global request name
+	Type    string // "session" (channel open), "session-refused" (WithMaxSessions), "pty-req", "window-change", "env", "shell", "exec", "subsystem", or a global request name
 	Term    string // pty-req
 	Width   int    // pty-req, window-change: columns
 	Height  int    // pty-req, window-change: rows
-	Name    string // env
+	Name    string // env; subsystem: the subsystem name
 	Value   string // env
 	Command string // exec
 }
@@ -140,6 +140,9 @@ type Server struct {
 	handler   Handler
 	port      int // 0: a random free port
 
+	sftp        *sftpConfig // nil: no sftp subsystem
+	maxSessions int         // 0: unlimited
+
 	wg sync.WaitGroup
 
 	mu       sync.Mutex
@@ -151,6 +154,12 @@ type Server struct {
 	requests []Request
 	closes   []Request
 	received map[[2]int][]byte
+
+	sftpRead       map[string]int64
+	sftpWritten    map[string]int64
+	sftpHandles    int
+	sftpWriters    int
+	sftpMaxWriters int
 }
 
 // New starts a server for a test and closes it when the test ends.
@@ -173,6 +182,9 @@ func Start(opts ...Option) (*Server, error) {
 		handler:   Shell,
 		conns:     map[int]net.Conn{},
 		received:  map[[2]int][]byte{},
+
+		sftpRead:    map[string]int64{},
+		sftpWritten: map[string]int64{},
 	}
 	for _, o := range opts {
 		if err := o(s); err != nil {
@@ -341,21 +353,42 @@ func (s *Server) serveConn(c numberedConn) {
 		}
 	}()
 	nch := 0
+	var openMu sync.Mutex
+	open := 0
 	for nc := range chans {
 		if nc.ChannelType() != "session" {
 			_ = nc.Reject(ssh.UnknownChannelType, "sshtest: only session channels")
+			continue
+		}
+		openMu.Lock()
+		full := s.maxSessions > 0 && open >= s.maxSessions
+		if !full {
+			open++
+		}
+		openMu.Unlock()
+		if full {
+			s.record(Request{Conn: c.n, Type: "session-refused"})
+			_ = nc.Reject(ssh.Prohibited, "sshtest: too many sessions")
 			continue
 		}
 		nch++
 		s.record(Request{Conn: c.n, Channel: nch, Type: "session"})
 		ch, chReqs, err := nc.Accept()
 		if err != nil {
+			openMu.Lock()
+			open--
+			openMu.Unlock()
 			continue
 		}
 		sess := &Session{ch: ch, srv: s, conn: c.n, channel: nch, env: map[string]string{}}
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			defer func() {
+				openMu.Lock()
+				open--
+				openMu.Unlock()
+			}()
 			sess.serve(chReqs)
 		}()
 	}
@@ -573,12 +606,31 @@ func (ss *Session) serve(reqs <-chan *ssh.Request) {
 			ss.started = true
 			ss.command = rec.Command
 			ss.mu.Unlock()
+		case "subsystem":
+			var p struct{ Name string }
+			if ssh.Unmarshal(r.Payload, &p) != nil {
+				ok = false
+				break
+			}
+			rec.Name = p.Name
+			ss.mu.Lock()
+			ok = !ss.started && p.Name == "sftp" && ss.srv.sftpOn()
+			ss.started = true
+			ss.mu.Unlock()
 		default:
 			ok = false
 		}
 		ss.srv.record(rec)
 		if r.WantReply {
 			_ = r.Reply(ok, nil)
+		}
+		if ok && r.Type == "subsystem" {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				ss.srv.serveSFTP(ss.ch, ss.conn)
+				_ = ss.ch.Close()
+			}()
 		}
 		if ok && (r.Type == "shell" || r.Type == "exec") {
 			wg.Add(1)

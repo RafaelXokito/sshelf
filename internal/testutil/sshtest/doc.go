@@ -8,5 +8,10 @@
 // version, every auth attempt in order, every request, every byte a
 // handler reads and every channel and connection close, and can drop its
 // connections on demand.
+//
+// M3 (ARCH-TEST-004, sftp.go): WithSFTP serves the sftp subsystem from a
+// directory through pkg/sftp's request server over an os.Root, with the
+// hostile mode, fault injection, virtual zero files, WithoutSFTP,
+// WithMaxSessions, per-file byte counters and the open-handle count.
 // cmd/sshtestd runs it as a standalone server for demos.
 package sshtest

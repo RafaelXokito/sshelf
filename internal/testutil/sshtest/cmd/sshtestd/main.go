@@ -2,7 +2,7 @@
 // It prints its address, a known_hosts line and the path of a demo private
 // key that every user name can log in with. Stop it with Ctrl+C.
 //
-//	go run ./internal/testutil/sshtest/cmd/sshtestd [-dir DIR] [-port N] [-password PW [-otp CODE]]
+//	go run ./internal/testutil/sshtest/cmd/sshtestd [-dir DIR] [-port N] [-password PW [-otp CODE]] [-sftp DIR]
 //
 // With -dir, the host key and demo key are kept in DIR and reused, so the
 // known_hosts line stays valid across runs. With -port the address stays
@@ -13,6 +13,10 @@
 // instead, followed by a second round that asks for CODE, as a server
 // with a second factor does. Neither is ever a real secret: this is a
 // demo server on 127.0.0.1.
+//
+// With -sftp, the sftp subsystem serves DIR as "/" with the home
+// directory /home/pi inside it (DIR/home/pi, created if missing), for the
+// M3 acceptance run (ARCH-TEST-004).
 package main
 
 import (
@@ -37,18 +41,19 @@ func main() {
 	port := flag.Int("port", 0, "port on 127.0.0.1 (default: a free port)")
 	password := flag.String("password", "", "also accept password authentication with this password, for any user")
 	otp := flag.String("otp", "", "with -password: ask for the password and then this one-time code through keyboard-interactive, instead of password authentication")
+	sftpDir := flag.String("sftp", "", "serve the sftp subsystem from this directory (home: <DIR>/home/pi)")
 	flag.Parse()
 	if *otp != "" && *password == "" {
 		fmt.Fprintln(os.Stderr, "sshtestd: -otp needs -password")
 		os.Exit(2)
 	}
-	if err := run(*dir, *port, *password, *otp); err != nil {
+	if err := run(*dir, *port, *password, *otp, *sftpDir); err != nil {
 		fmt.Fprintln(os.Stderr, "sshtestd:", err)
 		os.Exit(1)
 	}
 }
 
-func run(dir string, port int, password, otp string) error {
+func run(dir string, port int, password, otp, sftpDir string) error {
 	if dir == "" {
 		d, err := os.MkdirTemp("", "sshtestd-")
 		if err != nil {
@@ -86,6 +91,10 @@ func run(dir string, port int, password, otp string) error {
 	}
 	if port != 0 {
 		opts = append(opts, sshtest.WithPort(port))
+	}
+	if sftpDir != "" {
+		opts = append(opts, sshtest.WithSFTP(sftpDir))
+		auth += "; sftp subsystem serving " + sftpDir
 	}
 	srv, err := sshtest.Start(opts...)
 	if err != nil {
