@@ -160,9 +160,6 @@ func (m Model) updateSFTP(msg tea.Msg) (Model, tea.Cmd, bool) {
 		var cmd tea.Cmd
 		st.view, cmd = st.view.Update(msg)
 		return m, cmd, true
-
-	case sftpview.EditRequestMsg:
-		return m, nil, true // edit locally arrives with T-055
 	}
 	return m, nil, false
 }

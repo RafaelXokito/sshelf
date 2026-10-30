@@ -76,6 +76,9 @@ func FormatTime(t, now time.Time) string {
 	return t.Format("2006-01-02")
 }
 
+// ErrText is an error as the progress line shows it (errText).
+func ErrText(err error) string { return errText(err) }
+
 // errText is an error as the progress line shows it: sanitised, with the
 // common file-system errors in words (FR-SFTP-024, SEC-SFTP-008).
 func errText(err error) string {

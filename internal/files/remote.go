@@ -496,6 +496,19 @@ func (r *RemoteFS) stat(p string) (fs.FileInfo, error) {
 	return fi, remoteErr(err)
 }
 
+// realPath resolves p, a link included, with the server's realpath. The
+// result must be an absolute path.
+func (r *RemoteFS) realPath(p string) (string, error) {
+	rp, err := r.transfer.RealPath(p)
+	if err != nil {
+		return "", remoteErr(err)
+	}
+	if !path.IsAbs(rp) {
+		return "", &ServerError{Msg: "realpath: not an absolute path", Err: fs.ErrInvalid}
+	}
+	return path.Clean(rp), nil
+}
+
 // mkdir creates the directory p with the server's default mode.
 func (r *RemoteFS) mkdir(p string) error { return remoteErr(r.transfer.Mkdir(p)) }
 

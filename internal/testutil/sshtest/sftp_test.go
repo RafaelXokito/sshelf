@@ -436,3 +436,33 @@ func TestARCH_TEST_004_ByteCounters(t *testing.T) {
 		t.Fatal("counter for an unused file")
 	}
 }
+
+// TestARCH_TEST_004_RealpathFollowsLinks: realpath resolves links in the
+// path as OpenSSH's does (edit-locally, FR-SFTP-019), keeps names that do
+// not exist, and stops a loop.
+func TestARCH_TEST_004_RealpathFollowsLinks(t *testing.T) {
+	srv := sftpServer(t, WithSFTP(t.TempDir()))
+	if err := os.MkdirAll(srv.SFTPDir("d"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for link, target := range map[string]string{"rel": "d/f.txt", "abs": SFTPHome + "/d", "up": "../pi/rel", "loop": "loop"} {
+		if err := os.Symlink(target, srv.SFTPDir(link)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	c := sftpClient(t, srv)
+	for in, want := range map[string]string{
+		"rel":         SFTPHome + "/d/f.txt",
+		"abs/x.txt":   SFTPHome + "/d/x.txt",
+		"up":          SFTPHome + "/d/f.txt",
+		"missing/a":   SFTPHome + "/missing/a",
+		"/home/pi/up": SFTPHome + "/d/f.txt",
+	} {
+		if got, err := c.RealPath(in); err != nil || got != want {
+			t.Errorf("RealPath(%q) = %q, %v, want %q", in, got, err, want)
+		}
+	}
+	if got, err := c.RealPath("loop"); err == nil {
+		t.Errorf("RealPath(loop) = %q, want an error", got)
+	}
+}

@@ -104,10 +104,50 @@ const (
 	Disconnected = files.Disconnected
 )
 
+// EditCopy is one file being edited locally (FR-SFTP-019, design §8.10).
+type EditCopy = files.EditCopy
+
+// EditMaxSize is the largest file edit-locally takes.
+const EditMaxSize = files.EditMaxSize
+
+// EditOutcome is how one step of an edit ended.
+type EditOutcome = files.EditOutcome
+
+// Edit outcomes.
+const (
+	EditUnchanged     = files.EditUnchanged
+	EditSaved         = files.EditSaved
+	EditSavedAs       = files.EditSavedAs
+	EditRemoteChanged = files.EditRemoteChanged
+	EditRemoteGone    = files.EditRemoteGone
+	EditDiscarded     = files.EditDiscarded
+)
+
+// EditResult is the outcome of EditFinish or EditResolve.
+type EditResult = files.EditResult
+
+// EditChoice is the user's answer when an edit could not simply be
+// uploaded (FR-SFTP-019, FR-SFTP-020).
+type EditChoice = files.EditChoice
+
+// Edit choices.
+const (
+	EditOverwrite  = files.EditOverwrite
+	EditKeepRemote = files.EditKeepRemote
+	EditSaveRemote = files.EditSaveRemote
+	EditSaveLocal  = files.EditSaveLocal
+	EditDiscard    = files.EditDiscard
+	EditRetry      = files.EditRetry
+)
+
+// LocalEditSuffix ends the name an edit is saved under when it is not
+// uploaded over the remote file.
+const LocalEditSuffix = files.LocalEditSuffix
+
 // Browser is the UI-facing handle of one SFTP tab (design §8.9),
 // implemented by *files.Browser; UI tests use apptest.FakeBrowser. Every
 // method may block on I/O, so the UI calls them from commands only
-// (ARCH-UI-002). The edit-locally methods arrive with T-055.
+// (ARCH-UI-002).
 type Browser interface {
 	ConnID() uint64
 	// Start is the side's starting directory (FR-SFTP-005).
@@ -138,6 +178,16 @@ type Browser interface {
 	Clear()
 	// Updates delivers coalesced state changes (ARCH-SFTP-003).
 	Updates() <-chan struct{}
+
+	// EditFetch downloads the remote file name in dir into a private
+	// temporary copy for the editor (design §8.10).
+	EditFetch(ctx context.Context, dir, name string) (*EditCopy, error)
+	// EditFinish uploads the copy if it changed, once the editor exited
+	// with status 0, or reports that the remote file changed meanwhile.
+	EditFinish(ctx context.Context, c *EditCopy) (EditResult, error)
+	// EditResolve ends the edit with the user's choice; localDir is the
+	// local pane's directory, for EditSaveLocal.
+	EditResolve(ctx context.Context, c *EditCopy, choice EditChoice, localDir string) (EditResult, error)
 
 	State() ConnState
 	// Done is closed when the connection drops; after a reconnect it is

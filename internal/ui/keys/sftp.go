@@ -50,6 +50,18 @@ var (
 	ConflictAll       = key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "apply to all"))
 )
 
+// Edit-locally modals (FR-SFTP-019, FR-SFTP-020). Enter answers neither:
+// the remote-changed question has no default, and Esc keeps the remote
+// file; the upload-failed question waits for a choice.
+var (
+	EditOverwrite = key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "overwrite"))
+	EditKeep      = key.NewBinding(key.WithKeys("k", "esc"), key.WithHelp("k/esc", "keep remote"))
+	EditSaveMine  = key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "save mine"))
+	EditRetry     = key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "retry"))
+	EditSaveLocal = key.NewBinding(key.WithKeys("l"), key.WithHelp("l", "save locally"))
+	EditDiscard   = key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "discard"))
+)
+
 // SFTPPaneKeys are the panes' bindings in help order; the footer shows
 // them from the left, as many as fit.
 func SFTPPaneKeys() []key.Binding {
@@ -70,6 +82,8 @@ func sftpMaps() []Map {
 		{Name: "sftp disconnected", Bindings: append(SFTPDisconnectedKeys(), Up, Down, PageUp, PageDown, First, Last, OpenDir, ParentDir, HomeDir, SwitchPane, Prefix)},
 		{Name: "transfers", Bindings: []key.Binding{Up, Down, TransferCancel, TransferRetry, TransferAnswer, TransferClear, TransfersBack, Prefix}},
 		{Name: "conflict", Bindings: []key.Binding{ConflictOverwrite, ConflictSkip, ConflictKeepBoth, ConflictAll}},
+		{Name: "edit conflict", Bindings: []key.Binding{EditOverwrite, EditKeep, EditSaveMine}},
+		{Name: "edit upload failed", Bindings: []key.Binding{EditRetry, EditSaveLocal, EditDiscard}},
 		{Name: "input", Bindings: append([]key.Binding{Submit, Cancel}, textInput...)},
 	}
 }

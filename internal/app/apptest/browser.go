@@ -40,6 +40,9 @@ type FakeBrowser struct {
 	state     app.ConnState
 	lists     int
 	closes    int
+	editErr   error      // EditFetch's error
+	editSteps []EditStep // what EditFinish and EditResolve return next
+	edits     []string   // the recorded edit calls
 
 	updates chan struct{}
 	done    chan struct{}
@@ -507,6 +510,83 @@ func (f *FakeBrowser) Close() error {
 	defer f.mu.Unlock()
 	f.closes++
 	return nil
+}
+
+// EditStep is what one EditFinish or EditResolve call returns.
+type EditStep struct {
+	Result app.EditResult
+	Err    error
+}
+
+// SetEditErr makes EditFetch fail with err; nil clears it.
+func (f *FakeBrowser) SetEditErr(err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.editErr = err
+}
+
+// QueueEdit sets what the next EditFinish and EditResolve calls return,
+// in order. Without a step, EditFinish reports EditUnchanged and
+// EditResolve EditDiscarded.
+func (f *FakeBrowser) QueueEdit(steps ...EditStep) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.editSteps = append(f.editSteps, steps...)
+}
+
+// EditCalls returns the recorded edit calls: "fetch <path>", "finish
+// <name>" and "resolve <choice> <name> <localDir>".
+func (f *FakeBrowser) EditCalls() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.edits)
+}
+
+// editStep pops the next step, or returns def.
+func (f *FakeBrowser) editStep(def app.EditOutcome) (app.EditResult, error) {
+	if len(f.editSteps) == 0 {
+		return app.EditResult{Outcome: def}, nil
+	}
+	s := f.editSteps[0]
+	f.editSteps = f.editSteps[1:]
+	return s.Result, s.Err
+}
+
+// EditFetch implements app.Browser: it records the call and returns a
+// copy whose Path does not exist; UI tests never run an editor on it.
+func (f *FakeBrowser) EditFetch(_ context.Context, dir, name string) (*app.EditCopy, error) {
+	f.check("EditFetch")
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	p := path.Join(dir, name)
+	f.edits = append(f.edits, "fetch "+p)
+	if err := f.connected(app.Remote); err != nil {
+		return nil, err
+	}
+	if f.editErr != nil {
+		return nil, f.editErr
+	}
+	return &app.EditCopy{Name: name, Path: path.Join("/fake-tmp/sshelf-edit-1", name), Remote: p}, nil
+}
+
+// EditFinish implements app.Browser.
+func (f *FakeBrowser) EditFinish(_ context.Context, c *app.EditCopy) (app.EditResult, error) {
+	f.check("EditFinish")
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.edits = append(f.edits, "finish "+c.Name)
+	return f.editStep(app.EditUnchanged)
+}
+
+// EditResolve implements app.Browser.
+func (f *FakeBrowser) EditResolve(_ context.Context, c *app.EditCopy, choice app.EditChoice, localDir string) (app.EditResult, error) {
+	f.check("EditResolve")
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	names := map[app.EditChoice]string{app.EditOverwrite: "overwrite", app.EditKeepRemote: "keep", app.EditSaveRemote: "save-remote",
+		app.EditSaveLocal: "save-local", app.EditDiscard: "discard", app.EditRetry: "retry"}
+	f.edits = append(f.edits, "resolve "+names[choice]+" "+c.Name+" "+localDir)
+	return f.editStep(app.EditDiscarded)
 }
 
 // ErrFake is a convenient error for tests.

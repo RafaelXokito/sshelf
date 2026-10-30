@@ -1222,7 +1222,7 @@ If an SFTP tab's connection drops, then the system shall pause its running and q
 ### FR-SFTP-019 · Edit a remote file locally
 When the user presses `e` on a remote file, the system shall download it to a private temporary copy, suspend its own display, run the user's editor on that copy, and when the editor exits, upload the copy back if it changed, then delete the copy.
 
-- **Priority:** M3 · **Status:** Draft · **Source:** D-018, D-019
+- **Priority:** M3 · **Status:** Implemented · **Source:** D-018, D-019
 - **Acceptance:**
   - The editor is the first non-empty of `$VISUAL`, `$EDITOR` and `vi`. A value with spaces is split into words (`code -w`); there is no shell. The copy's path is the last argument.
   - The copy keeps the remote file's name, in a new directory with mode 0700, with mode 0600 (SEC-SFTP-005).
@@ -1237,7 +1237,7 @@ When the user presses `e` on a remote file, the system shall download it to a pr
 ### FR-SFTP-020 · Remote file changed while editing
 If the remote file's size or modification time differs, when the editor exits, from what sshelf recorded at the download, then the system shall ask whether to overwrite the remote file, keep the remote file and discard the edit, or save the edit as `<name>.local-edit` next to the remote file.
 
-- **Priority:** M3 · **Status:** Draft · **Source:** D-019
+- **Priority:** M3 · **Status:** Implemented · **Source:** D-019
 - **Acceptance:**
   - The modal "notes.txt changed on the server while you edited it. [o] Overwrite · [k] Keep remote · [s] Save mine as notes.txt.local-edit" defaults to nothing: Esc is the same as Keep remote, and Enter does nothing.
   - "Save mine" uploads to `notes.txt.local-edit` (or `notes.txt.local-edit (1)` if that exists) in the same remote directory.

@@ -16,6 +16,7 @@ import (
 	xterm "golang.org/x/term"
 
 	"github.com/RafaelXokito/sshelf/internal/app"
+	"github.com/RafaelXokito/sshelf/internal/files"
 	"github.com/RafaelXokito/sshelf/internal/paths"
 	"github.com/RafaelXokito/sshelf/internal/term"
 	"github.com/RafaelXokito/sshelf/internal/ui"
@@ -94,6 +95,7 @@ func run(args []string) (code int) {
 	term.SetPanicReporter(func(r any, stack []byte) { _, _ = crash.report(r, stack) })
 	defer func() {
 		if r := recover(); r != nil {
+			files.RemoveEditCopies() // no edit-locally copy outlives a crash (SEC-SFTP-005)
 			code = crash.crash(r, debug.Stack())
 		}
 	}()
@@ -118,6 +120,7 @@ func run(args []string) (code int) {
 			m.CloseTabs()
 		}
 	}
+	files.RemoveEditCopies()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "sshelf:", err)
 		return 1

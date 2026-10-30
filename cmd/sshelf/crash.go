@@ -118,6 +118,8 @@ func (g guard) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		term.Fault("update")
 	case ui.SessionUpdateMsg:
 		term.Fault("session-update") // a crash while a session is open
+	case ui.EditFetchedMsg:
+		term.Fault("edit-fetched") // a crash while an edit copy exists (SEC-SFTP-005)
 	}
 	m, cmd := g.model.Update(msg)
 	return guard{model: m}, guardCmd(cmd)

@@ -486,8 +486,10 @@ func (h *sftpFS) Lstat(r *sftp.Request) (sftp.ListerAt, error) {
 // Readlink returns a link's target as stored.
 func (h *sftpFS) Readlink(p string) (string, error) { return h.root.Readlink(rel(p)) }
 
-// RealPath resolves p against the start directory, without following
-// links; the hostile mode answers "." with its Realpath.
+// RealPath resolves p against the start directory and follows the links
+// in it, as OpenSSH's realpath does (edit-locally resolves a link with it,
+// FR-SFTP-019); names that do not exist are kept. The hostile mode
+// answers "." with its Realpath.
 func (h *sftpFS) RealPath(p string) (string, error) {
 	if rp := h.cfg.hostile.Realpath; rp != "" && (p == "." || p == "") {
 		return rp, nil
@@ -495,7 +497,32 @@ func (h *sftpFS) RealPath(p string) (string, error) {
 	if !path.IsAbs(p) {
 		p = path.Join(SFTPHome, p)
 	}
-	return path.Clean(p), nil
+	out, todo := "/", strings.Split(path.Clean(p), "/")
+	for hops := 0; len(todo) > 0; {
+		name := todo[0]
+		todo = todo[1:]
+		if name == "" {
+			continue
+		}
+		next := path.Join(out, name)
+		fi, err := h.root.Lstat(rel(next))
+		if err != nil || fi.Mode()&fs.ModeSymlink == 0 {
+			out = next
+			continue
+		}
+		if hops++; hops > 40 {
+			return "", fs.ErrInvalid // a loop
+		}
+		target, err := h.root.Readlink(rel(next))
+		if err != nil {
+			return "", err
+		}
+		if !path.IsAbs(target) {
+			target = path.Join(out, target)
+		}
+		out, todo = "/", append(strings.Split(path.Clean(target), "/"), todo...)
+	}
+	return out, nil
 }
 
 func (h *sftpFS) list(p string) (sftp.ListerAt, error) {

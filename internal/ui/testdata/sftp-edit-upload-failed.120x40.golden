@@ -1,0 +1,40 @@
+sshelf │ Hosts │ 1 raspberrypi4 │[2 sftp: raspberrypi4]│
+┌ Local: ~/Downloads ──────────────────────────────────────┐┌ Remote: /home/pi ────────────────────────────────────────┐
+│   ..                                                     ││   ..                                                     │
+│ ▸ photos/                            4 items Oct 29 10:12││ ▸ scripts/                          12 items Oct 29 10:12│
+│   notes.txt                             3 KB Oct 29 10:12││>  .bashrc                               4 KB Oct 29 10:12│
+│   report.pdf                          1.2 MB Oct 29 10:12││   backup.tar.gz                       840 MB Oct 29 10:12│
+│                                                          ││                                                          │
+│                                                          ││                                                          │
+│                                                          ││                                                          │
+│                                                          ││                                                          │
+│                                                          ││                                                          │
+│                                                          ││                                                          │
+│                                                          ││                                                          │
+│                                                          ││                                                          │
+│                                                          ││                                                          │
+│                                                          ││                                                          │
+│                                                          ││                                                          │
+│                                                          ││                                                          │
+│                                                          ││                                                          │
+│                                                          ││                                                          │
+│                                                          ││                                                          │
+│                                                          ││                                                          │
+│                                                          ││                                                          │
+│                                                          ││                                                          │
+│                                                          ││                                                          │
+│                                                          ││                                                          │
+│                                                          ││                                                          │
+│                                                          ││                                                          │
+│                                                          ││                                                          │
+
+╭────────────────────────────────────────────────────╮
+│ Upload of .bashrc failed                           │
+│ permission denied                                  │
+│                                                    │
+│ [r] Retry                                          │
+│ [l] Save to /Users/me/Downloads/.bashrc.local-edit │
+│ [x] Discard                                        │
+╰────────────────────────────────────────────────────╯
+ ✕ .bashrc: upload failed: permission denied
+r retry • l save locally • x discard

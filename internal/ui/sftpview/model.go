@@ -552,10 +552,30 @@ func (m Model) paneKey(p *pane, k tea.KeyPressMsg) (Model, tea.Cmd) {
 	case key.Matches(k, keys.Delete):
 		return m.delete(p)
 	case key.Matches(k, keys.EditLocally):
-		if r, ok := p.current(); ok && !r.parent && p.side == app.Remote {
-			tab, dir, name := m.tab, p.dir, r.e.Name
-			return m, func() tea.Msg { return EditRequestMsg{Tab: tab, Dir: dir, Name: name} }
-		}
+		return m.edit(p)
+	}
+	return m, nil
+}
+
+// edit asks the root model to edit the remote file under the cursor
+// (FR-SFTP-019); anything else only says why not. A link is sent on: the
+// back end resolves it.
+func (m Model) edit(p *pane) (Model, tea.Cmd) {
+	r, ok := p.current()
+	switch {
+	case !ok:
+		return m, nil
+	case p.side == app.Local:
+		m.setMessage("e edits remote files; this is the local pane")
+	case r.parent || r.e.Kind == app.KindDir:
+		m.setMessage("cannot edit a directory")
+	case r.e.Kind == app.KindOther:
+		m.setMessage(displayName(r.e) + ": not a regular file")
+	case r.e.Kind == app.KindFile && r.e.Size > app.EditMaxSize:
+		m.setMessage(displayName(r.e) + ": too large to edit (over 64 MiB)")
+	default:
+		tab, dir, name := m.tab, p.dir, r.e.Name
+		return m, func() tea.Msg { return EditRequestMsg{Tab: tab, Dir: dir, Name: name} }
 	}
 	return m, nil
 }

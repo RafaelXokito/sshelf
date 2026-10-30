@@ -1,0 +1,24 @@
+sshelf │ Hosts │ 1 raspberrypi4 │[2 sftp: raspberrypi4]│
+┌ Local: ~/Downloads ──────────────────┐┌ Remote: /home/pi ────────────────────┐
+│   ..                                 ││   ..                                 │
+│ ▸ photos/                     4 items││ ▸ scripts/                   12 items│
+│   notes.txt                      3 KB││>  .bashrc                        4 KB│
+│   report.pdf                   1.2 MB││   backup.tar.gz                840 MB│
+│                                      ││                                      │
+│                                      ││                                      │
+│                                      ││                                      │
+│                                      ││                                      │
+│                                      ││                                      │
+│                                      ││                                      │
+│                                      ││                                      │
+│                                      ││                                      │
+
+╭────────────────────────────────────────────────────╮
+│ .bashrc changed on the server while you edited it. │
+│                                                    │
+│ [o] Overwrite                                      │
+│ [k] Keep remote                                    │
+│ [s] Save mine as .bashrc.local-edit                │
+╰────────────────────────────────────────────────────╯
+
+o overwrite • k/esc keep remote • s save mine

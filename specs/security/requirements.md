@@ -294,13 +294,14 @@ Priority: MVP · Status: Implemented · Threats: T-17
 - AC1: The import-rule test (`internal/archtest`, ADR-009) finds no import of `os/exec` in any sshelf package, so
   sshelf itself starts no child process that could receive a secret.
 - AC2: A dependency review confirms the keyring library uses `security -i` (stdin) for set operations.
-- **M3 revision** · Priority: M3 · Status: Draft · Source: D-019
+- **M3 revision** · Priority: M3 · Status: Implemented · Source: D-019
   - *Revised:* The system shall never pass a secret through argv or environment variables, and shall start no child
     process other than `/usr/bin/security`, invoked by `zalando/go-keyring` on macOS through stdin and stdout (D-008),
     and the user's editor for edit-locally (FR-SFTP-019), started only by `internal/ui/editor`.
   - *Acceptance:*
     - AC1: The import-rule test (`internal/archtest`, ADR-009 as revised by ADR-019) finds `os/exec` imported by
-      `internal/ui/editor` and by no other sshelf package.
+      `internal/ui/editor` and by no other sshelf package (`TestSEC_MEM_008_M3_ExecOnlyInEditor`, which replaces
+      the MVP's `TestSEC_MEM_008_NoOsExecImport`; a fixture module with `os/exec` elsewhere fails).
     - AC2: A dependency review confirms the keyring library uses `security -i` (stdin) for set operations.
     - AC3: A unit test with `SSHELF_TEST_CANARY` in the credential store, after a connect, checks that the editor
       command's `Args` are exactly the words of `$VISUAL`/`$EDITOR`/`vi` plus the temp file path, its `Env` is
@@ -518,7 +519,7 @@ Priority: M3 · Status: Draft · Threats: T-24
 When the system downloads a file for editing, it shall place it in a new directory created with mode 0700 in the
 OS temp directory and create the file with mode 0600, and shall delete the file and the directory when editing
 ends, whatever the outcome, and from the crash handler.
-Priority: M3 · Status: Draft · Threats: T-25 · Source: D-019
+Priority: M3 · Status: Implemented · Threats: T-25 · Source: D-019
 - AC1: While the fake editor runs, `stat` shows the directory 0700 and the file 0600 under `umask 000`.
 - AC2: After each of these endings the directory no longer exists: unchanged, changed and uploaded, editor exit
   status 1, editor not found, remote changed with each of the three answers, upload failed then discarded,
@@ -529,9 +530,9 @@ Priority: M3 · Status: Draft · Threats: T-25 · Source: D-019
 When the system starts the editor, it shall run the program named by the first word of `$VISUAL`, `$EDITOR` or `vi`
 directly, with the remaining words and the temp file path as separate arguments and no shell, from
 `internal/ui/editor` only.
-Priority: M3 · Status: Draft · Threats: T-26 · Source: D-019
-- AC1: A remote file named `$(touch pwned);x.txt` is edited with a fake editor; no file `pwned` is created anywhere,
-  and the editor receives the name as one argument.
+Priority: M3 · Status: Implemented · Threats: T-26 · Source: D-019
+- AC1: A file named `$(touch pwned);x.txt` is given to a fake editor (`testdata` script) through `editor.Command`; no
+  file `pwned` is created anywhere, and the editor receives the name as one argument.
 - AC2: archtest: `os/exec` is imported by `internal/ui/editor` only (SEC-MEM-008 M3 revision AC1).
 
 **SEC-SFTP-007: No file contents or paths in logs.**

@@ -19,6 +19,7 @@ import (
 	"github.com/RafaelXokito/sshelf/internal/app"
 	"github.com/RafaelXokito/sshelf/internal/domain"
 	"github.com/RafaelXokito/sshelf/internal/ui/components"
+	"github.com/RafaelXokito/sshelf/internal/ui/editor"
 	"github.com/RafaelXokito/sshelf/internal/ui/keys"
 	"github.com/RafaelXokito/sshelf/internal/ui/modals/confirm"
 	"github.com/RafaelXokito/sshelf/internal/ui/modals/connecting"
@@ -134,12 +135,18 @@ type Model struct {
 	// progressTick is its 250 ms redraw; tests replace both.
 	listenSFTP   func(num, gen int, b app.Browser, watchDone bool, stop <-chan struct{}) tea.Cmd
 	progressTick func(num int, b app.Browser) tea.Cmd
+
+	// editing is set from e until the edit ends: one edit at a time
+	// (FR-SFTP-019). runEditor runs the editor (editor.Run); tests
+	// replace it and never start a program.
+	editing   bool
+	runEditor func(path string, done func(error) tea.Msg) tea.Cmd
 }
 
 // New returns the root model. It does no I/O; Init loads the config.
 func New(svc app.Service) Model {
 	return Model{svc: svc, now: time.Now, tick: tickEverySecond, listen: listenSession, home: localHome(),
-		listenSFTP: listenBrowser, progressTick: progressTick}
+		listenSFTP: listenBrowser, progressTick: progressTick, runEditor: editor.Run}
 }
 
 // Init implements tea.Model. Besides loading the config it asks the
@@ -168,6 +175,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return next, cmd
 	}
 	if next, cmd, ok := m.updateTransfers(msg); ok {
+		return next, cmd
+	}
+	if next, cmd, ok := m.updateEdit(msg); ok {
 		return next, cmd
 	}
 	switch msg := msg.(type) {

@@ -154,6 +154,7 @@ type Server struct {
 	requests []Request
 	closes   []Request
 	received map[[2]int][]byte
+	sent     map[[2]int]int64
 
 	sftpRead       map[string]int64
 	sftpWritten    map[string]int64
@@ -182,6 +183,7 @@ func Start(opts ...Option) (*Server, error) {
 		handler:   Shell,
 		conns:     map[int]net.Conn{},
 		received:  map[[2]int][]byte{},
+		sent:      map[[2]int]int64{},
 
 		sftpRead:    map[string]int64{},
 		sftpWritten: map[string]int64{},
@@ -476,6 +478,14 @@ func (s *Server) Closes() []Request {
 	return slices.Clone(s.closes)
 }
 
+// Sent returns how many bytes handlers have written to a channel's stdout
+// so far.
+func (s *Server) Sent(conn, channel int) int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.sent[[2]int{conn, channel}]
+}
+
 // Received returns every byte a handler has read from a channel so far.
 func (s *Server) Received(conn, channel int) []byte {
 	s.mu.Lock()
@@ -656,8 +666,19 @@ func (ss *Session) Read(p []byte) (int, error) {
 	return n, err
 }
 
-// Write writes to the client's stdout.
-func (ss *Session) Write(p []byte) (int, error) { return ss.ch.Write(p) }
+// Write writes to the client's stdout. The server counts the bytes the
+// client accepted (see Sent): a client that stops reading stops them once
+// its channel window is full.
+func (ss *Session) Write(p []byte) (int, error) {
+	n, err := ss.ch.Write(p)
+	if n > 0 {
+		k := [2]int{ss.conn, ss.channel}
+		ss.srv.mu.Lock()
+		ss.srv.sent[k] += int64(n)
+		ss.srv.mu.Unlock()
+	}
+	return n, err
+}
 
 // Stderr writes to the client's stderr.
 func (ss *Session) Stderr(p []byte) (int, error) { return ss.ch.Stderr().Write(p) }

@@ -54,6 +54,7 @@ type Browser struct {
 	running   int
 	nextID    TransferID
 	nextBatch BatchID
+	edits     map[*EditCopy]bool // edit copies that exist; Close removes them
 }
 
 // Options describe the tab a browser serves.
@@ -333,6 +334,7 @@ func (b *Browser) Close() error {
 		parts[i].remote = nil // the channels are closed
 	}
 	b.removeParts(parts)
+	b.removeEdits()
 	b.notify()
 	return err
 }
