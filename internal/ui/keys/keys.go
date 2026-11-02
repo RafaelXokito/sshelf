@@ -137,6 +137,7 @@ func MouseActions() []MouseAction {
 		{"changed host key: click [esc] Close", []key.Binding{CloseBlock}},
 		{"prefix help: click [esc] Close", []key.Binding{CloseHelp}},
 		{"tab bar: click a tab", []key.Binding{PrefixHosts, PrefixTab}},
+		{"tab bar: click an ended tab's ✕", []key.Binding{CloseTab}},
 		{"sftp: click a row", []key.Binding{SwitchPane, Up, Down, First, Last}},
 		{"sftp: click a pane's border", []key.Binding{SwitchPane}},
 		{"sftp: double-click a directory", []key.Binding{OpenDir}},

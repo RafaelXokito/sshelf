@@ -766,6 +766,9 @@ While the Hosts tab is focused and no modal is open, when the user clicks a tab 
 - **v1 revision** · Priority: v1 · Status: Implemented · Source: D-024
   - *Revised:* While no modal is open, when the user clicks a tab in the tab bar, the system shall focus that tab, whichever tab is focused.
   - *Acceptance:* A click on `2 web-prod` focuses that session tab; a click on `sshelf` or a separator does nothing. While a session tab is focused, a left click on `Hosts`, on another session tab or on an SFTP tab focuses it, also while the session's remote app has mouse reporting on, in scrollback mode and on an ended session; the click is never forwarded to the remote.
+- **D-028 revision** · Priority: v1 · Status: Implemented · Source: D-028
+  - *Revised:* While no modal is open, when the user clicks a tab in the tab bar, the system shall close that tab if the click is on its end marker `✕` (FR-TAB-004 D-028 revision) and focus it otherwise, whichever tab is focused.
+  - *Acceptance:* As the v1 revision, except that a left click on the `✕` of an ended session tab or a disconnected SFTP tab closes it as `x` does instead of focusing it; a click anywhere else on that tab still focuses it.
 
 ### FR-NAV-018 · Hosts ordered by last use
 The system shall order the host list by the time each host's last session was established, most recent first, followed by the hosts never connected in A–Z order by label, and show that time on each row as a dim relative time.
@@ -1391,6 +1394,9 @@ While a session tab is not focused, when its session receives output, the system
   - Output in a background tab shows `1 raspberrypi4 ●`; focusing the tab removes the marker. Output in the focused tab never sets it.
   - An ended session shows `✕` instead of `●`, focused or not.
   - Replies the emulator itself sends to the remote (ARCH-SESS-016) do not set the marker; only bytes received from the remote do.
+- **D-028 revision** · Priority: v1 · Status: Implemented · Source: D-028
+  - *Revised:* While a session tab is not focused, when its session receives output, the system shall mark that tab with `●` until it is focused; when a session ends, the system shall mark its tab with `✕` until it is reconnected or closed; and when the user left-clicks the `✕` of an ended tab with no modal open, the system shall close that tab as `x` does on it.
+  - *Acceptance:* As above, and: a left click on the `✕` of an ended session tab closes it exactly as `x` does (FR-CONN-005 revision), whichever tab is focused, in scrollback mode too, and the tabs to its right renumber (D-023); a click on the rest of the tab focuses it (FR-NAV-017). The click target is the `✕` cell and the cell after it (the tab's closing space or `]`), so it also lands where a terminal draws `✕` two columns wide; the label cut at 20 columns (FR-TAB-003) does not move it off the marker. A disconnected SFTP tab's `✕` acts as `x` does there (FR-SFTP-018): closed at once when idle, the close question first while transfers are paused (FR-SFTP-025). Live tabs show no `✕`, so no click closes them; a tab hidden behind `‹+N` or `+N›` has no close target; with a modal open the click does nothing (FR-NAV-016).
 
 ### FR-TAB-005 · Prefix key
 While any tab is focused and no modal is open, when the user presses `Ctrl+]`, the system shall treat the next key as a tab command (`q` disconnect or close, `?` help, `h` or `0` Hosts tab, `1`–`9` tab, `n` next tab, `p` previous tab, `[` scrollback mode, `s` SFTP tab for this host, `Ctrl+]` send a literal `Ctrl+]`) and shall send neither key to the remote.

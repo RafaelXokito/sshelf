@@ -183,7 +183,7 @@ func (m Model) sftpKey(t *sessionTab, k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		case key.Matches(k, keys.Reconnect):
 			return m.reconnectSFTP(t)
 		case key.Matches(k, keys.CloseTab):
-			return m.closeSFTPAsk(t, true)
+			return m.closeEnded(t)
 		}
 	}
 	var cmd tea.Cmd

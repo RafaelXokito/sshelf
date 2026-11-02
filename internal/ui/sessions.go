@@ -293,6 +293,17 @@ func (m Model) closeTab(id int) (Model, tea.Cmd) {
 	return m, tea.Batch(closeCmd, cmd)
 }
 
+// closeEnded closes the ended session tab or disconnected SFTP tab t, as
+// x does there and as a click on its "✕" does (D-028): a session tab
+// closes at once; an SFTP tab closes at once when idle and asks first
+// while transfers are paused (FR-SFTP-025).
+func (m Model) closeEnded(t *sessionTab) (tea.Model, tea.Cmd) {
+	if t.sftp != nil {
+		return m.closeSFTPAsk(t, true)
+	}
+	return m.closeTab(t.id)
+}
+
 // attemptTabPtr is the ended tab the connection attempt in progress
 // reconnects, or nil.
 func (m Model) attemptTabPtr() *sessionTab {
@@ -559,7 +570,7 @@ func (m Model) sessionKey(t *sessionTab, k tea.KeyPressMsg) (tea.Model, tea.Cmd)
 		hostID, label, id := t.hostID, t.label, t.id
 		return m, func() tea.Msg { return hostlist.ConnectRequestMsg{HostID: hostID, Label: label, Tab: id} }
 	case t.done && key.Matches(k, keys.CloseTab):
-		return m.closeTab(t.id)
+		return m.closeEnded(t)
 	case !t.done:
 		_ = t.sess.SendKey(toKeyEvent(k)) // never blocks; a full queue drops it (ARCH-SESS-014)
 	}

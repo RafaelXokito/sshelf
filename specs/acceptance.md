@@ -1467,6 +1467,10 @@ Run once per release, on macOS and Linux, with the release's own binary.
 - [ ] Copy the binary to a root-owned directory (`/usr/local/bin`, with `sudo`) and run `sshelf update` as yourself: it changes nothing and prints how to update (exit status 1).
 - [ ] Your hosts, identities, stored passwords and trusted host keys from the previous release all work in the new one without a prompt or a re-entry (D-027): connect to a host that uses a stored password.
 
+## U.3 Close an ended tab with the mouse (D-028)
+
+- [ ] Open two sessions, `exit` the first, and on the Hosts tab click the `✕` of `1 <label> ✕`: the tab closes and the other becomes `1`. End that one too; click its label (it focuses), then its `✕` (it closes and the Hosts tab comes back). A live tab has no `✕`, and clicking it only focuses it (FR-TAB-004, FR-NAV-017 D-028 revisions).
+
 ## U sign-off
 
 | | macOS | Linux |

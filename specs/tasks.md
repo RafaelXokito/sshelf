@@ -806,6 +806,15 @@ conventions above. v1 requirements are not yet checked by
 - **Done when:** the tests pass with `-race`, lint is clean, `go run ./scripts/tracecheck` is green, and the IDs listed are `Implemented`.
 - **Estimate:** 1 d
 
+### T-067 · Close an ended tab by clicking its ✕
+
+- **Delivers:** D-028. `tabs.Layout` records where an ended tab's `✕` sits (`Span.Close`, `Span.CloseX`) and `tabs.CloseAt` hit-tests it: the marker's cell and the one after it, so a terminal that draws `✕` two columns wide still hits it. `ui.tabBarClick` serves header clicks from the Hosts tab, SFTP tabs and session tabs (D-024): on a `✕` it calls `closeEnded`, the same function the `x` key uses on an ended session tab (`closeTab`) and on a disconnected SFTP tab (`closeSFTPAsk`); elsewhere on a tab it focuses it.
+- **Satisfies:** the D-028 revisions of FR-TAB-004 and FR-NAV-017
+- **Depends on:** T-063
+- **Tests:** `TestFR_TAB_004_D028_CloseAtMarker` (focused and not, cut label, session and SFTP entries, `●` not a target, the cell after `✕`), `TestFR_TAB_004_D028_CloseAtOverflow`, `TestFR_TAB_004_D028_ClickMarkerCloses` (from Hosts and from the ended tab, renumbering, a label click focuses), `TestFR_TAB_004_D028_BackgroundAndScrollback`, `TestFR_TAB_004_D028_LiveTabsAndModals`, `TestFR_TAB_004_D028_SFTPMarker` (idle closes, paused asks); PTY E2E `TestFR_TAB_004_D028_E2EClickMarkerCloses`.
+- **Done when:** the tests pass with `-race`, lint is clean, `go run ./scripts/tracecheck` is green, and both D-028 revisions are `Implemented`.
+- **Estimate:** 0.5 d
+
 ---
 
 ## v1 milestones (outline)
@@ -1078,10 +1087,10 @@ ARCH-UI-005, ARCH-UI-006, ARCH-UI-007) are now `M3` and are listed in the
 | FR-NAV-014 | T-038 |
 | FR-NAV-015 | T-039, T-040 |
 | FR-NAV-016 | T-040 |
-| FR-NAV-017 | T-040 |
+| FR-NAV-017 | T-040, T-067 |
 | FR-TAB-001 | T-034, T-035 |
 | FR-TAB-002 | T-034, T-037 |
-| FR-TAB-004 | T-034 |
+| FR-TAB-004 | T-034, T-067 |
 | FR-TAB-006 | T-035, T-037 |
 | FR-TAB-007 | T-034, T-042 |
 | FR-TAB-008 | T-037 |

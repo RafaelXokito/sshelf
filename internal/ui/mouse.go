@@ -237,11 +237,7 @@ func (m Model) mouseClick(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		return m.updateTopModal(components.ClickMsg{X: x, Y: y, Double: double})
 	}
 	if ms.Y == 0 {
-		// The tab bar (FR-NAV-017): the title and separators do nothing.
-		if i, ok := m.tabAt(ms.X); ok {
-			return m.focusTab(i)
-		}
-		return m, nil
+		return m.tabBarClick(ms.X)
 	}
 	if t := m.focusedSFTP(); t != nil {
 		// The SFTP view's layout counts rows from the top of the frame,
@@ -295,8 +291,17 @@ func (m Model) mouseWheel(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-// tabAt returns the tab (0 is Hosts) whose tab-bar entry is at column x
-// of the header row.
-func (m Model) tabAt(x int) (int, bool) {
-	return tabs.TabAt(m.headerSpans(), x)
+// tabBarClick handles a left click at column x of the tab bar, whichever
+// tab is focused: on an ended tab's "✕" it closes that tab as x does
+// (D-028), on any other part of a tab it focuses it (FR-NAV-017 v1
+// revision), and on the title or a separator it does nothing.
+func (m Model) tabBarClick(x int) (tea.Model, tea.Cmd) {
+	spans := m.headerSpans()
+	if i, ok := tabs.CloseAt(spans, x); ok && i > 0 {
+		return m.closeEnded(m.tabs[i-1])
+	}
+	if i, ok := tabs.TabAt(spans, x); ok {
+		return m.focusTab(i)
+	}
+	return m, nil
 }

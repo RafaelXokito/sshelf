@@ -97,6 +97,10 @@ type Span struct {
 	Kind     Kind
 	Tab      int  // index into the entries for KindTab; the nearest hidden tab for the overflow markers; -1 otherwise
 	Focused  bool // the focused tab
+	// Close is set on a tab showing EndedMarker: the marker is its close
+	// button, at column CloseX (D-028).
+	Close  bool
+	CloseX int
 }
 
 // Layout lays out the header for entries at width columns: the title,
@@ -146,6 +150,11 @@ func Layout(width int, entries []Entry, focus int) []Span {
 	}
 	for i := lo; i < hi; i++ {
 		add(texts[i], KindTab, i, i == focus)
+		if entries[i].Marker == EndedMarker {
+			// "[" or " ", the text, " ", then the marker (entryText).
+			s := &spans[len(spans)-1]
+			s.Close, s.CloseX = true, s.X+1+ansi.StringWidth(entries[i].Text)+1
+		}
 		add(sep, KindSep, -1, false)
 	}
 	if hi < n {
@@ -211,6 +220,19 @@ func Header(spans []Span) string {
 func TabAt(spans []Span, x int) (int, bool) {
 	for _, s := range spans {
 		if x >= s.X && x < s.X+s.Width && s.Tab >= 0 {
+			return s.Tab, true
+		}
+	}
+	return 0, false
+}
+
+// CloseAt returns the tab whose EndedMarker is under column x of the
+// header laid out as spans (D-028). The marker's cell and the one after
+// it (the tab's closing " " or "]") both count, so the click lands even
+// where a terminal draws "✕" two columns wide.
+func CloseAt(spans []Span, x int) (int, bool) {
+	for _, s := range spans {
+		if s.Close && (x == s.CloseX || x == s.CloseX+1) && x < s.X+s.Width {
 			return s.Tab, true
 		}
 	}

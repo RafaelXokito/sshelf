@@ -278,9 +278,7 @@ func (m Model) sessionMouse(t *sessionTab, msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	if ms.Y < area.Y {
 		if c, ok := msg.(tea.MouseClickMsg); ok && c.Button == tea.MouseLeft {
-			if i, ok := m.tabAt(ms.X); ok {
-				return m.focusTab(i) // FR-NAV-017 v1 revision
-			}
+			return m.tabBarClick(ms.X) // FR-NAV-017 v1 revision, D-028
 		}
 		return m, nil
 	}

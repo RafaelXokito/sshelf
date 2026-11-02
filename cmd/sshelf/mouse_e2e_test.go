@@ -19,6 +19,27 @@ import (
 func sgrPress(x, y int) string   { return fmt.Sprintf("\x1b[<0;%d;%dM", x+1, y+1) }
 func sgrRelease(x, y int) string { return fmt.Sprintf("\x1b[<0;%d;%dm", x+1, y+1) }
 
+// TestFR_TAB_004_D028_E2EClickMarkerCloses ends a session and closes its
+// tab with a real SGR click on the tab's "✕" (D-028), as x does: the
+// host list comes back. A click on the tab's label first leaves it open.
+func TestFR_TAB_004_D028_E2EClickMarkerCloses(t *testing.T) {
+	s := startSlice(t)
+	s.waitText(0, "web-prod demo@127.0.0.1")
+	off := s.openSession(s.srv, 1)
+	s.typeKeys("exit 3\r")
+	off = s.waitText(off, "exited (3) · r reconnect · x close")
+	// "sshelf │ Hosts │[1 web-prod ✕]│": the label at 17, the ✕ at 28.
+	s.typeKeys(sgrPress(20, 0) + sgrRelease(20, 0))
+	time.Sleep(300 * time.Millisecond)
+	if bytes.Contains(s.out.From(off), []byte("enter connect")) {
+		t.Fatalf("a click on the label closed the tab; output:\n%q", s.out.From(off))
+	}
+	s.typeKeys(sgrPress(28, 0) + sgrRelease(28, 0))
+	s.tabs--
+	s.waitText(off, "enter connect")
+	s.quit()
+}
+
 // TestFR_NAV_012_E2EDoubleClickConnects double-clicks web-prod with real
 // SGR mouse sequences through the PTY: a single click only selects, two
 // presses on the host row connect to the test server.
