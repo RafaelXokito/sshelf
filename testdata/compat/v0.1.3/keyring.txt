@@ -1,0 +1,4 @@
+# credential-store items: service<TAB>account (SEC-CRED-002)
+sshelf	019a3b10-0000-7000-8000-000000000010/password
+sshelf	019a3b10-0000-7000-8000-000000000011/private-key
+sshelf	019a3b10-0000-7000-8000-000000000011/key-passphrase
