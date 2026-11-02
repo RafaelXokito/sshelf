@@ -770,6 +770,15 @@ conventions above. v1 requirements are not yet checked by
 - **Done when:** the tests pass with `-race`, lint is clean, `go run ./scripts/tracecheck` is green, and FR-NAV-019 and FR-NAV-020 are `Implemented`.
 - **Estimate:** 1 d
 
+### T-063 · Clickable tabs and sshelf's own selection in sessions
+
+- **Delivers:** D-024 (ADR-014 v1 amendment, design §9.5 "Routing from v1"). `mouseModeFor` returns cell motion in every state except a live, unscrolled session whose remote asked for `?1003` (all motion). On a focused session tab with no modal: left clicks on the tab bar focus tabs, the status bar does nothing, and the session area forwards to the remote only while it has mouse reporting on and scrollback is off. Otherwise `ui/selection.go` selects text: drag (linewise), double-click (word), triple-click (row), on the live screen, in scrollback mode and on an ended tab; reverse video drawn by restyling the selected cells; text extracted from the session's own lines (wide characters whole, trailing spaces trimmed per row, rows joined with `\n`); on release `tea.SetClipboard` (OSC 52) and the status notice "copied N characters". Any key, a click, a tab switch, scrollback enter/exit and a resize clear the selection. The wheel enters scrollback mode and scrolls 3 lines a notch; wheel-down past the last line leaves it. The README explains selection and copy and the Option/Shift-drag fallback for terminals without OSC 52. The archtest clipboard-package ban stays.
+- **Satisfies:** FR-TAB-012, FR-TAB-013, SEC-CLIP-006, and the v1 revisions of NFR-UX-001, FR-TAB-010, FR-TAB-011, FR-NAV-017, ARCH-UI-006, SEC-CLIP-005 and SEC-SESSION-005
+- **Depends on:** T-062
+- **Tests:** `TestARCH_UI_006_V1_MouseModePolicy` (table), `TestARCH_UI_006_V1_SwitchAppliesNextFrame`, `TestNFR_UX_001_V1_MouseModePolicy`, `TestFR_NAV_017_V1_TabClicksFromSession` (plain, remote mouse on, scrollback, ended), `TestFR_TAB_011_V1_RemoteMouseStillForwarded`, `TestFR_TAB_011_V1_SelectAfterRemoteDisables`, `TestFR_TAB_012_DragSelectsLinewise` (forwards and backwards, clamped), `TestFR_TAB_012_WideCharacters`, `TestFR_TAB_012_DoubleClickWord`, `TestFR_TAB_012_TripleClickRow`, `TestFR_TAB_012_ReverseVideo`, `TestFR_TAB_012_KeyAndClickClear`, `TestFR_TAB_012_ScrollbackSelection`, `TestFR_TAB_010_V1_WheelScrollback`, `TestFR_TAB_013_CopyOnRelease` (OSC 52 payload, trailing spaces, wrapped rows, status message), `TestFR_TAB_013_EmptySelectionCopiesNothing`, `TestSEC_CLIP_006_NoCopyUnderModal`, `TestSEC_CLIP_006_OnlyOnRelease`, `TestSEC_CLIP_006_PayloadIsBase64`; PTY E2E `TestNFR_UX_001_V1_TrackingInPlainSession` and `TestFR_TAB_013_E2ECopyWritesOSC52`; the M2 tests that expected no tracking in a plain session are updated to the v1 policy.
+- **Done when:** the tests pass with `-race`, lint is clean, `go run ./scripts/tracecheck` is green, and FR-TAB-012, FR-TAB-013, SEC-CLIP-006 and the v1 revisions listed are `Implemented`.
+- **Estimate:** 1.5 d
+
 ---
 
 ## v1 milestones (outline)

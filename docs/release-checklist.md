@@ -20,9 +20,12 @@ run that whole checklist on macOS and Linux before a release.
 - [ ] **FR-TAB-011: mouse in `vim`, `htop` and `tmux`** lands on the
   clicked cell; header clicks are ignored while the remote has the mouse
   (acceptance M2.4.3, M2.4.4, M2.4.7).
-- [ ] **NFR-UX-001 / D-012: native selection in a plain shell.** Select
-  and copy with the terminal's own selection in a session tab and in
-  scrollback mode (acceptance M2.5, M2.7.3).
+- [ ] **FR-TAB-012 / FR-TAB-013 (D-024): sshelf's selection in a plain
+  shell.** Drag, double-click and triple-click select in a session tab and
+  in scrollback mode; the release shows "copied N characters" and `pbpaste`
+  prints the text (iTerm2, WezTerm, kitty, Ghostty). Tabs, Hosts included,
+  are clickable while a session is focused. In Terminal.app, Option-drag
+  still selects natively.
 - [ ] **SEC-SESSION-005: hostile output.** A remote OSC 52 write and OSC 0
   title do not change the local clipboard or window title
   (acceptance M2.8).

@@ -351,7 +351,8 @@ NFR-PERF-004/005 now measure.
   use protocols the emulator lacks (kitty graphics, sixel, the kitty keyboard
   protocol) fall back to what `xterm-256color` offers.
 - Native text selection keeps working while the remote app has not asked for
-  the mouse (D-012, ADR-014).
+  the mouse (D-012, ADR-014). From v1, sshelf does its own selection there and
+  copies through OSC 52 (D-024, ADR-014 v1 amendment).
 
 ### ADR-013: The terminal emulator is `github.com/charmbracelet/x/vt` v0.1.0, pinned and wrapped
 
@@ -506,6 +507,31 @@ includes them.
 selection and copy work as before; inside `vim` or `htop` with mouse
 support, the app gets the mouse as it would in a native terminal. No
 clipboard code is added (SEC-CLIP-005).
+
+**v1 amendment (D-024, supersedes D-012's "leave the mouse to the
+terminal").** Users could not click tabs while a session was focused, and
+the terminal's own selection copied sshelf's frame along with the session.
+From v1:
+- Mouse tracking stays on in session tabs: cell motion (button-event mode,
+  so drags arrive), or all motion while a live session's remote asked for
+  `?1003`. `mouseModeFor` never returns none.
+- On a focused session tab with no modal open, the header row and the
+  status bar are sshelf's: a left click on a tab focuses it, the rest does
+  nothing. In the session area, events go to the remote while it has mouse
+  reporting on (live, not in scrollback); otherwise sshelf selects text
+  (`ui/selection.go`): a drag selects linewise, a double-click a word, a
+  triple-click a row, drawn in reverse video by restyling the selected cells
+  of the session lines (parsed into an ultraviolet buffer), and the release
+  copies the text with `tea.SetClipboard`, which Bubble Tea writes as OSC 52.
+  The wheel enters and scrolls scrollback mode.
+- The text comes from the session's snapshot or scrollback lines, never from
+  the rendered frame, so sshelf's own fields cannot be copied (SEC-CLIP-006).
+  OSC 52 is an escape sequence, not a package: the clipboard-package ban
+  stays (SEC-CLIP-005). OSC 52 from the remote stays blocked
+  (SEC-SESSION-005).
+- Terminals without OSC 52 (macOS Terminal.app) copy nothing; their native
+  selection is still there with Option-drag or Shift-drag, which bypasses
+  mouse tracking.
 
 ### ADR-015: Tabs live in the root model; there is no session manager
 
@@ -992,6 +1018,9 @@ removed in revision 2.
 **ARCH-UI-006**: The system shall compute `tea.View.MouseMode` in one function of (focused tab kind, modal open, scrollback mode, session ended, the focused session's requested mouse mode), with cell motion on the Hosts tab and on SFTP tabs, following ADR-014.
 - Priority: M3 · Status: Implemented · Source: D-011, D-012, NFR-UX-001 revision; M3: D-011, ADR-020
 - Acceptance: A table test covers every combination. A root-model test switches between the Hosts tab, a plain shell tab and a tab whose remote sent `?1003h`, and checks the mode of each next `View()`. The table test gains the SFTP rows (live, disconnected, transfers view, modal open: all cell motion). A root-model test switches from a plain shell tab to an SFTP tab and back and checks the mode of each next `View()`.
+- **v1 revision** · Priority: v1 · Status: Draft · Source: D-024, ADR-014 v1 amendment
+  - *Revised:* The system shall compute `tea.View.MouseMode` in one function of (focused tab kind, modal open, scrollback mode, session ended, the focused session's requested mouse mode): all motion only for a live session tab, with no modal open and not in scrollback mode, whose remote asked for `?1003`; cell motion in every other state.
+  - *Acceptance:* The table test covers every combination with the new results (a plain session, scrollback mode and an ended session are cell motion; `TestARCH_UI_006_V1_MouseModePolicy`). The switch test expects cell motion on the Hosts tab and the plain shell tab and all motion on the `?1003h` tab (`TestARCH_UI_006_V1_SwitchAppliesNextFrame`).
 
 **ARCH-UI-007**: The system shall route each mouse press and wheel event to the single component under it, in that component's own coordinates computed from the same layout function as its `View`, shall recognise a double-click as two left presses on the same row within 400 ms, and, on an SFTP tab only, shall route motion with the left button held and the release to the SFTP view for dragging.
 - Priority: M3 · Status: Implemented · Source: D-011, ADR-014, FR-NAV-012, FR-NAV-014 … FR-NAV-017; M3: D-017, FR-SFTP-021, FR-SFTP-022
@@ -2020,8 +2049,8 @@ from):
 | State | Mode |
 |---|---|
 | Hosts tab, an SFTP tab (M3), or any modal open | cell motion |
-| Session tab in scrollback mode, or ended | none |
-| Live session tab, remote asked for nothing | none (the terminal's own selection works, D-012) |
+| Session tab in scrollback mode, or ended | none (v1: cell motion, D-024) |
+| Live session tab, remote asked for nothing | none (the terminal's own selection works, D-012; v1: cell motion, sshelf's own selection, D-024) |
 | Remote asked for `?9`, `?1000` or `?1002` | cell motion (Bubble Tea has no press-only mode; the session drops motion the remote did not ask for) |
 | Remote asked for `?1003` | all motion |
 
@@ -2038,6 +2067,23 @@ switch tabs only on the Hosts tab; on a session tab the prefix keys switch
 (D-012). Otherwise clicks go to the top modal if one is open (anywhere else
 does nothing), then the tab bar, then the screen, each in its own
 coordinates; releases and motion are ignored on sshelf's screens.
+
+**Routing from v1 (D-024).** On a focused session tab with no modal open:
+the header row takes left clicks on tabs (as on the Hosts tab), the status
+bar takes nothing, and in the session area events are forwarded only while
+the live session's remote has mouse reporting on and scrollback mode is off;
+otherwise they drive sshelf's selection:
+
+| Event in the session area | Action |
+|---|---|
+| Left press | clear the selection; a 2nd press within 400 ms on the same row selects a word, a 3rd a row; otherwise anchor a drag |
+| Motion, left held | extend the drag selection (linewise) to the cell under the pointer, clamped to the area |
+| Left release | copy the selection, if its text is not empty, with `tea.SetClipboard` (OSC 52); status "copied N characters" |
+| Wheel up / down | enter scrollback mode (when there are lines above the screen) / scroll 3 lines; down past the last line leaves it |
+| Other buttons | ignored |
+
+Any key press, a tab switch, entering or leaving scrollback, a modal and a
+resize clear the selection.
 
 | Where | Press (left) | Double-click | Wheel | Other buttons, release, motion |
 |---|---|---|---|---|
@@ -2269,7 +2315,7 @@ of 0 (unknown) keeps every binding.
 | 9 | A `session.Manager`? | **No.** The root model's tab list owns the sessions (ADR-015). |
 | 10 | Keep the `~` escapes? | **No.** The prefix key replaces them (§8.5). |
 | 11 | Scrollback size, wide characters at the margin, remote titles | **Decided** as orchestrator defaults the product owner may still change: 2,000 lines (D-013); worked around in the wrapper, so it is not a known limitation (D-015, ADR-013 limitation 2); OSC 0/2 ignored, a tab always shows the host label (D-014). |
-| 12 | Tab-bar clicks while a session is focused? | **Dropped.** Every mouse event on a focused session tab belongs to the session; header and status-bar events are ignored, and tabs are switched with the prefix key (D-012, §9.5). |
+| 12 | Tab-bar clicks while a session is focused? | **Dropped** in M2. Every mouse event on a focused session tab belongs to the session; header and status-bar events are ignored, and tabs are switched with the prefix key (D-012, §9.5). **Reopened in v1:** tabs are always clickable and sshelf does its own selection (D-024, ADR-014 v1 amendment). |
 | 13 | Server text in the end reason | Sanitised, folded to one line and cut to 80 columns in `session` before it is shown or logged (SEC-SESSION-006). |
 
 **M3 (revision 5):**
