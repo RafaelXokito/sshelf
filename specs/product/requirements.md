@@ -1649,11 +1649,12 @@ While a release build runs the TUI and `SSHELF_NO_UPDATE_CHECK` is not `1`, the 
   - Every failure (no network, HTTP error, timeout, malformed or oversized answer, unreadable state file) shows nothing and is not recorded, so the next start tries again (`TestSEC_UPD_001_FailuresAreSilent`). The TUI starts before the check ends (the check runs in a `term.SafeGo` goroutine).
 
 ### FR-UPD-002 · Update notice in the host-list footer
-While a newer release is known and the host list is shown, the system shall show `update available: vX.Y.Z · run sshelf update` right-aligned on the footer line, shortened to `vX.Y.Z available` when that does not fit, and left out before any of the essential keys or `? help` would be.
+While a newer release is known and the host list, or the Welcome screen that stands in for an empty host list (FR-NAV-013), is shown, the system shall show `update available: vX.Y.Z · run sshelf update` right-aligned on the footer line, shortened to `vX.Y.Z available` when that does not fit, and left out before any of the essential keys or `? help` would be.
 
 - **Priority:** v1 · **Status:** Implemented · **Source:** D-026 (design §9.8)
 - **Acceptance:**
   - At 120 columns the long notice ends the footer, right-aligned, after `enter connect • s sftp • / search • a add …` and `? help`; at 80 columns the short one. From 60 to 130 columns `enter connect`, `/ search`, `a add`, `q quit` and `? help` are always shown; each width shows the long form, the short form or none, never cut with "…" (`TestFR_UPD_002_FooterNotice`). Goldens at 80×24 and 120×40 (`TestFR_UPD_002_NoticeGolden`).
+  - With no hosts, the Welcome screen's footer `I import ~/.ssh/config • a add host • q quit` ends with the notice the same way; none of its keys gives way (`TestFR_UPD_002_WelcomeFooterNotice`, `TestFR_UPD_002_WelcomeNoNoticeWithoutUpdate`, goldens `TestFR_UPD_002_WelcomeNoticeGolden`).
   - The search footer and every other screen show no notice; with no newer release the footer is FR-NAV-020's (`TestFR_UPD_002_NoNoticeWithoutUpdate`).
   - Only a version of the form `vX.Y.Z` is shown (`TestSEC_UPD_001_NoticeOnlyShowsAVersion`).
 

@@ -100,3 +100,53 @@ func TestSEC_UPD_001_NoticeOnlyShowsAVersion(t *testing.T) {
 func TestFR_UPD_002_NoticeGolden(t *testing.T) {
 	golden(t, "hostlist-update", withUpdate(t, "v0.4.0").m)
 }
+
+// With no hosts the Welcome screen stands in for the host list
+// (FR-NAV-013); its footer shows the notice too.
+func TestFR_UPD_002_WelcomeFooterNotice(t *testing.T) {
+	d := newDriver(t, &fakeService{})
+	d.send(UpdateAvailableMsg{Version: "v0.4.0"})
+	const keys = "I import ~/.ssh/config • a add host • q quit"
+
+	d.resize(120, 40)
+	foot := plain(d.root().footer())
+	if !strings.HasPrefix(foot, keys) || !strings.HasSuffix(foot, longNotice) {
+		t.Fatalf("120 columns: footer %q", foot)
+	}
+	if w := ansi.StringWidth(foot); w != 120 {
+		t.Errorf("120 columns: footer is %d columns, want the notice right-aligned at 120", w)
+	}
+
+	d.resize(80, 24)
+	if foot = plain(d.root().footer()); !strings.HasPrefix(foot, keys) || !strings.HasSuffix(foot, shortNotice) {
+		t.Fatalf("80 columns: footer %q, want the short notice", foot)
+	}
+
+	for w := 40; w <= 130; w++ {
+		d.resize(w, 24)
+		f := plain(d.root().footer())
+		if w >= 46 && !strings.HasPrefix(f, keys) {
+			t.Fatalf("%d columns: footer %q dropped a key for the notice", w, f)
+		}
+		if strings.Contains(f, "available") && ansi.StringWidth(f) != w {
+			t.Fatalf("%d columns: footer %q not right-aligned", w, f)
+		}
+		if !strings.HasSuffix(f, longNotice) && !strings.HasSuffix(f, shortNotice) && !strings.HasSuffix(f, "q quit") {
+			t.Fatalf("%d columns: footer %q", w, f)
+		}
+	}
+}
+
+func TestFR_UPD_002_WelcomeNoNoticeWithoutUpdate(t *testing.T) {
+	d := newDriver(t, &fakeService{})
+	d.resize(120, 40)
+	if f := plain(d.root().footer()); f != "I import ~/.ssh/config • a add host • q quit" {
+		t.Fatalf("footer %q", f)
+	}
+}
+
+func TestFR_UPD_002_WelcomeNoticeGolden(t *testing.T) {
+	d := newDriver(t, &fakeService{})
+	d.send(UpdateAvailableMsg{Version: "v0.4.0"})
+	golden(t, "welcome-update", d.m)
+}

@@ -797,6 +797,15 @@ func (m Model) screenLines() (body []string, foot string) {
 	if l, ok := m.screen.(hostlist.Model); ok {
 		return body, l.Footer(m.update)
 	}
+	if w, ok := m.screen.(welcome.Model); ok {
+		// The Welcome screen is the host list with no hosts (FR-NAV-013),
+		// so it shows the update notice too; all its keys are essential
+		// (FR-UPD-002).
+		hints := components.Help(w.Hints()...)
+		if f, ok := components.NoticeFooter(m.width, m.update, components.HelpWidth(w.Hints()...), func(int) string { return hints }); ok {
+			return body, f
+		}
+	}
 	if h, ok := m.screen.(components.Hinter); ok {
 		return body, components.Help(h.Hints()...)
 	}

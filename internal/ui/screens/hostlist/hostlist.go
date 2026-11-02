@@ -209,43 +209,15 @@ func (m Model) Hints() []key.Binding {
 // it; the other keys give way to it, the long form first. latest is a
 // version update.Parse accepted, so it holds no control characters.
 func (m Model) Footer(latest string) string {
-	if m.searching || latest == "" || m.width <= 0 {
-		return components.Help(m.Hints()...)
-	}
-	essential := hintsWidth(append(slices.Clone(footerPriority[:4]), keys.Help))
-	notes := []struct{ plain, styled string }{
-		{"update available: " + latest + " · run sshelf update",
-			dimStyle.Render("update available: ") + noticeStyle.Render(latest) + dimStyle.Render(" · run sshelf ") + noticeStyle.Render("update")},
-		{latest + " available", noticeStyle.Render(latest) + dimStyle.Render(" available")},
-	}
-	for _, n := range notes {
-		w := ansi.StringWidth(n.plain)
-		if essential+noticeGap+w > m.width {
-			continue
+	if !m.searching {
+		essential := components.HelpWidth(append(slices.Clone(footerPriority[:4]), keys.Help)...)
+		if f, ok := components.NoticeFooter(m.width, latest, essential, func(avail int) string {
+			return components.Help(components.FitHints(avail, footerOrder, footerPriority, keys.Help)...)
+		}); ok {
+			return f
 		}
-		left := components.Help(components.FitHints(m.width-noticeGap-w, footerOrder, footerPriority, keys.Help)...)
-		return left + strings.Repeat(" ", m.width-lipgloss.Width(left)-w) + n.styled
 	}
 	return components.Help(m.Hints()...)
-}
-
-// noticeGap is the least space between the footer's hints and the update
-// notice.
-const noticeGap = 2
-
-var noticeStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("212"))
-
-// hintsWidth is the width of components.Help(bs...).
-func hintsWidth(bs []key.Binding) int {
-	w := 0
-	for i, b := range bs {
-		if i > 0 {
-			w += ansi.StringWidth(" • ")
-		}
-		h := b.Help()
-		w += ansi.StringWidth(h.Key + " " + h.Desc)
-	}
-	return w
 }
 
 // footerOrder is the order of the host list's footer, and footerPriority

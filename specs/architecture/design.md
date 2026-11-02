@@ -2387,7 +2387,9 @@ if the essential keys (`enter connect`, `/ search`, `a add`, `q quit`) and
 `? help` fit beside it; then `FitHints` fills the rest of the width (minus
 the notice) in the FR-NAV-020 priority, so lower keys give way to the notice.
 If neither form fits, the footer is FR-NAV-020's. The search footer never
-shows it.
+shows it. The Welcome screen (FR-NAV-013), which stands in for an empty host
+list, shows it the same way through `components.NoticeFooter`; all three of
+its keys are essential.
 
 ## 10. Testing strategy
 
