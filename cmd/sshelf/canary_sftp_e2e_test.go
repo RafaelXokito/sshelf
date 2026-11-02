@@ -54,7 +54,7 @@ func (c *canaryRun) openSFTP(label, want string) int {
 	off := c.out.Len()
 	c.typeKeys("s")
 	c.tabs++
-	c.waitText(off, fmt.Sprintf("[%d sftp: %s]", c.tabs, label))
+	c.waitText(off, fmt.Sprintf("[%d sftp: %s ✕]", c.tabs, label))
 	return c.waitText(off, want)
 }
 
@@ -275,7 +275,7 @@ func TestSEC_SFTP_007_PasswordCanaryNotInFrames(t *testing.T) {
 	off = c.waitText(off, "Password for alice@127.0.0.1")
 	c.typeKeys(pw + keyEnter)
 	c.tabs++
-	c.waitText(off, "[1 sftp: files]")
+	c.waitText(off, "[1 sftp: files ✕]")
 	off = c.waitText(off, "same.txt")
 
 	c.typeKeys("jc") // same.txt exists locally: a question

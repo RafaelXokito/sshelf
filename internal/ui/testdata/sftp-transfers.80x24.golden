@@ -1,4 +1,4 @@
-sshelf │ Hosts │ 1 raspberrypi4 │[2 sftp: raspberrypi4]│
+sshelf │ Hosts │ 1 raspberrypi4 ✕ │[2 sftp: raspberrypi4 ✕]│
 ┌ Transfers (8) ───────────────────────────────────────────────────────────────┐
 │> ↓ backup.tar.gz                running           412/840 MB   12 MB/s   0:35│
 │  ↓ photos/a.jpg                 queued                0/2 MB                 │

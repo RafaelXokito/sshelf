@@ -423,14 +423,14 @@ func TestFR_SFTP_013_RefreshKeepsLaterMoves(t *testing.T) {
 
 func TestFR_TAB_003_M3_SftpLabel(t *testing.T) {
 	d, _ := approvedTab(t)
-	if h := headerLine(d); h != "sshelf │ Hosts │ 1 raspberrypi4 │[2 sftp: raspberrypi4]│" {
+	if h := headerLine(d); h != "sshelf │ Hosts │ 1 raspberrypi4 ✕ │[2 sftp: raspberrypi4 ✕]│" {
 		t.Fatalf("header = %q", h)
 	}
 	long := []domain.Host{{Meta: domain.Meta{ID: "pi"}, Label: "a-very-long-host-label\x1b[31m", Hostname: "h"}}
 	d2, _ := sftpDriver(t, long, nil, approvedBrowser(2))
 	d2.send(tea.WindowSizeMsg{Width: 80, Height: 24})
 	openSFTP(t, d2, "pi")
-	if h := headerLine(d2); h != "sshelf │ Hosts │[1 sftp: a-very-long-h…]│" {
+	if h := headerLine(d2); h != "sshelf │ Hosts │[1 sftp: a-very-long-h… ✕]│" {
 		t.Fatalf("header = %q", h)
 	}
 }
@@ -555,7 +555,7 @@ func TestARCH_SFTP_007_SharedNumbering(t *testing.T) {
 	connectHost(t, d, "h1") // 1
 	openSFTP(t, d, "h2")    // 2
 	connectHost(t, d, "h3") // 3
-	if h := headerLine(d); !strings.Contains(h, " 1 db-staging │ 2 sftp: web-prod │[3 zeta]│") {
+	if h := headerLine(d); !strings.Contains(h, " 1 db-staging ✕ │ 2 sftp: web-prod ✕ │[3 zeta ✕]│") {
 		t.Fatalf("header = %q", h)
 	}
 	d.prefix("2")
@@ -569,7 +569,7 @@ func TestARCH_SFTP_007_SharedNumbering(t *testing.T) {
 	}
 	// Tab 3 moved to position 2, so the new tab is number 3 (D-023).
 	openSFTP(t, d, "h2")
-	if h := headerLine(d); !strings.Contains(h, " 1 db-staging │ 2 zeta │[3 sftp: web-prod]│") {
+	if h := headerLine(d); !strings.Contains(h, " 1 db-staging ✕ │ 2 zeta ✕ │[3 sftp: web-prod ✕]│") {
 		t.Fatalf("header = %q", h)
 	}
 }

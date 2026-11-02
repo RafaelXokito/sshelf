@@ -1,4 +1,4 @@
-sshelf │ Hosts │[1 sftp: web-prod]│
+sshelf │ Hosts │[1 sftp: web-prod ✕]│
 ┌ Transfers (1) ───────────────────────────────────────────────────────────────────────────────────────────────────────┐
 │> ↑ a.jpg                                            running                                 0.4/1 MB  200 KB/s   0:03│
 │                                                                                                                      │

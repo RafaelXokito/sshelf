@@ -1,4 +1,4 @@
-sshelf │ Hosts │ 1 raspberrypi4 │[2 sftp: raspberrypi4]│
+sshelf │ Hosts │ 1 raspberrypi4 ✕ │[2 sftp: raspberrypi4 ✕]│
 ┌ Transfers (1) ───────────────────────────────────────────────────────────────────────────────────────────────────────┐
 │> ↓ notes.txt                                        waiting                                   0/3 KB                 │
 │                                                                                                                      │

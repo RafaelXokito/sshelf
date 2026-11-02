@@ -292,13 +292,14 @@ func (m Model) mouseWheel(ms tea.Mouse) (tea.Model, tea.Cmd) {
 }
 
 // tabBarClick handles a left click at column x of the tab bar, whichever
-// tab is focused: on an ended tab's "✕" it closes that tab as x does
-// (D-028), on any other part of a tab it focuses it (FR-NAV-017 v1
-// revision), and on the title or a separator it does nothing.
+// tab is focused: on a tab's "✕" it closes an ended tab as x does and
+// asks as Ctrl+] q does on a live one (D-030, closeClick), on any other
+// part of a tab it focuses it (FR-NAV-017 v1 revision), and on the title
+// or a separator it does nothing.
 func (m Model) tabBarClick(x int) (tea.Model, tea.Cmd) {
 	spans := m.headerSpans()
 	if i, ok := tabs.CloseAt(spans, x); ok && i > 0 {
-		return m.closeEnded(m.tabs[i-1])
+		return m.closeClick(m.tabs[i-1])
 	}
 	if i, ok := tabs.TabAt(spans, x); ok {
 		return m.focusTab(i)

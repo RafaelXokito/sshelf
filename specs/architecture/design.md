@@ -2190,7 +2190,7 @@ resize clear the selection.
 
 | Where | Press (left) | Double-click | Wheel | Other buttons, release, motion |
 |---|---|---|---|---|
-| Tab bar (Hosts tab, no modal) | focus the tab; on an ended tab's `✕` (its cell and the next), close it as `x` does (D-028) | same as press | ignored | ignored |
+| Tab bar (Hosts tab, no modal) | focus the tab; on a tab's `✕` (its cell and the next), close an ended tab as `x` does and ask on a live one as `Ctrl+]` `q` does (D-028, D-030) | same as press | ignored | ignored |
 | Host list | select row; search field: focus search | connect (as Enter) | move selection ±3 | ignored |
 | Welcome | run the choice under the pointer | same as press | ignored | ignored |
 | Forms (host, identity, prompt modal) | focus field; `‹`/`›` change choice; `[ Save ]` / `[ Cancel ]` | same as press | ignored | ignored |

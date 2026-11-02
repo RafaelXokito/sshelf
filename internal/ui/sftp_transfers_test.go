@@ -224,7 +224,7 @@ func TestFR_SFTP_018_DisconnectedGolden(t *testing.T) {
 	if !sftpTabAt(t, d, 2).disconnected {
 		t.Fatal("not disconnected")
 	}
-	if h := headerLine(d); !strings.Contains(h, "[2 sftp: raspberrypi4 ✕]") {
+	if h := headerLine(d); !strings.Contains(h, "[2 sftp: raspberrypi4 ended ✕]") {
 		t.Fatalf("header = %q", h)
 	}
 	if p := progressLine(d); p != "⏸ 3 transfers paused: connection lost · r reconnect" {
@@ -303,7 +303,7 @@ func TestFR_SFTP_018_ReconnectSameTab(t *testing.T) {
 	if b.Lists()-lists != 2 {
 		t.Fatalf("panes not refreshed: %d lists", b.Lists()-lists)
 	}
-	if h := headerLine(d); strings.Contains(h, "✕") {
+	if h := headerLine(d); strings.Contains(h, " ended ") {
 		t.Fatalf("header = %q", h)
 	}
 	// The new connection's drop is watched again.

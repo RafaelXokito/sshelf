@@ -53,10 +53,10 @@ func TestFR_TAB_002_E2ETwoServers(t *testing.T) {
 	off = s.waitText(off, "on-web-test")
 
 	s.prefix("1")
-	off = s.waitText(off, "[1 web-prod]")
+	off = s.waitText(off, "[1 web-prod ✕]")
 	s.typeKeys("flood 1M\r") // keeps writing while its tab is in the background
 	s.prefix("2")
-	off = s.waitText(off, "[2 web-test]")
+	off = s.waitText(off, "[2 web-test ✕]")
 	time.Sleep(time.Second)
 	s.prefix("1")
 	s.waitText(off, "flood done")

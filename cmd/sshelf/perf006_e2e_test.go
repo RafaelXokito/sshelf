@@ -68,14 +68,14 @@ func TestNFR_PERF_006_TenSessions(t *testing.T) {
 		if target == 1 { // Ctrl+] n from tab 10 goes to Hosts; jump instead
 			off := s.out.Len()
 			s.prefix("1")
-			s.waitText(off, "[1 web-prod]")
+			s.waitText(off, "[1 web-prod ✕]")
 			focused = 1
 			continue
 		}
 		off := s.out.Len()
 		start := time.Now()
 		s.prefix("n")
-		switches = append(switches, s.waitFast(off, fmt.Sprintf("[%d web-prod]", target), start))
+		switches = append(switches, s.waitFast(off, fmt.Sprintf("[%d web-prod ✕]", target), start))
 		focused = target
 	}
 	slices.Sort(switches)

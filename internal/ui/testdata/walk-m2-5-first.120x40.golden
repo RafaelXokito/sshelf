@@ -1,4 +1,4 @@
-sshelf │ Hosts │[1 web-prod]│ 2 db-staging │
+sshelf │ Hosts │[1 web-prod ✕]│ 2 db-staging ✕ │
 ubuntu@web-prod:~$
 
 

@@ -33,7 +33,7 @@ func TestFR_KH_001_E2ETrustThenNoPrompt(t *testing.T) {
 		t.Fatalf("no shell after trusting; output:\n%q", s.out.From(0))
 	}
 	s.tabs = 1
-	off = s.waitText(off, "[1 web-prod]") // the session's tab
+	off = s.waitText(off, "[1 web-prod ✕]") // the session's tab
 	off = s.endSession(off, "exit 3", "exited (3)")
 
 	b, err := os.ReadFile(kh) //nolint:gosec // test temp dir

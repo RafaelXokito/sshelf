@@ -53,7 +53,7 @@ func TestFR_CONN_005_M2_BackgroundEndKeepsFocus(t *testing.T) {
 	if d.root().focus != 2 {
 		t.Fatalf("focus = %d after a background session ended", d.root().focus)
 	}
-	if h := headerLine(d); !strings.Contains(h, "1 db-staging ✕") {
+	if h := headerLine(d); !strings.Contains(h, "1 db-staging ended ✕") {
 		t.Fatalf("header = %q", h)
 	}
 	d.focus(0)
@@ -138,7 +138,7 @@ func TestFR_CONN_010_ReconnectSameTab(t *testing.T) {
 		t.Fatal("the tab does not run the new session, or the old one is open")
 	}
 	v := plain(d.view())
-	if !strings.Contains(v, "new screen") || strings.Contains(v, "old screen") || strings.Contains(v, "✕") {
+	if !strings.Contains(v, "new screen") || strings.Contains(v, "old screen") || strings.Contains(v, "ended") {
 		t.Fatalf("view after reconnecting:\n%s", v)
 	}
 	if got := statusBar(d); !strings.HasPrefix(got, "● connected · ubuntu@10.0.0.10:22 · 00:00:00") {
@@ -176,7 +176,7 @@ func TestFR_CONN_010_FailureKeepsEndedTab(t *testing.T) {
 	m, cmd := d.root().Update(tea.KeyPressMsg{Code: 'r', Text: "r"})
 	req := cmd().(hostlist.ConnectRequestMsg)
 	m, _ = m.Update(req) // the connect command is not run
-	if v := plain(m.View().Content); !strings.Contains(v, "Connecting to web-prod") || !strings.HasPrefix(v, "sshelf │ Hosts │[1 web-prod ✕]│") {
+	if v := plain(m.View().Content); !strings.Contains(v, "Connecting to web-prod") || !strings.HasPrefix(v, "sshelf │ Hosts │[1 web-prod ended ✕]│") {
 		t.Fatalf("Connecting not over the tab:\n%s", v)
 	}
 	m, cmd = m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})

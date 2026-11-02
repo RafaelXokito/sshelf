@@ -143,7 +143,7 @@ func TestFR_TAB_002_SameHostTwice(t *testing.T) {
 		t.Fatalf("focus = %d after the first connect, want tab 1", d.root().focus)
 	}
 	connectHost(t, d, "h2")
-	if h := headerLine(d); !strings.Contains(h, "│ 1 web-prod │[2 web-prod]│") {
+	if h := headerLine(d); !strings.Contains(h, "│ 1 web-prod ✕ │[2 web-prod ✕]│") {
 		t.Fatalf("header = %q", h)
 	}
 	if len(svc.connected) != 2 || len(d.root().tabs) != 2 {
@@ -183,7 +183,7 @@ func TestARCH_SESS_002_M2_PromptsOverCurrentTab(t *testing.T) {
 	if root.focus != 0 || len(root.tabs) != 1 {
 		t.Fatalf("focus = %d, tabs = %d while authenticating", root.focus, len(root.tabs))
 	}
-	if !strings.Contains(v, "Password for admin@10.0.1.20") || !strings.HasPrefix(v, "sshelf │[Hosts]│ 1 web-prod │") {
+	if !strings.Contains(v, "Password for admin@10.0.1.20") || !strings.HasPrefix(v, "sshelf │[Hosts]│ 1 web-prod ✕ │") {
 		t.Fatalf("prompt not over the Hosts tab:\n%s", v)
 	}
 
@@ -202,11 +202,11 @@ func TestFR_TAB_003_FocusBracketsInASCIIProfile(t *testing.T) {
 	d := framedDriver(t, testHosts, apptest.NewFakeSession(), apptest.NewFakeSession())
 	connectHost(t, d, "h3")
 	connectHost(t, d, "h2")
-	if h := headerLine(d); h != "sshelf │ Hosts │ 1 zeta │[2 web-prod]│" {
+	if h := headerLine(d); h != "sshelf │ Hosts │ 1 zeta ✕ │[2 web-prod ✕]│" {
 		t.Fatalf("header = %q", h)
 	}
 	d.focus(0)
-	if h := headerLine(d); h != "sshelf │[Hosts]│ 1 zeta │ 2 web-prod │" {
+	if h := headerLine(d); h != "sshelf │[Hosts]│ 1 zeta ✕ │ 2 web-prod ✕ │" {
 		t.Fatalf("header = %q", h)
 	}
 	// Reverse video is extra: the brackets alone show focus.
@@ -224,11 +224,11 @@ func TestFR_TAB_003_LabelSanitisedAndCut(t *testing.T) {
 		t.Fatalf("header carries the label's control sequence: %q", raw)
 	}
 	h := headerLine(d)
-	want := "[1 " + tabs.SessionEntry(1, hosts[0].Label, false, false).Text[2:] + "]"
+	want := "[1 " + tabs.SessionEntry(1, hosts[0].Label, false, false).Text[2:] + " ✕]"
 	if !strings.Contains(h, want) {
 		t.Fatalf("header = %q, want %q", h, want)
 	}
-	label := strings.TrimSuffix(strings.TrimPrefix(want, "[1 "), "]")
+	label := strings.TrimSuffix(strings.TrimPrefix(want, "[1 "), " ✕]")
 	if w := len([]rune(label)); w != tabs.LabelWidth || !strings.HasSuffix(label, "…") {
 		t.Fatalf("label %q is %d columns, want %d ending in …", label, w, tabs.LabelWidth)
 	}
@@ -293,7 +293,7 @@ func TestFR_TAB_004_ActivityOnlyInBackground(t *testing.T) {
 
 	bg.Output("new output")
 	d.pump(1)
-	if h := headerLine(d); !strings.Contains(h, "│ 1 db-staging ● │") {
+	if h := headerLine(d); !strings.Contains(h, "│ 1 db-staging ● ✕ │") {
 		t.Fatalf("header = %q, want the activity marker on tab 1", h)
 	}
 	fg.Output("more")
@@ -327,12 +327,12 @@ func TestFR_TAB_004_EndedMarker(t *testing.T) {
 	d.pump(1)
 	a.End(&session.DisconnectError{Err: errors.New("reset")})
 	d.pump(1)
-	if h := headerLine(d); !strings.Contains(h, "│ 1 db-staging ✕ │") || strings.Contains(h, "●") {
+	if h := headerLine(d); !strings.Contains(h, "│ 1 db-staging ended ✕ │") || strings.Contains(h, "●") {
 		t.Fatalf("header = %q, want ✕ instead of ●", h)
 	}
 	b.End(nil)
 	d.pump(2)
-	if h := headerLine(d); !strings.Contains(h, "[2 web-prod ✕]") {
+	if h := headerLine(d); !strings.Contains(h, "[2 web-prod ended ✕]") {
 		t.Fatalf("header = %q, want ✕ on the focused tab", h)
 	}
 }

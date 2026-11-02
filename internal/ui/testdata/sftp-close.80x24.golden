@@ -1,4 +1,4 @@
-sshelf │ Hosts │ 1 raspberrypi4 │[2 sftp: raspberrypi4]│
+sshelf │ Hosts │ 1 raspberrypi4 ✕ │[2 sftp: raspberrypi4 ✕]│
 ┌ Local: ~/Downloads ──────────────────┐┌ Remote: /home/pi ────────────────────┐
 │   ..                                 ││>  ..                                 │
 │ ▸ photos/                     4 items││ ▸ scripts/                   12 items│

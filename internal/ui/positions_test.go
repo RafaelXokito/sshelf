@@ -42,9 +42,9 @@ func TestFR_TAB_002_NumbersArePositions(t *testing.T) {
 		header string // after closing
 		left   []int  // the sessions left, by index into the sessions
 	}{
-		{"first", "1", "sshelf │[Hosts]│ 1 web-prod │ 2 zeta │", []int{1, 2}},
-		{"middle", "2", "sshelf │ Hosts │[1 db-staging]│ 2 zeta │", []int{0, 2}},
-		{"last", "3", "sshelf │ Hosts │ 1 db-staging │[2 web-prod]│", []int{0, 1}},
+		{"first", "1", "sshelf │[Hosts]│ 1 web-prod ✕ │ 2 zeta ✕ │", []int{1, 2}},
+		{"middle", "2", "sshelf │ Hosts │[1 db-staging ✕]│ 2 zeta ✕ │", []int{0, 2}},
+		{"last", "3", "sshelf │ Hosts │ 1 db-staging ✕ │[2 web-prod ✕]│", []int{0, 1}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			d, ss := threeTabs(t)
@@ -67,7 +67,7 @@ func TestFR_TAB_002_NumbersArePositions(t *testing.T) {
 			}
 
 			connectHost(t, d, "h1")
-			if h := headerLine(d); !strings.HasSuffix(h, "│[3 db-staging]│") {
+			if h := headerLine(d); !strings.HasSuffix(h, "│[3 db-staging ✕]│") {
 				t.Fatalf("header after a new connection = %q", h)
 			}
 			d.prefix("1")
@@ -86,7 +86,7 @@ func TestFR_TAB_001_NextPrevFollowPositions(t *testing.T) {
 	d.prefix("q")
 	d.keys("y") // focus on 1 db-staging
 	d.prefix("n")
-	if focusedSession(d) != ss[2] || !strings.Contains(headerLine(d), "[2 zeta]") {
+	if focusedSession(d) != ss[2] || !strings.Contains(headerLine(d), "[2 zeta ✕]") {
 		t.Fatalf("Ctrl+] n: header = %q", headerLine(d))
 	}
 	d.prefix("n")
@@ -121,7 +121,7 @@ func TestFR_CONN_010_ReconnectAfterRenumbering(t *testing.T) {
 	d.prefix("1")
 	d.prefix("q")
 	d.keys("y")
-	if h := headerLine(d); h != "sshelf │[Hosts]│ 1 web-prod │ 2 zeta ✕ │" {
+	if h := headerLine(d); h != "sshelf │[Hosts]│ 1 web-prod ✕ │ 2 zeta ended ✕ │" {
 		t.Fatalf("header = %q", h)
 	}
 	d.prefix("2")
@@ -130,7 +130,7 @@ func TestFR_CONN_010_ReconnectAfterRenumbering(t *testing.T) {
 	if len(r.tabs) != 2 || r.focus != 2 || focusedSession(d) != ss[3] {
 		t.Fatalf("tabs = %d, focus = %d after r", len(r.tabs), r.focus)
 	}
-	if h := headerLine(d); h != "sshelf │ Hosts │ 1 web-prod │[2 zeta]│" {
+	if h := headerLine(d); h != "sshelf │ Hosts │ 1 web-prod ✕ │[2 zeta ✕]│" {
 		t.Fatalf("header after reconnect = %q", h)
 	}
 }
@@ -151,7 +151,7 @@ func TestFR_TAB_003_SFTPTabRenumbered(t *testing.T) {
 	d.prefix("2")
 	d.prefix("q")
 	d.keys("y")
-	if h := headerLine(d); h != "sshelf │ Hosts │[1 db-staging]│ 2 sftp: db-staging │" {
+	if h := headerLine(d); h != "sshelf │ Hosts │[1 db-staging ✕]│ 2 sftp: db-staging ✕ │" {
 		t.Fatalf("header = %q", h)
 	}
 	d.prefix("1")

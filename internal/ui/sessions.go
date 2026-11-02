@@ -294,7 +294,7 @@ func (m Model) closeTab(id int) (Model, tea.Cmd) {
 }
 
 // closeEnded closes the ended session tab or disconnected SFTP tab t, as
-// x does there and as a click on its "✕" does (D-028): a session tab
+// x does there and as a click on its "✕" does (D-028, D-030): a session tab
 // closes at once; an SFTP tab closes at once when idle and asks first
 // while transfers are paused (FR-SFTP-025).
 func (m Model) closeEnded(t *sessionTab) (tea.Model, tea.Cmd) {
@@ -302,6 +302,35 @@ func (m Model) closeEnded(t *sessionTab) (tea.Model, tea.Cmd) {
 		return m.closeSFTPAsk(t, true)
 	}
 	return m.closeTab(t.id)
+}
+
+// disconnectAsk is Ctrl+] q on tab t (FR-CONN-014, FR-SFTP-025), and a
+// click on a live tab's "✕" (D-030): an SFTP tab asks its close
+// question; a session tab asks "Disconnect <label>?", or names the SFTP
+// tab that stays connected on its connection.
+func (m Model) disconnectAsk(t *sessionTab) (tea.Model, tea.Cmd) {
+	if t.sftp != nil {
+		return m.closeSFTPAsk(t, false)
+	}
+	sftp := 0
+	if !t.done {
+		if id := m.sftpTabOn(t.sess.ConnID()); id > 0 {
+			sftp = m.tabIndex(id) + 1
+		}
+	}
+	q := disconnectQuestion(t.label, sftp)
+	m.modals = append(m.modals, confirm.New(q, closeTabMsg{Num: t.id}))
+	return m, nil
+}
+
+// closeClick is a click on tab t's "✕" (D-030): an ended session tab or
+// a disconnected SFTP tab closes as x does there (closeEnded); a live
+// tab does what Ctrl+] q does on it (disconnectAsk).
+func (m Model) closeClick(t *sessionTab) (tea.Model, tea.Cmd) {
+	if (t.sftp == nil && t.done) || (t.sftp != nil && t.sftp.disconnected) {
+		return m.closeEnded(t)
+	}
+	return m.disconnectAsk(t)
 }
 
 // attemptTabPtr is the ended tab the connection attempt in progress
@@ -519,17 +548,10 @@ func (m Model) runPrefix(r keys.PrefixResult) (tea.Model, tea.Cmd) {
 		}
 	case keys.PrefixDoDisconnect:
 		if st := m.focusedSFTP(); st != nil {
-			return m.closeSFTPAsk(st, false)
+			return m.disconnectAsk(st)
 		}
 		if t != nil {
-			sftp := 0
-			if !t.done {
-				if id := m.sftpTabOn(t.sess.ConnID()); id > 0 {
-					sftp = m.tabIndex(id) + 1
-				}
-			}
-			q := disconnectQuestion(t.label, sftp)
-			m.modals = append(m.modals, confirm.New(q, closeTabMsg{Num: t.id}))
+			return m.disconnectAsk(t)
 		}
 	case keys.PrefixDoHelp:
 		m.modals = append(m.modals, help.New())

@@ -826,6 +826,17 @@ conventions above. v1 requirements are not yet checked by
 
 ---
 
+### T-069 · A close button on every tab
+
+- **Delivers:** D-030. `tabs.SessionEntry` and `tabs.SFTPEntry` set `Entry.Close`, so every session and SFTP tab ends with `tabs.CloseButton` (`✕`); the ended marker becomes `tabs.EndedMarker` = `ended`, plain ASCII, drawn in the ended colour. `tabs.Layout` records every button's column (`Span.CloseX`), and `tabs.CloseAt` keeps the two-cell target. `ui.tabBarClick` calls `closeClick`: an ended session tab or a disconnected SFTP tab goes to `closeEnded` (as `x`), a live tab to `disconnectAsk`, which `Ctrl+]` `q` now calls too, so the click asks the same questions ("Disconnect web-prod?", the shared-connection and SFTP close questions, FR-SFTP-025).
+- **Satisfies:** the D-030 revisions of FR-TAB-004 and FR-NAV-017
+- **Depends on:** T-067
+- **Tests:** `TestFR_TAB_004_D030_Markers`, `TestFR_TAB_004_D030_CloseAtNarrow`, `TestFR_TAB_004_D028_CloseAtMarker` (now every tab), `TestFR_TAB_004_D030_LiveTabAsks` (any focus, session focused, scrollback, `n` keeps, `y` closes and renumbers), `TestFR_TAB_004_D030_LiveTabSharedConnection`, `TestFR_TAB_004_D030_LiveSFTPAsks`, the D-028 tests for ended tabs; goldens with the new tab text; PTY E2E `TestFR_TAB_004_D030_E2EClickLiveCloseAsks` and `TestFR_TAB_004_D028_E2EClickMarkerCloses`.
+- **Done when:** the tests pass with `-race`, lint is clean, `go run ./scripts/tracecheck` is green, and both D-030 revisions are `Implemented`.
+- **Estimate:** 0.5 d
+
+---
+
 ## v1 milestones (outline)
 
 No task detail yet. Each milestone is planned as tasks once the MVP gate (T-030)
@@ -1096,10 +1107,10 @@ ARCH-UI-005, ARCH-UI-006, ARCH-UI-007) are now `M3` and are listed in the
 | FR-NAV-014 | T-038 |
 | FR-NAV-015 | T-039, T-040 |
 | FR-NAV-016 | T-040 |
-| FR-NAV-017 | T-040, T-067 |
+| FR-NAV-017 | T-040, T-067, T-069 |
 | FR-TAB-001 | T-034, T-035 |
 | FR-TAB-002 | T-034, T-037 |
-| FR-TAB-004 | T-034, T-067 |
+| FR-TAB-004 | T-034, T-067, T-069 |
 | FR-TAB-006 | T-035, T-037 |
 | FR-TAB-007 | T-034, T-042 |
 | FR-TAB-008 | T-037 |

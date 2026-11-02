@@ -18,10 +18,14 @@ import (
 // LabelWidth is the most columns a host label takes in a tab (FR-TAB-003).
 const LabelWidth = 20
 
-// Markers shown after a tab's label (FR-TAB-004).
+// Markers shown after a tab's label (FR-TAB-004 D-030 revision): "●"
+// for unseen activity, "ended" for an ended session or a disconnected
+// SFTP tab (plain ASCII, one column a letter on every terminal), then
+// the close button "✕" on every tab but Hosts.
 const (
 	ActivityMarker = "●"
-	EndedMarker    = "✕"
+	EndedMarker    = "ended"
+	CloseButton    = "✕"
 )
 
 const (
@@ -44,6 +48,7 @@ var (
 type Entry struct {
 	Text   string // "Hosts" or "<number> <label>", already sanitised and cut
 	Marker string // "", ActivityMarker or EndedMarker
+	Close  bool   // the tab shows CloseButton (every tab but Hosts, D-030)
 }
 
 // HostsEntry is the Hosts tab.
@@ -53,7 +58,7 @@ func HostsEntry() Entry { return Entry{Text: "Hosts"} }
 // sanitised (SEC-SESSION-003) and cut to LabelWidth columns, with the end
 // marker taking precedence over the activity marker.
 func SessionEntry(num int, label string, activity, ended bool) Entry {
-	e := Entry{Text: strconv.Itoa(num) + " " + ansi.Truncate(domain.Sanitize(label), LabelWidth, "…")}
+	e := Entry{Text: strconv.Itoa(num) + " " + ansi.Truncate(domain.Sanitize(label), LabelWidth, "…"), Close: true}
 	switch {
 	case ended:
 		e.Marker = EndedMarker
@@ -68,7 +73,7 @@ func SessionEntry(num int, label string, activity, ended bool) Entry {
 // LabelWidth columns, with the disconnected marker taking precedence over
 // the activity marker.
 func SFTPEntry(num int, label string, activity, disconnected bool) Entry {
-	e := Entry{Text: strconv.Itoa(num) + " " + ansi.Truncate("sftp: "+domain.Sanitize(label), LabelWidth, "…")}
+	e := Entry{Text: strconv.Itoa(num) + " " + ansi.Truncate("sftp: "+domain.Sanitize(label), LabelWidth, "…"), Close: true}
 	switch {
 	case disconnected:
 		e.Marker = EndedMarker
@@ -95,10 +100,10 @@ type Span struct {
 	X, Width int
 	Text     string // plain text
 	Kind     Kind
-	Tab      int  // index into the entries for KindTab; the nearest hidden tab for the overflow markers; -1 otherwise
-	Focused  bool // the focused tab
-	// Close is set on a tab showing EndedMarker: the marker is its close
-	// button, at column CloseX (D-028).
+	Tab      int    // index into the entries for KindTab; the nearest hidden tab for the overflow markers; -1 otherwise
+	Focused  bool   // the focused tab
+	Marker   string // the tab's marker, for styling
+	// Close is set on a tab showing CloseButton, at column CloseX (D-030).
 	Close  bool
 	CloseX int
 }
@@ -150,10 +155,11 @@ func Layout(width int, entries []Entry, focus int) []Span {
 	}
 	for i := lo; i < hi; i++ {
 		add(texts[i], KindTab, i, i == focus)
-		if entries[i].Marker == EndedMarker {
-			// "[" or " ", the text, " ", then the marker (entryText).
-			s := &spans[len(spans)-1]
-			s.Close, s.CloseX = true, s.X+1+ansi.StringWidth(entries[i].Text)+1
+		s := &spans[len(spans)-1]
+		s.Marker = entries[i].Marker
+		if entries[i].Close {
+			// The button is last, before the closing " " or "]" (entryText).
+			s.Close, s.CloseX = true, s.X+s.Width-1-ansi.StringWidth(CloseButton)
 		}
 		add(sep, KindSep, -1, false)
 	}
@@ -169,6 +175,9 @@ func entryText(e Entry, focused bool) string {
 	s := e.Text
 	if e.Marker != "" {
 		s += " " + e.Marker
+	}
+	if e.Close {
+		s += " " + CloseButton
 	}
 	if focused {
 		return "[" + s + "]"
@@ -203,8 +212,8 @@ func Header(spans []Span) string {
 			b.WriteString(titleStyle.Render("sshelf") + " ")
 		case s.Focused:
 			b.WriteString(focusStyle.Render(s.Text))
-		case s.Kind == KindTab && strings.HasSuffix(s.Text, " "+ActivityMarker+" "):
-			b.WriteString(strings.TrimSuffix(s.Text, ActivityMarker+" ") + activeMarker.Render(ActivityMarker) + " ")
+		case s.Kind == KindTab:
+			b.WriteString(tabText(s))
 		case s.Kind == KindSep || s.Kind == KindMoreLeft || s.Kind == KindMoreRight:
 			b.WriteString(dimStyle.Render(s.Text))
 		default:
@@ -212,6 +221,22 @@ func Header(spans []Span) string {
 		}
 	}
 	return b.String()
+}
+
+// tabText renders an unfocused tab: the activity marker green, the ended
+// marker in the ended colour, the close button in the default colour so
+// it shows on every theme (D-030).
+func tabText(s Span) string {
+	cut := strings.LastIndex(s.Text, " "+s.Marker+" ")
+	if s.Marker == "" || cut < 0 {
+		return s.Text
+	}
+	style := activeMarker
+	if s.Marker == EndedMarker {
+		style = endedStyle
+	}
+	cut++
+	return s.Text[:cut] + style.Render(s.Marker) + s.Text[cut+len(s.Marker):]
 }
 
 // TabAt returns the tab under column x of the header laid out as spans:
@@ -226,8 +251,8 @@ func TabAt(spans []Span, x int) (int, bool) {
 	return 0, false
 }
 
-// CloseAt returns the tab whose EndedMarker is under column x of the
-// header laid out as spans (D-028). The marker's cell and the one after
+// CloseAt returns the tab whose CloseButton is under column x of the
+// header laid out as spans (D-030). The marker's cell and the one after
 // it (the tab's closing " " or "]") both count, so the click lands even
 // where a terminal draws "✕" two columns wide.
 func CloseAt(spans []Span, x int) (int, bool) {
@@ -273,7 +298,7 @@ func Notice(width int, text string) string {
 // EndedStatus is an ended session's status bar (FR-CONN-005 revision):
 // "✕ <reason> · <hints>".
 func EndedStatus(width int, reason string, hints ...string) string {
-	return endedStyle.Render(Fit(width, []string{EndedMarker + " " + domain.Sanitize(reason)}, hints...))
+	return endedStyle.Render(Fit(width, []string{"✕ " + domain.Sanitize(reason)}, hints...))
 }
 
 // Area fits lines to the session area: rows lines, each cut to width

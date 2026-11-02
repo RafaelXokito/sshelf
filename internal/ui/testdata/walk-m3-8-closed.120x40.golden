@@ -1,4 +1,4 @@
-sshelf │ Hosts │ 1 sftp: web-prod │[2 db-staging]│
+sshelf │ Hosts │ 1 sftp: web-prod ✕ │[2 db-staging ✕]│
 admin@db-staging:~$
 
 

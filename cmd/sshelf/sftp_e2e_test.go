@@ -51,7 +51,7 @@ func (r *sftpRun) openSFTPHost(want string) int {
 	off := r.out.Len()
 	r.typeKeys("s")
 	r.tabs++
-	r.waitText(off, fmt.Sprintf("[%d sftp: web-prod]", r.tabs))
+	r.waitText(off, fmt.Sprintf("[%d sftp: web-prod ✕]", r.tabs))
 	return r.waitText(off, want)
 }
 
@@ -62,7 +62,7 @@ func (r *sftpRun) openSFTPOn(want string) int {
 	off := r.out.Len()
 	r.prefix("s")
 	r.tabs++
-	r.waitText(off, fmt.Sprintf("[%d sftp: web-prod]", r.tabs))
+	r.waitText(off, fmt.Sprintf("[%d sftp: web-prod ✕]", r.tabs))
 	return r.waitText(off, want)
 }
 
@@ -285,7 +285,7 @@ func TestFR_SFTP_004_E2ECloseEitherFirst(t *testing.T) {
 		r.prefix("q")
 		off = r.waitText(off, "Close SFTP tab 2?")
 		r.typeKeys("y")
-		off = r.waitText(off, "[1 web-prod]")
+		off = r.waitText(off, "[1 web-prod ✕]")
 		r.typeKeys("echo still-here\r")
 		off = r.waitText(off, "still-here")
 		if n := disconnects(r.srv); n != 0 {

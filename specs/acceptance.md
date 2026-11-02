@@ -1470,7 +1470,14 @@ Run once per release, on macOS and Linux, with the release's own binary.
 
 ## U.3 Close an ended tab with the mouse (D-028)
 
-- [ ] Open two sessions, `exit` the first, and on the Hosts tab click the `✕` of `1 <label> ✕`: the tab closes and the other becomes `1`. End that one too; click its label (it focuses), then its `✕` (it closes and the Hosts tab comes back). A live tab has no `✕`, and clicking it only focuses it (FR-TAB-004, FR-NAV-017 D-028 revisions).
+- [ ] Open two sessions, `exit` the first, and on the Hosts tab click the `✕` of `1 <label> ended ✕`: the tab closes and the other becomes `1`. End that one too; click its label (it focuses), then its `✕` (it closes and the Hosts tab comes back). Clicking a live tab's label only focuses it (FR-TAB-004, FR-NAV-017 D-028 revisions; D-030 tabs show `ended ✕`).
+
+## U.4 A close button on every tab (D-030)
+
+- [ ] On macOS and on Linux (GNOME Terminal or Konsole, and one other), open two sessions: both tabs show `✕` (`1 <label> ✕`, `[2 <label> ✕]`), the Hosts tab none, and the header fits on one line.
+- [ ] With session 2 focused and typing in it, click tab 1's `✕`: "Disconnect <label>?" appears and nothing reaches the remote; `n` keeps it. Click it again and press `y`: the tab closes and the other becomes `1`.
+- [ ] `exit` the remaining session: its tab shows `ended ✕`; click `✕`: it closes at once, with no question.
+- [ ] Open an SFTP tab and click its `✕`: "Close SFTP tab N?" appears, as `Ctrl+]` `q` asks.
 
 ## U sign-off
 

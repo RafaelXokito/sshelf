@@ -28,13 +28,38 @@ func TestFR_TAB_004_D028_E2EClickMarkerCloses(t *testing.T) {
 	off := s.openSession(s.srv, 1)
 	s.typeKeys("exit 3\r")
 	off = s.waitText(off, "exited (3) · r reconnect · x close")
-	// "sshelf │ Hosts │[1 web-prod ✕]│": the label at 17, the ✕ at 28.
+	// "sshelf │ Hosts │[1 web-prod ended ✕]│": the label at 17, the ✕ at 34.
 	s.typeKeys(sgrPress(20, 0) + sgrRelease(20, 0))
 	time.Sleep(300 * time.Millisecond)
 	if bytes.Contains(s.out.From(off), []byte("enter connect")) {
 		t.Fatalf("a click on the label closed the tab; output:\n%q", s.out.From(off))
 	}
+	s.typeKeys(sgrPress(34, 0) + sgrRelease(34, 0))
+	s.tabs--
+	s.waitText(off, "enter connect")
+	s.quit()
+}
+
+// TestFR_TAB_004_D030_E2EClickLiveCloseAsks clicks the "✕" of a live,
+// focused session tab with a real SGR click (D-030): it asks as Ctrl+] q
+// does, n keeps the session, and a second click then y disconnects it
+// and the host list comes back.
+func TestFR_TAB_004_D030_E2EClickLiveCloseAsks(t *testing.T) {
+	s := startSlice(t)
+	s.waitText(0, "web-prod demo@127.0.0.1")
+	off := s.openSession(s.srv, 1)
+	// "sshelf │ Hosts │[1 web-prod ✕]│": the ✕ at 28.
 	s.typeKeys(sgrPress(28, 0) + sgrRelease(28, 0))
+	off = s.waitText(off, "Disconnect web-prod?")
+	s.typeKeys("n")
+	time.Sleep(300 * time.Millisecond)
+	if bytes.Contains(s.out.From(off), []byte("enter connect")) {
+		t.Fatalf("n closed the tab; output:\n%q", s.out.From(off))
+	}
+	off = s.out.Len()
+	s.typeKeys(sgrPress(28, 0) + sgrRelease(28, 0))
+	off = s.waitText(off, "Disconnect web-prod?")
+	s.typeKeys("y")
 	s.tabs--
 	s.waitText(off, "enter connect")
 	s.quit()
@@ -61,7 +86,7 @@ func TestFR_NAV_012_E2EDoubleClickConnects(t *testing.T) {
 		t.Fatalf("the double-click did not connect; output:\n%q", s.out.From(0))
 	}
 	s.tabs = 1
-	off = s.waitText(off, "[1 web-prod]") // the session's tab
+	off = s.waitText(off, "[1 web-prod ✕]") // the session's tab
 	s.endSession(off, "exit 3", "exited (3)")
 	s.quit()
 }

@@ -142,7 +142,7 @@ func (c *canaryRun) connectShell(label string, srv *sshtest.Server, n int, promp
 		c.t.Fatalf("%s: no shell; output:\n%q", label, c.out.From(0))
 	}
 	c.tabs++
-	off = c.waitText(off, fmt.Sprintf("[%d %s]", c.tabs, label)) // the focused tab
+	off = c.waitText(off, fmt.Sprintf("[%d %s ✕]", c.tabs, label)) // the focused tab
 	c.typeKeys("echo in-the-frame" + keyEnter)
 	off = c.waitText(off, "in-the-frame")
 	c.endSession(off, "exit 0", "exited (0)")

@@ -76,7 +76,9 @@ Each connection opens in a tab. While a session has focus, all keys go to the re
 | `?` | help |
 | `ctrl+]` | send `ctrl+]` to the remote |
 
-When a session ends, press `r` to reconnect or `x` to close the tab.
+When a session ends, its tab shows `ended`; press `r` to reconnect or `x` to close the tab.
+
+Every session and SFTP tab ends with a `✕` close button. Clicking it closes an ended tab at once; on a live tab it asks first, exactly as `ctrl+]` `q` does ("Disconnect web-prod?"). A `●` on a tab means new output (or a finished transfer) you have not seen yet.
 
 Tabs are clickable at any time, including the Hosts tab while a session is focused. Inside a session, sshelf does its own text selection: drag to select, double-click a word, triple-click a line. When you release the button, the selection is copied to your clipboard through the terminal (OSC 52) and the status bar shows how many characters were copied. Any key or click clears the selection. The mouse wheel scrolls back through the session's history. Programs that ask for the mouse (vim with `set mouse=a`, htop, tmux with `mouse on`) receive it instead.
 

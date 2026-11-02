@@ -105,7 +105,7 @@ func TestSEC_SESSION_005_HostileOutputPTYScan(t *testing.T) {
 	s.prefix("h")
 	off = s.waitText(off, "[Hosts]")
 	s.prefix("1")
-	s.waitText(off, "[1 web-prod]")
+	s.waitText(off, "[1 web-prod ✕]")
 	time.Sleep(100 * time.Millisecond) // the last frame
 	window := s.out.From(start)
 
@@ -147,8 +147,8 @@ func TestSEC_SESSION_005_NoRemoteTitleInTab(t *testing.T) {
 		t.Errorf("window title %q", v.WindowTitle)
 	}
 	lines := strings.Split(ansi.Strip(v.Content), "\n")
-	if !strings.Contains(lines[0], "[1 web-prod]") {
-		t.Errorf("header %q, want the focused tab [1 web-prod]", lines[0])
+	if !strings.Contains(lines[0], "[1 web-prod ✕]") {
+		t.Errorf("header %q, want the focused tab [1 web-prod ✕]", lines[0])
 	}
 	for i, line := range lines {
 		if strings.Contains(line, "evil") || strings.Contains(line, "title") {
@@ -178,7 +178,7 @@ func echoFlow(t *testing.T, env ...string) (*canaryRun, string) {
 	c.typeKeys(keyEnter)
 	c.answerPrompt(off, srv, 1, "Password for bob@127.0.0.1", pw)
 	c.tabs++
-	c.waitText(off, "[1 echo-host]")
+	c.waitText(off, "[1 echo-host ✕]")
 	c.waitText(off, "connected · bob@127.0.0.1")
 
 	off = c.out.Len()
@@ -240,7 +240,7 @@ func chromeHits(t *testing.T, what string, lines []string, pw string, want ...st
 func TestFR_TAB_003_CanaryNotInTabBar(t *testing.T) {
 	c, pw := echoFlow(t)
 	headers, _ := c.chrome()
-	chromeHits(t, "header", headers, pw, "[1 echo-host]", "1 echo-host ✕", "[Hosts]")
+	chromeHits(t, "header", headers, pw, "[1 echo-host ✕]", "1 echo-host ended ✕", "[Hosts]")
 	c.check()
 }
 
@@ -289,20 +289,20 @@ func TestSEC_LOG_001_CanaryHarnessM2(t *testing.T) {
 	off := c.out.Len()
 	c.typeKeys(keyEnter)
 	c.answerPrompt(off, srvB, 1, "Password for bob@127.0.0.1", typedPw)
-	c.waitText(off, "[1 m2-typed]")
+	c.waitText(off, "[1 m2-typed ✕]")
 	step(typedPw+keyEnter, "unknown command: "+typedPw)
 
 	// Tab 2: the stored password.
 	step("\x1dh", "enter connect")
 	// m2-typed moved to the top on connecting (FR-NAV-018): m2-stored is
 	// below it.
-	step("j"+keyEnter, "[2 m2-stored]", "connected · alice@127.0.0.1")
+	step("j"+keyEnter, "[2 m2-stored ✕]", "connected · alice@127.0.0.1")
 	step("echo in-tab-2"+keyEnter, "in-tab-2")
 
 	// Switching, help and scrollback.
-	step("\x1d1", "[1 m2-typed]")
-	step("\x1dn", "[2 m2-stored]")
-	step("\x1dp", "[1 m2-typed]")
+	step("\x1d1", "[1 m2-typed ✕]")
+	step("\x1dn", "[2 m2-stored ✕]")
+	step("\x1dp", "[1 m2-typed ✕]")
 	step("\x1d?", "Press Ctrl+], then:")
 	step(keyEsc, "connected · bob@127.0.0.1")
 	step("\x1d[", "scrollback")
@@ -323,7 +323,7 @@ func TestSEC_LOG_001_CanaryHarnessM2(t *testing.T) {
 	c.waitQuit()
 
 	headers, bars := c.chrome()
-	chromeHits(t, "header", headers, typedPw, "[1 m2-typed]", "[2 m2-stored]", "1 m2-typed ✕")
+	chromeHits(t, "header", headers, typedPw, "[1 m2-typed ✕]", "[2 m2-stored ✕]", "1 m2-typed ended ✕")
 	chromeHits(t, "header", headers, storedPw)
 	chromeHits(t, "status bar", bars, typedPw, "connected · alice@127.0.0.1:"+strconv.Itoa(srvA.Port()), "exited (5)")
 	chromeHits(t, "status bar", bars, storedPw)
