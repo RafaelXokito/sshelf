@@ -1,0 +1,96 @@
+{
+  "version": 1,
+  "settings": {
+    "theme": "dark"
+  },
+  "groups": [
+    {
+      "id": "019a3b10-0000-7000-8000-000000000001",
+      "name": "Production",
+      "parent_id": null
+    },
+    {
+      "id": "019a3b10-0000-7000-8000-000000000002",
+      "name": "Databases",
+      "parent_id": "019a3b10-0000-7000-8000-000000000001"
+    }
+  ],
+  "identities": [
+    {
+      "id": "019a3b10-0000-7000-8000-000000000010",
+      "name": "deploy",
+      "username": "deploy",
+      "key_path": "",
+      "has_password": true,
+      "has_private_key": false,
+      "has_key_passphrase": false,
+      "use_agent": false
+    },
+    {
+      "id": "019a3b10-0000-7000-8000-000000000011",
+      "name": "web key",
+      "username": "",
+      "key_path": "",
+      "has_password": false,
+      "has_private_key": true,
+      "has_key_passphrase": true,
+      "use_agent": false,
+      "hidden": true,
+      "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEoW4G7m4zT0lJ1Yd7oP0E9mQx2m2c9b7j8B1a2C3d4E web"
+    },
+    {
+      "id": "019a3b10-0000-7000-8000-000000000012",
+      "name": "key file",
+      "username": "",
+      "key_path": "~/.ssh/id_ed25519",
+      "has_password": false,
+      "has_private_key": false,
+      "has_key_passphrase": false,
+      "use_agent": true
+    }
+  ],
+  "hosts": [
+    {
+      "id": "019a3b10-0000-7000-8000-000000000020",
+      "label": "web prod",
+      "hostname": "web.example.com",
+      "port": 22,
+      "user": "ubuntu",
+      "identity_id": "019a3b10-0000-7000-8000-000000000011",
+      "group_id": "019a3b10-0000-7000-8000-000000000001",
+      "tags": [
+        "prod",
+        "web"
+      ],
+      "jump_host_ids": [],
+      "forward_agent": false,
+      "last_connected_at": "2026-10-30T09:15:00Z"
+    },
+    {
+      "id": "019a3b10-0000-7000-8000-000000000021",
+      "label": "db",
+      "hostname": "db.example.com",
+      "port": 2222,
+      "user": "",
+      "identity_id": "019a3b10-0000-7000-8000-000000000010",
+      "group_id": "019a3b10-0000-7000-8000-000000000002",
+      "tags": [],
+      "jump_host_ids": [
+        "019a3b10-0000-7000-8000-000000000020"
+      ],
+      "forward_agent": true
+    },
+    {
+      "id": "019a3b10-0000-7000-8000-000000000022",
+      "label": "lab",
+      "hostname": "10.0.0.5",
+      "port": 0,
+      "user": "",
+      "identity_id": "019a3b10-0000-7000-8000-000000000012",
+      "group_id": "",
+      "tags": [],
+      "jump_host_ids": [],
+      "forward_agent": false
+    }
+  ]
+}
