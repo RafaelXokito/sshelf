@@ -65,6 +65,12 @@ type sessionTab struct {
 	// counted from the session's first line (top + Dropped()), so the view
 	// keeps its place while the cap drops old lines; nil otherwise.
 	scroll *int
+	// sel is the text selection in the session area, or nil
+	// (FR-TAB-012); copied is the "copied N characters" status message,
+	// shown for sftpNoticeHold from copiedAt (FR-TAB-013).
+	sel      *selection
+	copied   string
+	copiedAt time.Time
 }
 
 // scrollTop returns the top line of the scrollback view relative to the
@@ -223,6 +229,7 @@ func (m Model) focusTab(i int) (Model, tea.Cmd) {
 		return m, nil
 	}
 	m.focus = i
+	m.clearSelections()
 	if t := m.focused(); t != nil {
 		t.seq = t.sess.Snapshot().Seq
 		t.seenSeq = t.seq
@@ -425,6 +432,7 @@ func (m Model) updateSessions(msg tea.Msg) (Model, tea.Cmd, bool) {
 		}
 		t := m.tabs[i]
 		t.done, t.ended = true, msg.Err
+		t.copied = "" // the end reason comes first
 		return m, nil, true
 
 	case closeTabMsg:
@@ -637,6 +645,9 @@ func (m Model) sessionStatus(t *sessionTab) string {
 			return components.Help(h.Hints()...)
 		}
 	}
+	if t.copied != "" && m.now().Sub(t.copiedAt) < sftpNoticeHold {
+		return tabs.Notice(w, t.copied)
+	}
 	if t.scroll != nil {
 		_, total := t.sess.Scrollback(0, 0)
 		last := min(t.scrollTop()+m.areaRows(t), total)
@@ -699,12 +710,8 @@ func (m Model) sessionFrame(t *sessionTab, snap app.Snapshot) ([]string, *tea.Cu
 	if m.height > 0 {
 		rows = max(m.height-2, 1)
 	}
-	lines := snap.Lines
-	if t.scroll != nil {
-		// The view keeps its top line while output arrives (FR-TAB-010).
-		_, total := t.sess.Scrollback(0, 0)
-		lines, _ = t.sess.Scrollback(min(t.scrollTop(), max(total-rows, 0)), rows)
-	}
+	lines, origin := m.viewLines(t, snap)
+	lines = m.highlightLines(t, lines, origin)
 	var ml []string
 	tops := make([]int, len(m.modals))
 	for i, md := range m.modals {

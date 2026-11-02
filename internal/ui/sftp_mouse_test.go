@@ -390,7 +390,7 @@ func TestARCH_UI_006_M3_SftpCellMotion(t *testing.T) {
 		t.Fatalf("sftp tab: mode %v", mode())
 	}
 	d.focus(1)
-	if d.root().focused() == nil || mode() != none {
+	if d.root().focused() == nil || mode() != cell { // D-024
 		t.Fatalf("plain shell tab: mode %v", mode())
 	}
 	d.focus(2)
@@ -411,7 +411,7 @@ func TestARCH_UI_006_M3_SftpCellMotion(t *testing.T) {
 		t.Fatalf("disconnected: mode %v", mode())
 	}
 	d.focus(1)
-	if mode() != none {
+	if mode() != cell { // D-024
 		t.Fatalf("shell tab again: mode %v", mode())
 	}
 }

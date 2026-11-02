@@ -220,28 +220,32 @@ func (s *slice) runChecked() {
 	s.waitText(0, "web-prod demo@127.0.0.1")
 	s.waitTracking(true, "on the host list")
 	off := s.openSession(s.srv, 1)
-	s.waitTracking(false, "while the session tab is focused")
+	s.waitTracking(true, "while the session tab is focused") // D-024
 	s.typeKeys("exit 3\r")
 	off = s.waitText(off, "exited (3) · r reconnect · x close")
-	s.waitTracking(false, "on the ended tab")
+	s.waitTracking(true, "on the ended tab")
 	s.typeKeys("x")
 	s.waitText(off, "enter connect")
 	s.waitTracking(true, "on the host list after the session")
 }
 
-// TestNFR_UX_001_NoMouseTrackingInPlainSession runs the whole slice
+// TestNFR_UX_001_V1_TrackingInPlainSession runs the whole slice
 // (start, list, connect, session, back, quit) and follows the mouse
-// tracking sequences in every byte sshelf wrote (NFR-UX-001 M2 revision):
-// cell motion on the host list, none while the remote shell has the
-// terminal, so its native selection works (D-012), and none after
+// tracking sequences in every byte sshelf wrote (NFR-UX-001 v1 revision,
+// D-024): cell motion from the host list through the plain session and
+// its ended tab, never turned off and never all motion, and off after
 // quitting.
-func TestNFR_UX_001_NoMouseTrackingInPlainSession(t *testing.T) {
+func TestNFR_UX_001_V1_TrackingInPlainSession(t *testing.T) {
 	s := startSlice(t)
 	s.runChecked()
+	running := s.out.From(0)
 	s.quit()
 	out := s.out.From(0)
 	if !bytes.Contains(out, []byte("\x1b[?1002h\x1b[?1006h")) {
 		t.Errorf("cell-motion tracking with SGR encoding was never enabled; output:\n%q", out)
+	}
+	if lastIndex(running, mouseTrackingOff) >= 0 || bytes.Contains(running, []byte("\x1b[?1003h")) {
+		t.Errorf("tracking turned off or to all motion before quitting; output:\n%q", running)
 	}
 	if trackingOn(out) {
 		t.Error("mouse tracking is still on after quitting")

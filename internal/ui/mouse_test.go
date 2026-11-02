@@ -78,9 +78,10 @@ func manyHosts(n int) []domain.Host {
 	return hosts
 }
 
-func TestARCH_UI_006_MouseModePolicy(t *testing.T) {
+// The v1 policy (D-024): tracking is always on; all motion only for a
+// live, unscrolled session whose remote asked for ?1003.
+func TestARCH_UI_006_V1_MouseModePolicy(t *testing.T) {
 	const (
-		none = tea.MouseModeNone
 		cell = tea.MouseModeCellMotion
 		all  = tea.MouseModeAllMotion
 	)
@@ -91,15 +92,17 @@ func TestARCH_UI_006_MouseModePolicy(t *testing.T) {
 	}{
 		{"hosts tab", mouseState{}, cell},
 		{"hosts tab, modal", mouseState{modal: true}, cell},
-		{"plain session", mouseState{session: true}, none},
+		{"plain session", mouseState{session: true}, cell},
 		{"session asking for cell motion", mouseState{session: true, requested: cell}, cell},
 		{"session asking for all motion", mouseState{session: true, requested: all}, all},
 		{"session, modal", mouseState{session: true, modal: true, requested: all}, cell},
 		{"plain session, modal", mouseState{session: true, modal: true}, cell},
-		{"scrollback", mouseState{session: true, scrollback: true, requested: all}, none},
-		{"ended", mouseState{session: true, ended: true, requested: cell}, none},
-		{"ended, scrollback", mouseState{session: true, ended: true, scrollback: true}, none},
+		{"scrollback", mouseState{session: true, scrollback: true, requested: all}, cell},
+		{"plain scrollback", mouseState{session: true, scrollback: true}, cell},
+		{"ended", mouseState{session: true, ended: true, requested: all}, cell},
+		{"ended, scrollback", mouseState{session: true, ended: true, scrollback: true}, cell},
 		{"ended, modal", mouseState{session: true, ended: true, modal: true}, cell},
+		{"sftp", mouseState{sftp: true}, cell},
 	} {
 		if got := mouseModeFor(tc.in); got != tc.want {
 			t.Errorf("%s: mode %v, want %v", tc.name, got, tc.want)
@@ -113,7 +116,7 @@ func TestARCH_UI_006_MouseModePolicy(t *testing.T) {
 		t.Fatalf("Hosts tab: mode %v", got)
 	}
 	connectHost(t, d, "h2")
-	if got := d.m.View().MouseMode; got != none {
+	if got := d.m.View().MouseMode; got != cell {
 		t.Fatalf("plain shell tab: mode %v", got)
 	}
 	d.focus(0)
@@ -122,11 +125,8 @@ func TestARCH_UI_006_MouseModePolicy(t *testing.T) {
 	}
 }
 
-func TestNFR_UX_001_MouseModePolicy(t *testing.T) {
-	const (
-		none = tea.MouseModeNone
-		cell = tea.MouseModeCellMotion
-	)
+func TestNFR_UX_001_V1_MouseModePolicy(t *testing.T) {
+	const cell = tea.MouseModeCellMotion
 	mode := func(d *driver) tea.MouseMode { return d.m.View().MouseMode }
 
 	// Every sshelf screen and modal: cell motion.
@@ -153,19 +153,19 @@ func TestNFR_UX_001_MouseModePolicy(t *testing.T) {
 	d.esc()
 
 	// A focused plain session, scrollback mode and an ended session:
-	// none, so the terminal's own selection works (D-012).
+	// cell motion too, for tab clicks and sshelf's selection (D-024).
 	connectHost(t, d, "h2")
-	if d.root().focused() == nil || mode(d) != none {
+	if d.root().focused() == nil || mode(d) != cell {
 		t.Fatalf("plain session: mode %v", mode(d))
 	}
 	d.prefix("[")
-	if mode(d) != none {
+	if mode(d) != cell {
 		t.Fatalf("scrollback: mode %v", mode(d))
 	}
 	d.esc()
 	fs.End(nil)
 	d.pump(1)
-	if !d.root().focused().done || mode(d) != none {
+	if !d.root().focused().done || mode(d) != cell {
 		t.Fatalf("ended session: mode %v", mode(d))
 	}
 }

@@ -433,11 +433,10 @@ func TestFR_NAV_017_ClickTabFocuses(t *testing.T) {
 	if d.root().focus != 2 {
 		t.Fatalf("focus %d after clicking 2 web-prod, want 2", d.root().focus)
 	}
-	// On a session tab tracking is off; any header click that still
-	// arrives is ignored (D-012).
+	// From a session tab too (FR-NAV-017 v1 revision, D-024).
 	d.clickText(t, "1 db-staging")
-	if d.root().focus != 2 {
-		t.Fatal("a header click switched tabs while a session was focused")
+	if d.root().focus != 1 {
+		t.Fatalf("focus %d after clicking 1 db-staging from a session, want 1", d.root().focus)
 	}
 	d.focus(0)
 	d.clickText(t, "1 db-staging")

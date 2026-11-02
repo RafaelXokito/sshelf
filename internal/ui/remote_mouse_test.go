@@ -38,7 +38,7 @@ func TestFR_TAB_011_RemoteModeMapping(t *testing.T) {
 		in   app.MouseMode
 		want tea.MouseMode
 	}{
-		{app.MouseNone, tea.MouseModeNone},
+		{app.MouseNone, tea.MouseModeCellMotion}, // sshelf's selection (D-024)
 		{app.MousePress, tea.MouseModeCellMotion},
 		{app.MouseDrag, tea.MouseModeCellMotion},
 		{app.MouseAny, tea.MouseModeAllMotion},
@@ -50,21 +50,24 @@ func TestFR_TAB_011_RemoteModeMapping(t *testing.T) {
 	}
 }
 
-func TestFR_TAB_011_TrackingOffAfterDisable(t *testing.T) {
-	d, fs := mouseSession(t, app.MouseNone)
-	if got := d.m.View().MouseMode; got != tea.MouseModeNone {
-		t.Fatalf("before the remote asks: mode %v", got)
+func TestFR_TAB_011_V1_SelectAfterRemoteDisables(t *testing.T) {
+	d, fs := mouseSession(t, app.MouseAny)
+	if got := d.m.View().MouseMode; got != tea.MouseModeAllMotion {
+		t.Fatalf("after ?1003h: mode %v", got)
 	}
-	remoteMouse(fs, app.MousePress) // ?1000h
+	d.dragTo(0, 1, 5, 1)
+	if len(fs.Mouse()) != 3 || d.root().focused().sel != nil {
+		t.Fatalf("with remote mouse on: forwarded %v, selection %v", fs.Mouse(), d.root().focused().sel)
+	}
+	remoteMouse(fs, app.MouseNone) // ?1003l
 	if got := d.m.View().MouseMode; got != tea.MouseModeCellMotion {
-		t.Fatalf("after ?1000h: mode %v", got)
+		t.Fatalf("after ?1003l: mode %v, want cell motion in the next frame", got)
 	}
-	remoteMouse(fs, app.MouseNone) // ?1000l
-	if got := d.m.View().MouseMode; got != tea.MouseModeNone {
-		t.Fatalf("after ?1000l: mode %v, want tracking off in the next frame", got)
+	// From the next event on, the area selects instead of forwarding.
+	d.dragTo(0, 1, 5, 1)
+	if len(fs.Mouse()) != 3 || d.root().focused().sel == nil {
+		t.Fatalf("after ?1003l: forwarded %v, selection %v", fs.Mouse(), d.root().focused().sel)
 	}
-	// Presses after that are not forwarded either: the session drops them,
-	// and the terminal no longer sends any.
 }
 
 func TestFR_TAB_011_ForwardedInSessionCoordinates(t *testing.T) {
@@ -92,6 +95,9 @@ func TestFR_TAB_011_FrameRowsNotForwarded(t *testing.T) {
 	_, hostsX := textAt(t, before, "Hosts") // the Hosts tab in the tab bar
 	for _, y := range []int{0, 23} {        // the header and the status bar
 		for _, x := range []int{0, hostsX, 79} {
+			if x == hostsX && y == 0 {
+				continue // a tab: checked below
+			}
 			d.clickAt(x, y)
 			d.send(tea.MouseReleaseMsg{X: x, Y: y, Button: tea.MouseLeft})
 			d.send(tea.MouseWheelMsg{X: x, Y: y, Button: tea.MouseWheelUp})
@@ -101,11 +107,17 @@ func TestFR_TAB_011_FrameRowsNotForwarded(t *testing.T) {
 	if got := fs.Mouse(); len(got) != 0 {
 		t.Fatalf("frame rows forwarded %v", got)
 	}
-	// Not acted on either: the tab bar does not switch tabs while a
-	// session is focused (D-012), and nothing else changes (but the
-	// status bar's clock, which the clicks moved on).
+	// Not acted on either (but the status bar's clock, which the clicks
+	// moved on).
 	if d.root().focus != 1 || withoutStatus(d.view()) != withoutStatus(before) {
 		t.Fatalf("a click on the frame changed it: focus %d\n%s", d.root().focus, plain(d.view()))
+	}
+	// A click on the Hosts tab is sshelf's: it focuses the Hosts tab and
+	// reaches no remote (FR-NAV-017 v1 revision, D-024).
+	d.clickAt(hostsX, 0)
+	d.send(tea.MouseReleaseMsg{X: hostsX, Y: 0, Button: tea.MouseLeft})
+	if d.root().focus != 0 || len(fs.Mouse()) != 0 {
+		t.Fatalf("a click on Hosts: focus %d, forwarded %v", d.root().focus, fs.Mouse())
 	}
 }
 
@@ -140,7 +152,7 @@ func TestFR_TAB_011_NotForwardedInScrollbackEndedOrModal(t *testing.T) {
 	}
 }
 
-func TestARCH_UI_006_SwitchAppliesNextFrame(t *testing.T) {
+func TestARCH_UI_006_V1_SwitchAppliesNextFrame(t *testing.T) {
 	plainSess := apptest.NewFakeSession(shellScreen...)
 	mouseSess := apptest.NewFakeSession(shellScreen...)
 	remoteMouse(mouseSess, app.MouseAny) // ?1003h
@@ -153,24 +165,24 @@ func TestARCH_UI_006_SwitchAppliesNextFrame(t *testing.T) {
 		want  tea.MouseMode
 	}{
 		{0, tea.MouseModeCellMotion},
-		{1, tea.MouseModeNone},
+		{1, tea.MouseModeCellMotion},
 		{2, tea.MouseModeAllMotion},
 		{0, tea.MouseModeCellMotion},
 		{2, tea.MouseModeAllMotion},
-		{1, tea.MouseModeNone},
+		{1, tea.MouseModeCellMotion},
 	} {
 		d.focus(step.focus)
 		if got := d.m.View().MouseMode; got != step.want {
 			t.Fatalf("focus %d: mode %v, want %v", step.focus, got, step.want)
 		}
 	}
-	// Each session gets only the events of the frames it was focused in.
+	// Each session gets only the events of the frames it was focused in;
+	// the plain shell gets none (sshelf selects there, D-024).
 	d.focus(1)
 	d.clickAt(3, 3)
 	d.focus(2)
 	d.clickAt(4, 4)
-	if a, b := plainSess.Mouse(), mouseSess.Mouse(); len(a) != 1 || len(b) != 1 ||
-		a[0] != uv.MouseEvent(uv.MouseClickEvent{X: 3, Y: 2, Button: uv.MouseLeft}) ||
+	if a, b := plainSess.Mouse(), mouseSess.Mouse(); len(a) != 0 || len(b) != 1 ||
 		b[0] != uv.MouseEvent(uv.MouseClickEvent{X: 4, Y: 3, Button: uv.MouseLeft}) {
 		t.Fatalf("tab 1 got %v, tab 2 got %v", a, b)
 	}

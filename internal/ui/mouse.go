@@ -88,20 +88,17 @@ type mouseState struct {
 	requested  tea.MouseMode // the mode the focused session's remote app asked for
 }
 
-// mouseModeFor is the mouse-mode policy (ARCH-UI-006, ADR-014): cell
-// motion on the Hosts tab, on an SFTP tab (M3 revision) and whenever a
-// modal is open, since those are sshelf's screens; on a session tab, none in scrollback mode and on an
-// ended session, and otherwise the mode the remote asked for. A plain
-// shell asks for none, so the terminal's own selection keeps working
-// (D-012).
+// mouseModeFor is the mouse-mode policy (ARCH-UI-006 v1 revision,
+// ADR-014 v1 amendment, D-024): tracking is always on, so tabs are
+// clickable and sshelf selects text in sessions. All motion only for a
+// live session tab, with no modal and not in scrollback mode, whose
+// remote asked for ?1003; cell motion (button events, so drags arrive)
+// everywhere else.
 func mouseModeFor(s mouseState) tea.MouseMode {
-	switch {
-	case !s.session || s.sftp || s.modal:
-		return tea.MouseModeCellMotion
-	case s.scrollback || s.ended:
-		return tea.MouseModeNone
+	if s.session && !s.sftp && !s.modal && !s.scrollback && !s.ended && s.requested == tea.MouseModeAllMotion {
+		return tea.MouseModeAllMotion
 	}
-	return s.requested
+	return tea.MouseModeCellMotion
 }
 
 // mouseMode is the mouse mode of the frame View draws now. requested is
@@ -140,8 +137,8 @@ func (m Model) sessionArea() region {
 }
 
 // updateMouse handles the mouse messages; ok is false for other messages.
-// While a session is focused and no modal is open, every mouse event
-// belongs to the session (forwardMouse). Releases and motion are ignored
+// While a session is focused and no modal is open, sessionMouse routes
+// every mouse event: tab clicks, the remote, or sshelf's selection. Releases and motion are ignored
 // on sshelf's screens, except on an SFTP tab with no modal open, whose
 // view uses them to drag (ARCH-UI-007 M3 revision).
 func (m Model) updateMouse(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
@@ -149,9 +146,12 @@ func (m Model) updateMouse(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 	if !ok {
 		return m, nil, false
 	}
-	if t := m.focused(); t != nil && len(m.modals) == 0 {
-		m.forwardMouse(t, msg)
-		return m, nil, true
+	if t := m.focused(); t != nil {
+		if len(m.modals) == 0 {
+			next, cmd := m.sessionMouse(t, msg)
+			return next, cmd, true
+		}
+		t.sel = nil // a modal took the mouse
 	}
 	if t := m.focusedSFTP(); t != nil {
 		switch msg.(type) {
@@ -180,9 +180,9 @@ func (m Model) updateMouse(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 
 // forwardMouse sends a mouse event to the focused session t, in the
 // coordinates of the session area (FR-TAB-011, ADR-014). Events on the
-// header row (the tab bar included, D-012) and on the status bar are
-// neither forwarded nor acted on; nothing is forwarded in scrollback mode
-// or once the session has ended. The session encodes the event as the
+// header row and on the status bar are never forwarded (sessionMouse
+// handles them); nothing is forwarded in scrollback mode or once the
+// session has ended. The session encodes the event as the
 // remote asked (X10 or SGR) and drops what the remote's mode does not
 // report, such as motion under ?1000 (ADR-013).
 func (m Model) forwardMouse(t *sessionTab, msg tea.Msg) {
@@ -238,7 +238,7 @@ func (m Model) mouseClick(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	}
 	if ms.Y == 0 {
 		// The tab bar (FR-NAV-017): the title and separators do nothing.
-		if i, ok := tabs.TabAt(m.headerSpans(), ms.X); ok {
+		if i, ok := m.tabAt(ms.X); ok {
 			return m.focusTab(i)
 		}
 		return m, nil
@@ -293,4 +293,10 @@ func (m Model) mouseWheel(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.screen, cmd = m.screen.Update(components.WheelMsg{X: x, Y: y, Delta: delta})
 	return m, cmd
+}
+
+// tabAt returns the tab (0 is Hosts) whose tab-bar entry is at column x
+// of the header row.
+func (m Model) tabAt(x int) (int, bool) {
+	return tabs.TabAt(m.headerSpans(), x)
 }

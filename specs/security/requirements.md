@@ -346,7 +346,7 @@ Priority: MVP · Status: Implemented · Threats: T-17
   the MVP has no path that can copy a secret.
 - Note: when a copy feature arrives (FR-HOST-008, v1), its clipboard writer takes `string` only and gets a canary
   test of "copy ssh command".
-- **v1 revision** · Priority: v1 · Status: Draft · Source: D-024
+- **v1 revision** · Priority: v1 · Status: Implemented · Source: D-024
   - *Revised:* The system shall never place a secret on the clipboard, shall copy to the clipboard only through an
     OSC 52 write to the terminal (no clipboard package), and copied command lines shall contain no secret.
   - *Acceptance:* AC1 unchanged: the import-rule test still finds no clipboard package (OSC 52 is an escape
@@ -356,10 +356,11 @@ Priority: MVP · Status: Implemented · Threats: T-17
 The system shall write to the clipboard only when the user releases the mouse after selecting text in a session
 (FR-TAB-013), and shall copy only text taken from the session's own screen or scrollback, never from sshelf's
 header, status bar, screens, modals or form fields.
-Priority: v1 · Status: Draft · Threats: T-17 · Source: D-024
+Priority: v1 · Status: Implemented · Threats: T-17 · Source: D-024
 - AC1: The text is extracted from the session's snapshot or scrollback lines, not from the rendered frame; with a
-  modal (the password prompt with a canary typed into it) open over a session, presses, drags and releases over
-  the modal and over the session area copy nothing (`TestSEC_CLIP_006_NoCopyUnderModal`).
+  modal (the disconnect confirmation) open over a session, presses, drags and releases over the modal and over the
+  session area copy nothing, and a drag in progress when the modal opens is dropped
+  (`TestSEC_CLIP_006_NoCopyUnderModal`).
 - AC2: Remote output alone never causes a copy: a session whose screen changes, and one that sends an OSC 52 write,
   produce no clipboard write without a mouse release (`TestSEC_CLIP_006_OnlyOnRelease`).
 - AC3: Drags over the header and the status bar, and on the Hosts and SFTP tabs, copy nothing.
@@ -441,7 +442,7 @@ Priority: M2 · Status: Implemented · Threats: T-15 · Source: D-009, ADR-012
 - AC2: A fuzz test feeds random bytes to a session's emulator and asserts the same property on the rendered view.
 - AC3: Tab labels and the status bar show the host label and address only, never a remote-set title, and never a
   secret (canary harness, SEC-LOG-001).
-- **v1 revision** · Priority: v1 · Status: Draft · Source: D-024
+- **v1 revision** · Priority: v1 · Status: Implemented · Source: D-024
   - *Revised:* The system shall pass remote session output only to sshelf's terminal emulator and shall write to the
     user's terminal only characters and SGR styles rendered from emulator cells, plus the OSC 52 clipboard write
     that sshelf itself makes when the user copies a selection (FR-TAB-013, SEC-CLIP-006), so that no OSC, DCS, APC,

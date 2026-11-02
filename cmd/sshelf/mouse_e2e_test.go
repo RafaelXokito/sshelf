@@ -4,9 +4,11 @@ package main
 
 import (
 	"bytes"
+	"encoding/base64"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"testing"
 	"time"
 )
@@ -43,32 +45,30 @@ func TestFR_NAV_012_E2EDoubleClickConnects(t *testing.T) {
 	s.quit()
 }
 
-// TestFR_TAB_011_NoTrackingUntilRequested scans every byte sshelf writes
-// while a session is focused: no mouse-tracking sequence until the remote
-// asks for the mouse, so the terminal's own selection works (D-012); then
-// tracking on, a real SGR press in the session area reaching the remote
-// in session coordinates and a press on the header not reaching it; and
-// tracking off again once the remote turns reporting off.
-func TestFR_TAB_011_NoTrackingUntilRequested(t *testing.T) {
+// TestFR_TAB_011_V1_E2ERemoteMouse scans what sshelf writes while a
+// session is focused (D-024): button-event tracking stays on in a plain
+// shell, never all motion; once the remote asks for the mouse, a real SGR
+// press in the session area reaches it in session coordinates and a
+// press on the header's title does not; and tracking stays on (cell
+// motion) after the remote turns reporting off, for sshelf's selection.
+func TestFR_TAB_011_V1_E2ERemoteMouse(t *testing.T) {
 	s := startSlice(t)
 	s.waitText(0, "web-prod demo@127.0.0.1")
 	s.waitTracking(true, "on the host list")
 	off := s.openSession(s.srv, 1)
-	s.waitTracking(false, "once the session tab is focused")
 	plainFrom := s.out.Len()
 	s.typeKeys("echo plain shell\r")
 	off = s.waitText(off, "echo plain shell plain shell")
-	if got := s.out.From(plainFrom); lastIndex(got, mouseTrackingOn) >= 0 {
-		t.Fatalf("mouse tracking enabled in a plain shell; output:\n%q", got)
+	s.waitTracking(true, "in a plain shell")
+	if got := s.out.From(0); bytes.Contains(got, []byte("\x1b[?1003h")) {
+		t.Fatalf("all-motion tracking enabled in a plain shell; output:\n%q", got)
 	}
 
 	s.typeKeys("modes 1000,1006\r")
-	s.waitTracking(true, "after the remote sent ?1000h ?1006h")
-	if !bytes.Contains(s.out.From(plainFrom), []byte("\x1b[?1002h")) {
-		t.Fatalf("cell-motion tracking not enabled for ?1000; output:\n%q", s.out.From(plainFrom))
-	}
+	s.waitText(off, "modes 1000,1006")
+	time.Sleep(200 * time.Millisecond) // the emulator has seen ?1000h
 	have := len(s.srv.Received(1, 1))
-	s.typeKeys(sgrPress(10, 0) + sgrRelease(10, 0)) // the header
+	s.typeKeys(sgrPress(0, 0) + sgrRelease(0, 0)) // the title on the header
 	s.typeKeys(sgrPress(10, 5) + sgrRelease(10, 5))
 	const want = "\x1b[<0;11;5M\x1b[<0;11;5m"
 	if !s.srv.WaitFor(10*time.Second, func() bool { return bytes.Contains(s.srv.Received(1, 1)[have:], []byte(want)) }) {
@@ -83,11 +83,54 @@ func TestFR_TAB_011_NoTrackingUntilRequested(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.typeKeys("\x03replay " + disable + "\r") // Ctrl+C drops the mouse bytes from the line
-	s.waitTracking(false, "after the remote sent ?1000l")
+	time.Sleep(200 * time.Millisecond)
+	s.waitTracking(true, "after the remote sent ?1000l")
+	if got := s.out.From(plainFrom); lastIndex(got, mouseTrackingOff) >= 0 {
+		t.Fatalf("mouse tracking turned off in a session; output:\n%q", got)
+	}
 
 	s.endSession(off, "exit 3", "exited (3)")
 	s.quit()
 	if trackingOn(s.out.From(0)) {
 		t.Error("mouse tracking is still on after quitting")
 	}
+}
+
+// osc52 matches the clipboard write sshelf sends for a copy.
+var osc52 = regexp.MustCompile(`\x1b\]52;c;([A-Za-z0-9+/=]*)\x07`)
+
+// TestFR_TAB_013_E2ECopyWritesOSC52 triple-clicks rows of a plain shell's
+// session area with real SGR sequences until one holds the output of an
+// echo, and checks that sshelf wrote it to the terminal as an OSC 52
+// clipboard write, base64-encoded.
+func TestFR_TAB_013_E2ECopyWritesOSC52(t *testing.T) {
+	s := startSlice(t)
+	s.waitText(0, "web-prod demo@127.0.0.1")
+	off := s.openSession(s.srv, 1)
+	s.typeKeys("echo copy-me-123\r")
+	off = s.waitText(off, "echo copy-me-123 copy-me-123")
+	var copied []string
+	found := false
+	for y := 1; y <= 8 && !found; y++ {
+		from := s.out.Len()
+		click := sgrPress(3, y) + sgrRelease(3, y)
+		s.typeKeys(click + click + click)
+		deadline := time.Now().Add(time.Second)
+		for !found && time.Now().Before(deadline) {
+			for _, m := range osc52.FindAllSubmatch(s.out.From(from), -1) {
+				text, err := base64.StdEncoding.DecodeString(string(m[1]))
+				if err != nil {
+					t.Fatalf("OSC 52 payload %q: %v", m[1], err)
+				}
+				copied = append(copied, string(text))
+				found = found || string(text) == "copy-me-123"
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+	if !found {
+		t.Fatalf("no row copied copy-me-123; copied %q; output:\n%q", copied, s.out.From(0))
+	}
+	s.endSession(off, "exit 3", "exited (3)")
+	s.quit()
 }

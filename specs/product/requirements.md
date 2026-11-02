@@ -763,7 +763,7 @@ While the Hosts tab is focused and no modal is open, when the user clicks a tab 
 - **Acceptance:**
   - A click on `2 web-prod` focuses that session tab; a click on `sshelf` or a separator does nothing.
   - While a session tab is focused, tabs are switched with the keyboard (FR-TAB-005, D-012): header clicks are either not reported (mouse tracking off) or ignored (FR-TAB-011).
-- **v1 revision** · Priority: v1 · Status: Draft · Source: D-024
+- **v1 revision** · Priority: v1 · Status: Implemented · Source: D-024
   - *Revised:* While no modal is open, when the user clicks a tab in the tab bar, the system shall focus that tab, whichever tab is focused.
   - *Acceptance:* A click on `2 web-prod` focuses that session tab; a click on `sshelf` or a separator does nothing. While a session tab is focused, a left click on `Hosts`, on another session tab or on an SFTP tab focuses it, also while the session's remote app has mouse reporting on, in scrollback mode and on an ended session; the click is never forwarded to the remote.
 
@@ -1452,7 +1452,7 @@ While a session tab is focused, when the user presses the prefix key followed by
   - The status bar shows `scrollback 120/2000 · ↑↓ PgUp PgDn g G · esc back`. Keys are not sent to the remote; output keeps arriving, and the view stays on the same lines until the user moves it or those lines leave the scrollback.
   - Mouse tracking is off in scrollback mode, so the terminal's own selection can copy what is shown (D-012).
   - Esc returns to the live screen, with the remote's cursor shown again.
-- **v1 revision** · Priority: v1 · Status: Draft · Source: D-024
+- **v1 revision** · Priority: v1 · Status: Implemented · Source: D-024
   - *Revised:* While a session tab is focused, when the user presses the prefix key followed by `[`, or turns the mouse wheel up over the session area while the remote app has not asked for mouse reporting, the system shall show the session's scrollback and screen as one view that PgUp, PgDn, the arrow keys, `g`, `G` and the wheel move, until the user presses Esc or turns the wheel down past the last line.
   - *Acceptance:* The criteria above, except that mouse tracking stays on (cell motion) in scrollback mode and text is selected with sshelf's own selection (FR-TAB-012). Each wheel notch moves the view 3 lines. A wheel-up notch on the live screen enters scrollback mode only when there are lines above the screen. A wheel-down notch while the view already shows the last line leaves scrollback mode. While the remote app has mouse reporting on, the wheel is forwarded to it (FR-TAB-011) and does not enter scrollback mode; once in scrollback mode (prefix `[`), the wheel moves the view.
 
@@ -1466,31 +1466,31 @@ While a session tab is focused, the system shall enable mouse tracking only whil
   - Motion events are forwarded only when the app asked for them (`?1002` or `?1003`).
   - Events on the header or status bar are neither forwarded nor acted on.
   - Focusing the Hosts tab, or a session that has not requested mouse reporting, applies that tab's rule in the next frame (ARCH-UI-006).
-- **v1 revision** · Priority: v1 · Status: Draft · Source: D-024
+- **v1 revision** · Priority: v1 · Status: Implemented · Source: D-024
   - *Revised:* While a live session tab is focused, not in scrollback mode, and its remote app has mouse reporting on, the system shall forward each mouse event inside the session area to the remote, with coordinates relative to the session area and encoded as the app requested; events on the header row and the status bar are sshelf's.
   - *Acceptance:* After the remote sends `ESC [ ? 1000 h ESC [ ? 1006 h`, a left press at terminal cell x=10, y=5 (zero-based, header on row 0) reaches the remote as `ESC [ < 0 ; 11 ; 5 M`. Motion events are forwarded only when the app asked for them (`?1002` or `?1003`). Nothing is forwarded from the header or status bar: a left click on a tab focuses it (FR-NAV-017 v1 revision), and anything else there does nothing. Nothing is forwarded in scrollback mode, under a modal or after the end. After `ESC [ ? 1000 l`, events in the session area select text (FR-TAB-012) instead of being forwarded, from the next event on. Mouse tracking is on in every session state (NFR-UX-001 v1 revision, ARCH-UI-006 v1 revision).
 
 ### FR-TAB-012 · Select text in a session
 While a session tab is focused, no modal is open, and the session's remote app has no mouse reporting on (or the session is in scrollback mode or has ended), when the user drags with the left button over the session area, double-clicks or triple-clicks there, the system shall select the session's text under the pointer and show it in reverse video.
 
-- **Priority:** v1 · **Status:** Draft · **Source:** D-024
+- **Priority:** v1 · **Status:** Implemented · **Source:** D-024
 - **Acceptance:**
   - A drag selects linewise, like a terminal: from the cell pressed to the cell under the pointer, the first row from that column to the end, every row between in full, and the last row up to and including the pointer's column; dragging up or left of the press works the same. The pointer is clamped to the session area.
   - A double-click (two left presses within 400 ms on the same cell row, ARCH-UI-007) selects the word under the pointer: the run of cells around it that are neither blank nor one of `` ()[]{}<>"'`|,; ``. A triple-click (a third press within 400 ms of the second on the same row) selects the whole row. A double-click on a blank cell selects nothing.
   - A double-width character is selected whole when either of its cells is in the selection.
   - The selection is drawn in reverse video over the session's own styles, on the live screen and in scrollback mode, and it covers only the session area: never the header, the status bar or a modal.
   - Any key press clears the selection (and is then handled as usual: a live session receives it). A left press anywhere clears it before starting a new one. Switching tabs, entering or leaving scrollback mode, opening a modal and resizing the terminal clear it too.
-  - In scrollback mode, the selection is anchored to the lines it covers, so the wheel or keys may move the view after the selection is made, and it is extracted from those lines.
+  - In scrollback mode, the selection is anchored to the lines it covers, so the wheel may move the view after the selection is made, and it is extracted from those lines.
   - A plain left click (press and release on the same cell, no motion) selects nothing and copies nothing.
 
 ### FR-TAB-013 · Copy the selection
 When the user releases the left button after making a non-empty selection in a session (FR-TAB-012), the system shall copy the selected text to the terminal's clipboard with an OSC 52 write and show "copied N characters" in the status bar.
 
-- **Priority:** v1 · **Status:** Draft · **Source:** D-024
+- **Priority:** v1 · **Status:** Implemented · **Source:** D-024
 - **Acceptance:**
   - The copied text is the selection's characters as the remote drew them, without styles: one line per selected row, joined with `\n` (the emulator keeps no soft-wrap mark, so a long line the remote wrapped is copied as the rows it was drawn on), each line's trailing spaces removed, and no trailing newline. A double-width character appears once.
   - The write is Bubble Tea's `tea.SetClipboard`, which the terminal receives as `ESC ] 52 ; c ; <base64 of the text> BEL`. A selection whose text is empty copies nothing and shows nothing.
-  - N counts characters (Unicode code points, newlines included): "copied 1 character", "copied 42 characters". The message replaces the live status bar for 5 seconds (as FR-SFTP-003's notice), also in scrollback mode and on an ended tab.
+  - N counts characters (Unicode code points, newlines included): "copied 1 character", "copied 42 characters". The message replaces the status bar for 5 seconds (as FR-SFTP-003's notice), also in scrollback mode and on an ended tab; when the session ends, its end reason replaces the message at once.
   - Copying needs no key and no confirmation; terminals that ignore OSC 52 copy nothing (the README points to Option-drag or Shift-drag there). OSC 52 sent by the remote is still never passed to the terminal (SEC-SESSION-005).
 
 ---

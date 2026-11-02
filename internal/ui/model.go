@@ -126,6 +126,9 @@ type Model struct {
 	fg, bg color.Color
 
 	clicks components.ClickTracker // recognises double-clicks (ARCH-UI-007)
+	// selClicks counts presses for double- and triple-click selection in
+	// a session (FR-TAB-012).
+	selClicks multiClick
 
 	home string // the local home directory, where ~ goes in a local pane
 
@@ -184,6 +187,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
+		m.clearSelections()
 		m.screen = m.sized(m.screen)
 		for _, t := range m.tabs {
 			switch {
@@ -196,6 +200,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyPressMsg:
+		m.clearSelections() // any key clears the selection (FR-TAB-012)
 		// Key routing, in order (design §9.4): Ctrl+C on the Hosts tab,
 		// the top modal, the prefix key, the focused tab.
 		if m.focus == 0 && key.Matches(msg, keys.ForceQuit) {

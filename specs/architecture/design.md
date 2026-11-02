@@ -1018,7 +1018,7 @@ removed in revision 2.
 **ARCH-UI-006**: The system shall compute `tea.View.MouseMode` in one function of (focused tab kind, modal open, scrollback mode, session ended, the focused session's requested mouse mode), with cell motion on the Hosts tab and on SFTP tabs, following ADR-014.
 - Priority: M3 · Status: Implemented · Source: D-011, D-012, NFR-UX-001 revision; M3: D-011, ADR-020
 - Acceptance: A table test covers every combination. A root-model test switches between the Hosts tab, a plain shell tab and a tab whose remote sent `?1003h`, and checks the mode of each next `View()`. The table test gains the SFTP rows (live, disconnected, transfers view, modal open: all cell motion). A root-model test switches from a plain shell tab to an SFTP tab and back and checks the mode of each next `View()`.
-- **v1 revision** · Priority: v1 · Status: Draft · Source: D-024, ADR-014 v1 amendment
+- **v1 revision** · Priority: v1 · Status: Implemented · Source: D-024, ADR-014 v1 amendment
   - *Revised:* The system shall compute `tea.View.MouseMode` in one function of (focused tab kind, modal open, scrollback mode, session ended, the focused session's requested mouse mode): all motion only for a live session tab, with no modal open and not in scrollback mode, whose remote asked for `?1003`; cell motion in every other state.
   - *Acceptance:* The table test covers every combination with the new results (a plain session, scrollback mode and an ended session are cell motion; `TestARCH_UI_006_V1_MouseModePolicy`). The switch test expects cell motion on the Hosts tab and the plain shell tab and all motion on the `?1003h` tab (`TestARCH_UI_006_V1_SwitchAppliesNextFrame`).
 

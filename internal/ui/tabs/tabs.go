@@ -242,6 +242,12 @@ func LiveStatus(width int, addr string, d time.Duration, hints ...string) string
 	return statusStyle.Render(Fit(width, []string{statusOK, domain.Sanitize(addr)}, append([]string{Duration(d)}, hints...)...))
 }
 
+// Notice is a status bar holding one short message in the live style,
+// such as "copied 42 characters" (FR-TAB-013).
+func Notice(width int, text string) string {
+	return statusStyle.Render(Fit(width, []string{text}))
+}
+
 // EndedStatus is an ended session's status bar (FR-CONN-005 revision):
 // "✕ <reason> · <hints>".
 func EndedStatus(width int, reason string, hints ...string) string {

@@ -67,7 +67,9 @@ Each connection opens in a tab. While a session has focus, all keys go to the re
 
 When a session ends, press `r` to reconnect or `x` to close the tab.
 
-Inside a session, the mouse is left to your terminal, so selecting and copying text works normally. Programs that ask for the mouse (vim with `set mouse=a`, htop, tmux with `mouse on`) receive it.
+Tabs are clickable at any time, including the Hosts tab while a session is focused. Inside a session, sshelf does its own text selection: drag to select, double-click a word, triple-click a line. When you release the button, the selection is copied to your clipboard through the terminal (OSC 52) and the status bar shows how many characters were copied. Any key or click clears the selection. The mouse wheel scrolls back through the session's history. Programs that ask for the mouse (vim with `set mouse=a`, htop, tmux with `mouse on`) receive it instead.
+
+Copying needs a terminal that supports OSC 52 clipboard writes, such as iTerm2, WezTerm, kitty, Ghostty, Alacritty or Windows Terminal (in tmux, `set -g set-clipboard on`). In a terminal without it, such as macOS Terminal.app, hold Option (macOS) or Shift (most other terminals) while dragging to use the terminal's own selection.
 
 The first time you connect to a server, sshelf asks you to trust its host key. If the key later changes, the connection is blocked.
 
