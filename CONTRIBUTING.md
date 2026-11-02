@@ -41,3 +41,26 @@ wins any conflict.
 - Tests must not need network access beyond `127.0.0.1`.
 - Respect the package dependency rules in `specs/architecture/design.md`; the
   import-rule test enforces them.
+- Every goroutine starts through `term.SafeGo`. E2E binaries build with
+  `-tags sshelf_faultinject` (in-memory credential store).
+- Timing tests are named `TestNFR_PERF_*` and skip under `-race`; also run
+  `go test -count=1 -run 'TestNFR_PERF_' ./...` and
+  `~/go/bin/golangci-lint run ./...` (0 issues) before pushing.
+- Golden files are `<name>.<w>x<h>.golden` at 80x24 and 120x40.
+- If the spec is wrong or ambiguous, choose the reading most consistent with
+  `specs/decisions.md` and D-007 (keep it simple), fix the spec text in the
+  same commit, and mention it in the commit message.
+
+## Landing work on main
+
+Work on a branch, then:
+
+1. `git fetch origin && git rebase origin/main`; re-run all checks.
+2. `git push origin HEAD:main`; if rejected because main moved, repeat 1–2.
+3. Wait for CI (`gh run watch <id> --exit-status`). If it fails because of
+   your change, fix it and land again. If an unrelated test fails, rerun once;
+   if it fails again, report it instead of chasing it. Never leave main red,
+   never force-push.
+
+Commit messages end with the project's attribution trailers when an AI agent
+wrote the change.
