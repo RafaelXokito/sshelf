@@ -64,3 +64,28 @@ Work on a branch, then:
 
 Commit messages end with the project's attribution trailers when an AI agent
 wrote the change.
+
+## Releasing
+
+Every release is backwards compatible (D-027): it reads everything an older
+release wrote. Fields are only added, never renamed, retyped or removed;
+`config.json` keeps fields it does not know. Breaking this needs a new
+decision in `specs/decisions.md` first.
+
+To cut release `vX.Y.Z` from a green `main`:
+
+1. Write the release's compatibility fixture and commit it on `main` (land
+   it as above):
+
+   ```sh
+   SSHELF_COMPAT_FIXTURE=vX.Y.Z go test -run TestD027_WriteFixture ./internal/compat
+   git add testdata/compat/vX.Y.Z && git commit -m "release: vX.Y.Z compatibility fixture"
+   ```
+
+   Never edit an existing `testdata/compat/<tag>/` directory: the test loads
+   every one, so each keeps proving that its release's files still load.
+2. Run the manual checklist in `docs/release-checklist.md`.
+3. Tag the commit and push the tag: `git tag vX.Y.Z && git push origin vX.Y.Z`.
+   `.github/workflows/release.yml` refuses a tag without its fixture, builds
+   `sshelf_<os>_<arch>` for darwin and linux on amd64 and arm64, writes
+   `checksums.txt` and publishes the GitHub release.

@@ -59,7 +59,8 @@ type Snapshot struct {
 }
 
 // Load reads config.json at path. It never writes. A missing file returns
-// an empty Data with FirstRun set. Unknown fields are ignored, and unknown
+// an empty Data with FirstRun set. Unknown fields are ignored (Save keeps
+// them, FR-CFG-011), and unknown
 // setting keys produce a warning. A file that cannot be parsed, is larger
 // than MaxFileSize, or has a newer version returns a *LoadError.
 func Load(path string) (*Snapshot, error) {
@@ -133,24 +134,19 @@ func position(b []byte, off int64) (line, col int) {
 
 // Save writes s to config.json at path atomically with mode 0600 (WriteFile,
 // SEC-FILE-003). When Save returns nil the change is on disk (FR-CFG-002).
-// The directory must exist (paths.EnsureDir).
+// The directory must exist (paths.EnsureDir). Fields of the file on disk
+// that this build does not know are written back unchanged (FR-CFG-011).
 func Save(path string, s *Snapshot) error { return save(osFS{}, path, s) }
 
 func save(fsys fileSystem, path string, s *Snapshot) error {
-	b, err := encode(s.Data)
+	b, err := encodeWith(fromDomain(s.Data), readExtras(path))
 	if err != nil {
 		return err
 	}
 	return writeFile(fsys, path, b)
 }
 
-func encode(d domain.Data) ([]byte, error) {
-	b, err := json.MarshalIndent(fromDomain(d), "", "  ")
-	if err != nil {
-		return nil, err
-	}
-	return append(b, '\n'), nil
-}
+func encode(d domain.Data) ([]byte, error) { return encodeWith(fromDomain(d), extras{}) }
 
 // The on-disk schema (security/credential-storage.md §3.3). It has no field
 // that can hold a secret (SEC-CRED-001).

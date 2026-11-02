@@ -1,0 +1,66 @@
+name: Release
+
+# Publishes a GitHub release for a pushed tag vX.Y.Z (NFR-BUILD-002,
+# ADR-021): one raw binary per supported target, named sshelf_<os>_<arch>
+# as `sshelf update` expects, and checksums.txt, with plain go build,
+# sha256sum and gh (D-007).
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the release
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Tag is a release version, vX.Y.Z
+        run: |
+          set -eu
+          echo "$GITHUB_REF_NAME" | grep -Eq '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' \
+            || { echo "::error::tag $GITHUB_REF_NAME is not vX.Y.Z; sshelf update only knows release versions"; exit 1; }
+      - name: Compatibility fixture for this release exists (D-027)
+        run: |
+          set -eu
+          dir="testdata/compat/$GITHUB_REF_NAME"
+          if [ ! -f "$dir/config.json" ]; then
+            echo "::error::$dir is missing. Before tagging, run"
+            echo "  SSHELF_COMPAT_FIXTURE=$GITHUB_REF_NAME go test -run TestD027_WriteFixture ./internal/compat"
+            echo "and commit the new directory (CONTRIBUTING.md, Releasing)."
+            exit 1
+          fi
+      - name: Every past release's fixture still loads; update and store tests
+        # main's CI already ran the full suite on this commit.
+        run: go test -count=1 ./internal/compat ./internal/store ./internal/update
+      - name: Build 4 static targets, stamped with version, commit and date
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          set -eu
+          version="$GITHUB_REF_NAME"
+          date=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          ldflags="-s -w -X main.version=$version -X main.commit=$GITHUB_SHA -X main.date=$date"
+          mkdir -p dist
+          for target in darwin/amd64 darwin/arm64 linux/amd64 linux/arm64; do
+            os=${target%/*}; arch=${target#*/}
+            GOOS=$os GOARCH=$arch go build -trimpath -ldflags "$ldflags" -o "dist/sshelf_${os}_${arch}" ./cmd/sshelf
+          done
+          want="sshelf $version (commit $GITHUB_SHA, built $date)"
+          got=$(dist/sshelf_linux_amd64 --version)
+          [ "$got" = "$want" ] || { echo "--version: got '$got', want '$want'"; exit 1; }
+          (cd dist && sha256sum sshelf_* > checksums.txt && sha256sum -c checksums.txt && cat checksums.txt)
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          gh release create "$GITHUB_REF_NAME" dist/sshelf_* dist/checksums.txt \
+            --verify-tag --title "sshelf $GITHUB_REF_NAME" --generate-notes

@@ -47,6 +47,8 @@ var rules = []rule{
 	{pkg: "internal/ui/editor", allow: []string{}},
 	{pkg: "internal/ui/...", allow: []string{"internal/app", "internal/domain", "internal/search", "internal/session", "internal/ui/..."}, forbid: []string{"internal/secrets", "internal/store", "internal/sshclient", "internal/files", "golang.org/x/crypto/ssh/...", "github.com/pkg/sftp/..."}},
 	{pkg: "internal/app", forbid: []string{"internal/ui/..."}},
+	// The update check and `sshelf update` (ADR-021).
+	{pkg: "internal/update", allow: []string{"internal/domain", "internal/paths"}, forbid: bubbleTea},
 }
 
 // Every sshelf package: no child processes (ARCH-SESS-001, SEC-MEM-008)
@@ -59,6 +61,10 @@ var (
 	// pkg/sftp only in internal/files and the test server (ARCH-SFTP-001).
 	pkgSFTP   = "github.com/pkg/sftp/..."
 	sftpUsers = []string{"internal/files", "internal/testutil/..."}
+	// net/http only in internal/update, the release check and download
+	// (ARCH-UPD-001, ADR-021).
+	netHTTP     = "net/http/..."
+	netHTTPUser = "internal/update"
 )
 
 type pkg struct {
@@ -141,6 +147,9 @@ func violations(module string, pkgs []pkg) []string {
 			if match(module, pkgSFTP, imp) && !matchAny(module, sftpUsers, p.ImportPath) {
 				out = append(out, fmt.Sprintf("%s imports %s", rel(p.ImportPath), imp))
 			}
+			if match(module, netHTTP, imp) && !match(module, netHTTPUser, p.ImportPath) {
+				out = append(out, fmt.Sprintf("%s imports %s", rel(p.ImportPath), imp))
+			}
 			for _, r := range rules {
 				if !match(module, r.pkg, p.ImportPath) {
 					continue
@@ -211,6 +220,26 @@ func TestARCH_SESS_001_M3_ExecOnlyInEditor(t *testing.T) {
 	module, pkgs := load(t, filepath.Join("testdata", "osexec"))
 	got := violations(module, pkgs)
 	if want := []string{"internal/session imports os/exec"}; !slices.Equal(got, want) {
+		t.Fatalf("fixture violations = %q, want %q", got, want)
+	}
+}
+
+// TestARCH_UPD_001_NetHTTPOnlyInUpdate: net/http is imported by
+// internal/update and by no other sshelf package, and the import rules
+// catch it anywhere else (a fixture module).
+func TestARCH_UPD_001_NetHTTPOnlyInUpdate(t *testing.T) {
+	module, pkgs := load(t, moduleRoot(t))
+	var users []string
+	for _, p := range pkgs {
+		if slices.ContainsFunc(p.Imports, func(imp string) bool { return match(module, netHTTP, imp) }) {
+			users = append(users, strings.TrimPrefix(p.ImportPath, module+"/"))
+		}
+	}
+	if !slices.Equal(users, []string{netHTTPUser}) {
+		t.Fatalf("packages importing net/http: %q, want only %s", users, netHTTPUser)
+	}
+	module, pkgs = load(t, filepath.Join("testdata", "nethttp"))
+	if got, want := violations(module, pkgs), []string{"internal/session imports net/http"}; !slices.Equal(got, want) {
 		t.Fatalf("fixture violations = %q, want %q", got, want)
 	}
 }

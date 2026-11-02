@@ -13,6 +13,17 @@ A terminal UI for your SSH hosts, inspired by Termius.
 
 macOS and Linux only. ssh-agent, jump hosts, port forwarding and snippets are not implemented yet.
 
+## Install
+
+Download the binary for your system from the [latest release](https://github.com/RafaelXokito/sshelf/releases/latest) (`sshelf_darwin_arm64`, `sshelf_linux_amd64`, ...), check it against `checksums.txt`, and put it on your `PATH`:
+
+```sh
+shasum -a 256 -c checksums.txt --ignore-missing
+install -m 0755 sshelf_darwin_arm64 ~/.local/bin/sshelf
+```
+
+Or with Go: `go install github.com/RafaelXokito/sshelf/cmd/sshelf@latest`.
+
 ## Build
 
 Requires Go (version in `go.mod`).
@@ -97,11 +108,25 @@ Copies run in the background; the line above the footer shows the current one. `
 
 `e` downloads a remote file (up to 64 MiB) to a private temporary copy and opens it in `$VISUAL`, `$EDITOR` or `vi`. When the editor exits, a changed file is uploaded back; if the remote file changed meanwhile, sshelf asks whether to overwrite it, keep the remote one, or save yours as `<name>.local-edit`. The temporary copy is always deleted. For a GUI editor, use its wait flag, for example `VISUAL='code -w'`.
 
+## Updating
+
+When a newer release exists, the host list footer says so: `update available: v0.4.0 · run sshelf update`. Then run:
+
+```sh
+sshelf update
+```
+
+It downloads the release for your system, checks its SHA-256 against the release's `checksums.txt` and replaces the binary in place. If sshelf cannot write its own binary (a system path, Homebrew), it tells you how to update instead.
+
+sshelf checks for a new release at most once a day, in the background, by asking the GitHub releases API; it sends nothing but `sshelf/<version>` as its User-Agent. Set `SSHELF_NO_UPDATE_CHECK=1` to turn the check off. Builds from source without a release version never check.
+
+Every release reads what earlier releases wrote: your hosts, identities, stored secrets and trusted host keys keep working after an update, and an older sshelf keeps fields a newer one added to `config.json`.
+
 ## Where things are stored
 
 | What | macOS | Linux |
 |---|---|---|
-| Hosts and settings (`config.json`), trusted host keys | `~/Library/Application Support/sshelf/` | `~/.config/sshelf/` |
+| Hosts and settings (`config.json`), trusted host keys, last update check | `~/Library/Application Support/sshelf/` | `~/.config/sshelf/` |
 | Passwords, private keys, passphrases | Keychain, service `sshelf` | Secret Service, service `sshelf` |
 | Debug log (`SSHELF_DEBUG=1`) and crash reports | `~/Library/Logs/sshelf/` | `~/.local/state/sshelf/` |
 

@@ -20,16 +20,24 @@ import (
 	"github.com/RafaelXokito/sshelf/internal/paths"
 	"github.com/RafaelXokito/sshelf/internal/term"
 	"github.com/RafaelXokito/sshelf/internal/ui"
+	"github.com/RafaelXokito/sshelf/internal/update"
 )
 
 const usage = `Usage: sshelf [--help] [--version]
+       sshelf update
 
 sshelf is a terminal UI SSH host manager. Run it without arguments in an
 interactive terminal to open the host list.
 
+Commands:
+  update     replace this binary with the latest release (checksum verified)
+
 Options:
   --help     show this help and exit
   --version  show the version, commit and build date and exit
+
+Environment:
+  SSHELF_NO_UPDATE_CHECK=1  do not check for a new release at startup
 `
 
 func main() {
@@ -57,6 +65,10 @@ func run(args []string) (code int) {
 	case err != nil:
 		fmt.Fprintf(os.Stderr, "sshelf: %v\n\n%s", err, usage)
 		return 2
+	case fs.NArg() == 1 && fs.Arg(0) == "update" && !*showVersion:
+		// The one subcommand (D-026 amends D-001).
+		cur := runningVersion()
+		return runUpdate(cur, os.Executable, update.New(cur).Apply, os.Stdout, os.Stderr)
 	case fs.NArg() > 0:
 		fmt.Fprintf(os.Stderr, "sshelf: unknown argument %q\n\n%s", fs.Arg(0), usage)
 		return 2
@@ -112,7 +124,10 @@ func run(args []string) (code int) {
 	// Bubble Tea quits on SIGTERM; SIGHUP (the terminal went away) quits
 	// the same way instead of killing the process.
 	stopHangup := quitOnHangup(p)
+	// FR-UPD-001: in the background; the footer shows a newer release.
+	stopCheck := checkForUpdate(os.Getenv, runningVersion(), dirs.Config, func(msg any) { p.Send(msg) })
 	final, err := p.Run()
+	stopCheck()
 	stopHangup()
 	// Whatever ended the program, no session outlives it (ARCH-SESS-010).
 	if g, ok := final.(guard); ok {

@@ -160,3 +160,28 @@ func TestNFR_REL_001_GoroutinePackagesCheckLeaks(t *testing.T) {
 		t.Error("the scan found no VerifyTestMain call in internal/ui")
 	}
 }
+
+const releaseFile = ".github/workflows/release.yml"
+
+// TestNFR_BUILD_002_ReleaseWorkflow pins the release workflow: on a vX.Y.Z
+// tag it checks that the release's compatibility fixture exists (D-027),
+// builds the 4 targets as sshelf_<os>_<arch> stamped with the tag, writes
+// checksums.txt with sha256sum and publishes with gh, without goreleaser
+// (D-007, ADR-021).
+func TestNFR_BUILD_002_ReleaseWorkflow(t *testing.T) {
+	rel := readRootFile(t, releaseFile)
+	wantAll(t, releaseFile, rel,
+		"tags: ['v*']",
+		"testdata/compat/$GITHUB_REF_NAME",
+		"go test -count=1 ./internal/compat",
+		"for target in darwin/amd64 darwin/arm64 linux/amd64 linux/arm64",
+		`CGO_ENABLED: "0"`,
+		"-X main.version=$version -X main.commit=$GITHUB_SHA -X main.date=$date",
+		`dist/sshelf_${os}_${arch}`,
+		"sha256sum sshelf_* > checksums.txt",
+		"gh release create",
+	)
+	if strings.Contains(rel, "goreleaser") {
+		t.Errorf("%s uses goreleaser (D-007)", releaseFile)
+	}
+}

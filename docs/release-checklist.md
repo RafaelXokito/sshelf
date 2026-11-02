@@ -7,6 +7,9 @@ run that whole checklist on macOS and Linux before a release.
 
 ## Automated gates (must be green on the release commit)
 
+- [ ] `testdata/compat/<tag>/` was written with `TestD027_WriteFixture` and committed, and no older fixture directory changed (D-027; CONTRIBUTING "Releasing"). The release workflow fails without it.
+- [ ] After the release: the U checklist at the end of [`specs/acceptance.md`](../specs/acceptance.md) (assets, notice, `sshelf update`, an upgrade keeps hosts and secrets).
+
 - [ ] CI: lint, `go test -race` on Linux and macOS (with the `sshelf_faultinject` tests), perf jobs, cross-compile, keyring jobs.
 - [ ] `go run ./scripts/tracecheck` reports 0 problems over MVP, M2 and M3 (NFR-QUAL-001).
 - [ ] `go run ./scripts/covercheck coverage.out` passes (NFR-QUAL-003).

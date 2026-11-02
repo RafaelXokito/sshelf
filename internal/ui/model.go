@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"image/color"
+	"regexp"
 	"strings"
 	"time"
 
@@ -74,6 +75,13 @@ type HostDeleteFailedMsg struct {
 	Err   error
 }
 
+// UpdateAvailableMsg says a newer release exists (FR-UPD-002). Version is
+// shown only if it parses as a release version.
+type UpdateAvailableMsg struct{ Version string }
+
+// releaseVersion is the form of a release version (internal/update.Parse).
+var releaseVersion = regexp.MustCompile(`^v(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})$`)
+
 // ConnectedMsg carries an authenticated session; it opens a tab, or
 // reconnects an ended one (FR-TAB-002, FR-CONN-010).
 type ConnectedMsg struct {
@@ -104,6 +112,8 @@ type Model struct {
 	noStore    *app.StoreError   // set when no credential store is available (D-101)
 
 	width, height int // terminal size; 0 until the first tea.WindowSizeMsg
+
+	update string // a newer release, "vX.Y.Z", or "" (FR-UPD-002)
 
 	attempt     int                // id of the latest connection attempt
 	attemptHost domain.ID          // host of the attempt in progress
@@ -185,6 +195,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return next, cmd
 	}
 	switch msg := msg.(type) {
+	case UpdateAvailableMsg:
+		// Only a version that parses as a release is kept; it is drawn
+		// from the parsed numbers (FR-UPD-002, SEC-UPD-001).
+		if releaseVersion.MatchString(msg.Version) {
+			m.update = msg.Version
+		}
+		return m, nil
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		m.clearSelections()
@@ -777,6 +794,9 @@ func (m Model) screenLines() (body []string, foot string) {
 		return []string{dimStyle.Render("Loading…")}, components.Help(keys.Quit)
 	}
 	body = viewLines(m.screen.View())
+	if l, ok := m.screen.(hostlist.Model); ok {
+		return body, l.Footer(m.update)
+	}
 	if h, ok := m.screen.(components.Hinter); ok {
 		return body, components.Help(h.Hints()...)
 	}

@@ -73,30 +73,44 @@ func networkUses(fset *token.FileSet, filename string, src any) ([]string, error
 }
 
 // TestNFR_PRIV_001_NoHTTPClient checks that sshelf cannot make network
-// traffic other than the SSH connections the user starts: the binary does
-// not link net/http (no telemetry, no update checks) on any supported OS,
-// and only internal/sshclient dials or listens. Test files and the test
-// helpers in internal/testutil are not part of the binary and are skipped.
-// The scan is syntactic (go/parser with import aliases resolved), which
-// avoids a golang.org/x/tools dependency for go/packages.
+// traffic other than the SSH connections the user starts and the update
+// check (NFR-PRIV-001 v1 revision, D-110): on every supported OS the only
+// package of the binary that imports net/http, apart from net/http's own,
+// is internal/update (no telemetry, no HTTP in a dependency), and only
+// internal/sshclient dials or listens. Test files and the test helpers in
+// internal/testutil are not part of the binary and are skipped. The scan
+// is syntactic (go/parser with import aliases resolved), which avoids a
+// golang.org/x/tools dependency for go/packages.
 func TestNFR_PRIV_001_NoHTTPClient(t *testing.T) {
 	root := moduleRoot(t)
 	for _, goos := range []string{"linux", "darwin"} {
-		cmd := exec.Command("go", "list", "-deps", "-f", "{{.ImportPath}}", "./cmd/sshelf")
+		cmd := exec.Command("go", "list", "-deps", "-f", "{{.ImportPath}} {{join .Imports \" \"}}", "./cmd/sshelf")
 		cmd.Dir = root
 		cmd.Env = append(os.Environ(), "GOWORK=off", "GOFLAGS=-mod=mod", "GOOS="+goos, "CGO_ENABLED=0")
 		out, err := cmd.Output()
 		if err != nil {
 			t.Fatalf("go list (GOOS=%s): %v", goos, err)
 		}
-		deps := strings.Fields(string(out))
-		if !slices.Contains(deps, "net") {
+		var users []string
+		sawNet := false
+		for line := range strings.Lines(string(out)) {
+			f := strings.Fields(line)
+			if len(f) == 0 {
+				continue
+			}
+			sawNet = sawNet || f[0] == "net"
+			if f[0] == "net/http" || strings.HasPrefix(f[0], "net/http/") {
+				continue
+			}
+			if slices.ContainsFunc(f[1:], func(imp string) bool { return imp == "net/http" || strings.HasPrefix(imp, "net/http/") }) {
+				users = append(users, f[0])
+			}
+		}
+		if !sawNet {
 			t.Fatalf("GOOS=%s: go list output lacks net; the check would be vacuous", goos)
 		}
-		for _, dep := range deps {
-			if dep == "net/http" || strings.HasPrefix(dep, "net/http/") {
-				t.Errorf("GOOS=%s: sshelf links %s", goos, dep)
-			}
+		if want := []string{"github.com/RafaelXokito/sshelf/internal/update"}; !slices.Equal(users, want) {
+			t.Errorf("GOOS=%s: packages linking net/http: %q, want only %q", goos, users, want)
 		}
 	}
 
