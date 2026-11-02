@@ -779,6 +779,33 @@ conventions above. v1 requirements are not yet checked by
 - **Done when:** the tests pass with `-race`, lint is clean, `go run ./scripts/tracecheck` is green, and FR-TAB-012, FR-TAB-013, SEC-CLIP-006 and the v1 revisions listed are `Implemented`.
 - **Estimate:** 1.5 d
 
+### T-064 · Release pipeline and backwards-compatibility fixtures
+
+- **Delivers:** D-027 and the release half of D-026 (ADR-021). `.github/workflows/release.yml` on a `v*` tag: tag must be `vX.Y.Z`; `testdata/compat/<tag>/config.json` must exist; compat, store and update tests; `CGO_ENABLED=0` builds of darwin/linux × amd64/arm64 named `sshelf_<os>_<arch>` with `-s -w -X main.version/commit/date`; `--version` check; `checksums.txt` by `sha256sum`; `gh release create --verify-tag --generate-notes`. `store.Save` writes back the fields it does not know (`extras.go`). `internal/compat` (tests only): `TestD027_WriteFixture` writes a release's `config.json`, `known_hosts`, `update-check.json` and `keyring.txt` into a new `testdata/compat/<tag>/`; `TestD027_EveryReleaseFixtureLoads` loads every one. `testdata/compat/v0.1.0/` for the first release. CONTRIBUTING gets a "Releasing" section.
+- **Satisfies:** FR-CFG-011, FR-CFG-012, ARCH-DATA-006, NFR-BUILD-002
+- **Depends on:** T-063
+- **Tests:** `TestFR_CFG_011_UnknownFieldsKept`, `TestFR_CFG_011_NoExtrasSameBytes`, `TestSchemaV1RoundTripGolden` (unchanged bytes), `TestD027_EveryReleaseFixtureLoads`, `TestNFR_BUILD_002_ReleaseWorkflow`.
+- **Done when:** the tests pass with `-race`, lint is clean, `go run ./scripts/tracecheck` is green, and the IDs listed are `Implemented`.
+- **Estimate:** 1 d
+
+### T-065 · Daily update check and the footer notice
+
+- **Delivers:** D-026, D-110 (ADR-021, design §9.8). `internal/update`: `Parse` (strict `vX.Y.Z`), `Enabled` (dev builds and `SSHELF_NO_UPDATE_CHECK=1` off), `Client.Latest` (HTTPS only, `User-Agent: sshelf/<version>`, 1 MiB cap, HTTPS-only redirects), `Client.Check` (24 h cache in `update-check.json`, 0600, 10 s timeout, failures silent and not recorded). `cmd/sshelf` starts it with `term.SafeGo` after building the program and sends `ui.UpdateAvailableMsg`; the root model keeps a version of the release form; `hostlist.Footer` draws the long or short notice right-aligned, giving way before the essential keys and `? help`. The archtest allows `net/http` only in `internal/update`; NFR-PRIV-001's check is revised.
+- **Satisfies:** FR-UPD-001, FR-UPD-002, SEC-UPD-001, ARCH-UPD-001, ARCH-UPD-002, NFR-PRIV-001 (v1 revision)
+- **Depends on:** T-064
+- **Tests:** `TestFR_UPD_001_ParseIsStrict`, `TestFR_UPD_001_Enabled`, `TestFR_UPD_001_NewerReportedAndCached`, `TestFR_UPD_001_SameOrOlderNotReported`, `TestFR_UPD_001_RunningVersion`, `TestFR_UPD_001_CheckOffStartsNothing`, `TestSEC_UPD_001_OnlyUserAgentSent`, `TestSEC_UPD_001_FailuresAreSilent`, `TestSEC_UPD_001_NoticeOnlyShowsAVersion`, `TestFR_UPD_002_FooterNotice`, `TestFR_UPD_002_NoNoticeWithoutUpdate`, `TestFR_UPD_002_NoticeGolden` (80×24 and 120×40), `TestARCH_UPD_001_NetHTTPOnlyInUpdate`, `TestNFR_PRIV_001_NoHTTPClient`. All HTTP tests use an `httptest` TLS server on 127.0.0.1.
+- **Done when:** the tests pass with `-race`, lint is clean, `go run ./scripts/tracecheck` is green, and the IDs listed are `Implemented`.
+- **Estimate:** 1 d
+
+### T-066 · `sshelf update`
+
+- **Delivers:** D-026, D-111 (ADR-021, ADR-006 v1 amendment). `update.Client.Apply`: latest release, "already the latest", asset `sshelf_<GOOS>_<GOARCH>` and `checksums.txt`, symlinks resolved, package-manager trees refused, temporary file in the binary's directory (not writable: `ErrNotWritable`), SHA-256 while downloading (64 MiB cap), `chmod 0755`, `fsync`, rename; any failure leaves the binary and no temporary file. `cmd/sshelf`: the `update` argument, dev builds refused, `HowToUpdate` on `ErrNotWritable`, sanitised errors, Ctrl-C cancels. Usage text and README ("Updating", the compatibility promise).
+- **Satisfies:** FR-UPD-003, SEC-UPD-002, FR-CLI-001 (v1 revision)
+- **Depends on:** T-065
+- **Tests:** `TestFR_UPD_003_ReplacesBinary`, `TestFR_UPD_003_AlreadyLatest`, `TestFR_UPD_003_DevBuildRefused`, `TestFR_UPD_003_NotWritable`, `TestFR_UPD_003_PackageManagerTree`, `TestFR_UPD_003_RunUpdate`, `TestFR_UPD_003_UsageListsUpdate`, `TestFR_UPD_003_E2EDevBuildRefuses`, `TestSEC_UPD_002_ChecksumMismatchKeepsBinary`, `TestSEC_UPD_002_MissingAssetOrPlatform`, `TestSEC_UPD_002_OversizedDownloadRefused`, `TestSEC_UPD_002_RedirectToHTTPRefused`; `TestFR_CLI_001_*` unchanged.
+- **Done when:** the tests pass with `-race`, lint is clean, `go run ./scripts/tracecheck` is green, and the IDs listed are `Implemented`.
+- **Estimate:** 1 d
+
 ---
 
 ## v1 milestones (outline)
@@ -794,7 +821,7 @@ passes.
 | **v1-D Snippets** | FR-SNIP-001 … FR-SNIP-006 |
 | **v1-E Identities, trust and import** | Save typed password, key generation, deploy key (FR-IDENT-005 … FR-IDENT-007); known-hosts view and trust once (FR-KH-005, FR-KH-007); import preview, jumps and forwards on import, export, CSV (FR-IMPORT-004 … FR-IMPORT-007, ARCH-DATA-003); copy command adds a canary test under SEC-CLIP-005 |
 | **v1-F Settings** | External-change guard (FR-CFG-004, SEC-FILE-005, ARCH-DATA-005); `NO_COLOR`, themes, key bindings, defaults, settings view (FR-CFG-005 … FR-CFG-009); `--config` (FR-CLI-002) |
-| **v1-G Release** | NFR-SIZE-001, NFR-BUILD-002, NFR-PORT-003; goreleaser pipeline and first tagged release (NFR-PERF-004 moved to M2) |
+| **v1-G Release** | NFR-SIZE-001, NFR-PORT-003 (NFR-PERF-004 moved to M2). The release pipeline (NFR-BUILD-002), the update check and `sshelf update` and the compatibility fixtures are T-064 … T-066; the first tag follows them. |
 
 `Later` items (FR-CRED-003, FR-CONN-015 … FR-CONN-017, FR-KH-006, SEC-HOSTKEY-011,
 SEC-CRED-008 and the rest) are not planned. FR-TAB-001, ARCH-SESS-010 and

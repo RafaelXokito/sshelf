@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Owner** | Architecture |
-| **Status** | Revision 5: M3 planned (D-017…D-020: SFTP tab, shared connections, transfers, edit locally; ADR-016 … ADR-020). Revision 4: M2 as built (T-031 … T-043; D-009…D-015: framed sessions, tabs, mouse). Revision 3 planned M2; revision 2 aligned with D-001…D-008, D-101…D-109 |
+| **Status** | Revision 6: v1 releases, update check and `sshelf update`, backwards compatibility (D-026, D-027, D-110, D-111; ADR-021). Revision 5: M3 planned (D-017…D-020: SFTP tab, shared connections, transfers, edit locally; ADR-016 … ADR-020). Revision 4: M2 as built (T-031 … T-043; D-009…D-015: framed sessions, tabs, mouse). Revision 3 planned M2; revision 2 aligned with D-001…D-008, D-101…D-109 |
 | **Requirement prefix** | `ARCH-*` |
 | **Depends on** | `decisions.md` (binding), `security/credential-storage.md` (keychain library, item naming), `product/requirements.md` (`FR-*`) |
 | **Last updated** | 2026-10-30 |
@@ -19,7 +19,7 @@ testing strategy. `decisions.md` overrides it wherever the two disagree.
 ### 1.1 Context
 
 sshelf is a **TUI-only** SSH host manager, like Termius but in the terminal
-(D-001). The user runs `sshelf`, picks a host and connects. There is **no
+(D-001; D-026 adds one subcommand, `sshelf update`). The user runs `sshelf`, picks a host and connects. There is **no
 master password and no encrypted vault** (D-002). Data lives in two places:
 
 - **Metadata** (hosts, groups, identities without their secrets, snippets,
@@ -224,6 +224,11 @@ adds a dependency, and the UI is the primary editor anyway.
 
 **Decision.** Use the stdlib `flag` package in `cmd/sshelf/main.go`. There is
 no CLI framework, no subcommands and no shell completion.
+
+**v1 amendment (D-026).** D-026 amends D-001 with one subcommand,
+`sshelf update` (ADR-021). It is matched by hand after `flag` parsing: the
+only positional argument accepted is `update`, alone; anything else is still
+an unknown argument (exit 2).
 
 ### ADR-007: Adopt Bubble Tea v2, Bubbles v2 and Lip Gloss v2 now
 
@@ -842,6 +847,81 @@ sees only the editor; sshelf's tabs are not visible until it exits.
 **Consequences.** No new lifecycle owner; quitting closes SFTP tabs through
 the same path as sessions (`CloseSessions` becomes `CloseTabs`).
 
+### ADR-021: Releases, the update check and `sshelf update`, and backwards compatibility (D-026, D-027, D-110, D-111)
+
+**Context.** D-026 adds an update notice in the host-list footer and an
+`sshelf update` command, which amends D-001 (TUI only). D-110 and D-111 fix
+the check (daily, background, HTTPS to the GitHub releases API, silent,
+opt-out, never for dev builds) and the update (SHA-256 from
+`checksums.txt`, atomic swap, advice when the binary is not writable).
+D-027 makes every release read everything an older one wrote. NFR-PRIV-001
+had banned `net/http` from the binary.
+
+**Decision.**
+
+- **Releases.** `.github/workflows/release.yml` runs on a pushed tag
+  `vX.Y.Z`: it refuses a tag that is not a release version and a release
+  without its compatibility fixture (below), cross-builds the four targets
+  of NFR-BUILD-001 with `CGO_ENABLED=0 go build -trimpath -ldflags "-s -w
+  -X main.version=<tag> -X main.commit=<sha> -X main.date=<RFC 3339>"`
+  into raw binaries `sshelf_<os>_<arch>` (no archives: `sshelf update`
+  replaces the file as is), writes `checksums.txt` with `sha256sum`, and
+  publishes with `gh release create`. No goreleaser (D-007): the workflow is
+  about twenty lines of shell. Signed releases are `Later` (D-111).
+- **One package, `internal/update`, does HTTP** (ARCH-UPD-001). It imports
+  only `domain` (`Sanitize`) and `paths`; nothing else in sshelf imports
+  `net/http`, and `archtest` enforces both. The UI gets the result as a
+  message and never imports it.
+- **Version.** `update.Parse` accepts only `vMAJOR.MINOR.PATCH` (no leading
+  zeros, nothing after). The running version is `main.version`, else the Go
+  module version (`go install …@vX.Y.Z`), else `dev`; anything that does not
+  parse (`dev`, `v0.0.0-e2e`, a pseudo-version, `git describe` output) is a
+  development build: no check and no update (D-110). Versions are compared
+  numerically, and whatever is shown is re-printed from the parsed numbers,
+  so no byte of the API's text reaches the terminal (SEC-UPD-001).
+- **Check.** `cmd/sshelf` starts it after building the program, through
+  `term.SafeGo`, unless the build is a dev build or
+  `SSHELF_NO_UPDATE_CHECK=1`. `Client.Check` reads `update-check.json` in
+  the config directory (`{"checked_at", "latest"}`, 0600, written through a
+  temporary file and a rename); if it is less than 24 h old (and not in the
+  future) its answer is used with no request. Otherwise it sends one
+  `GET https://api.github.com/repos/RafaelXokito/sshelf/releases/latest`
+  with only `User-Agent: sshelf/<version>` and `Accept`, a 10 s timeout and a
+  1 MiB body cap, records the answer, and when the latest is newer sends
+  `ui.UpdateAvailableMsg`. A failure is not recorded (the next start tries
+  again) and shows nothing. The program never waits for it.
+- **Notice.** The root model keeps the version (only if it still matches the
+  release form) and the host list's `Footer(latest)` draws it at the right of
+  its footer (§9.8).
+- **Update.** `sshelf update` (`Client.Apply`): parse the running version
+  (dev: refuse), ask for the latest release, say so and exit 0 if it is not
+  newer; otherwise find `sshelf_<GOOS>_<GOARCH>` and `checksums.txt` among
+  the release assets (HTTPS URLs only), resolve `os.Executable()` through
+  symlinks, refuse a binary under a package manager's tree (Homebrew
+  `Cellar`, `/nix/store`), create `.sshelf-update-*` in the binary's own
+  directory (failure: not writable, print how to update and exit 1),
+  download `checksums.txt` (64 KiB cap) and the binary (64 MiB cap) while
+  hashing it, compare the SHA-256, `chmod 0755`, `fsync`, and `rename` over
+  the binary. Redirects are followed only to HTTPS. Any failure removes the
+  temporary file and leaves the installed binary as it was.
+- **Compatibility (D-027).** Fields are only added, so the config schema
+  version stays 1 and no migration exists. `store.Save` re-reads the file it
+  replaces and writes back every field it does not know, at the top level,
+  in `settings`, and per group, identity and host by id (FR-CFG-011), so an
+  older release does not drop what a newer one wrote. `testdata/compat/<tag>/`
+  holds `config.json`, `known_hosts`, `update-check.json` and `keyring.txt`
+  (credential-store service and account names) as each release wrote them,
+  generated by `TestD027_WriteFixture`; `TestD027_EveryReleaseFixtureLoads`
+  loads every directory and checks a load and save loses nothing
+  (ARCH-DATA-006). Old directories are never edited; the release workflow
+  fails without the new one.
+
+**Consequences.** NFR-PRIV-001 gets a v1 revision: the binary links
+`net/http`, only through `internal/update`. A compromised GitHub release
+(binary and checksums replaced together) is not detected: T-28, accepted
+until signing (`Later`). sshelf replaces only a binary its user can write,
+and never one a package manager owns.
+
 ---
 
 ## 4. Architecture requirements
@@ -1075,6 +1155,20 @@ removed in revision 2.
 - Priority: M3 · Status: Implemented · Source: ADR-020, ARCH-SESS-010
 - Acceptance: Root-model tests with a fake browser: numbering shared with session tabs, `ConnID` matching for `Ctrl+]` `s`, focus moves left on close. Quitting with two SFTP tabs and a session closes every channel and connection (sshtest), removes every local part file of running downloads, and `goleak` passes.
 
+### 4.8 Updates and compatibility (`ARCH-UPD`, ARCH-DATA-006)
+
+**ARCH-UPD-001**: The system shall make HTTP requests only from `internal/update`, which imports no other `internal/` package than `domain` and `paths`, and no other sshelf package shall import `net/http`.
+- Priority: v1 · Status: Implemented · Source: D-110, ADR-021
+- Acceptance: `TestARCH_UPD_001_NetHTTPOnlyInUpdate` finds `net/http` imported by `internal/update` only and flags a fixture module whose `internal/session` imports it; the import rules list `internal/update`'s allowed packages; `TestNFR_PRIV_001_NoHTTPClient` finds no package of the binary but `internal/update` (and `net/http`'s own) linking `net/http`.
+
+**ARCH-UPD-002**: When sshelf starts the TUI with a release build and `SSHELF_NO_UPDATE_CHECK` is not `1`, the system shall run the update check in a goroutine started by `term.SafeGo`, keep its state in `update-check.json` in the config directory with mode 0600, and deliver a newer version to the UI only as a message.
+- Priority: v1 · Status: Implemented · Source: D-110, ADR-021
+- Acceptance: `TestFR_UPD_001_CheckOffStartsNothing` (dev build, opt-out: nothing started); `TestFR_UPD_001_NewerReportedAndCached` (state file 0600, reused for 24 h); the `archtest` SafeGo check covers `internal/update` and `cmd/sshelf`.
+
+**ARCH-DATA-006**: The system shall keep, for every release, the files that release writes (`config.json`, `known_hosts`, `update-check.json`, and the credential-store item names) under `testdata/compat/<tag>/`, and its tests shall load every such directory and check that a load and a save of `config.json` lose nothing.
+- Priority: v1 · Status: Implemented · Source: D-027, ADR-021
+- Acceptance: `TestD027_EveryReleaseFixtureLoads` over `testdata/compat/v0.1.0/`; `TestNFR_BUILD_002_ReleaseWorkflow` pins the release workflow's check that `testdata/compat/<tag>/config.json` exists.
+
 ---
 
 ## 5. Package layout
@@ -1085,7 +1179,8 @@ removed in revision 2.
 cmd/sshelf/                 main: process hardening first (an unexported function: RLIMIT_CORE=0,
                             PR_SET_DUMPABLE=0 on Linux, SEC-MEM-003), stdlib flag parsing (--version,
                             --help, --config), top-level panic handler, debug-log setup, wiring:
-                            paths → store → secrets → app → ui.
+                            paths → store → secrets → app → ui. v1: the `update` subcommand and
+                            the background update check (update.go, ADR-021).
 internal/
   domain/                   Pure types: Host, Group, Identity, Snippet, ForwardRule, Settings, ID.
                             Validation and inheritance resolution. Stdlib plus github.com/google/uuid
@@ -1114,6 +1209,10 @@ internal/
                             checkpoints, resume, pause), edit.go (EditCopy: temp dir, change and conflict
                             checks, the crash-cleanup registry). Imports sshclient, domain and term; never
                             Bubble Tea, ui, app, secrets, store or os/exec.
+  update/                   v1 (ADR-021): the release check (GitHub releases API, update-check.json)
+                            and `sshelf update` (download, SHA-256 check, atomic swap). The only
+                            package that imports net/http. Imports domain and paths.
+  compat/                   v1: tests only; loads testdata/compat/<tag>/ of every release (D-027).
   sshconfig/                Parse ~/.ssh/config (Include, tokens) into an import plan. Own parser,
                             stdlib only (ADR-010).
   search/                   Fuzzy matching and ranking (sahilm/fuzzy).
@@ -1163,6 +1262,9 @@ flowchart TD
     main --> paths
     main --> term
     main --> files
+    main --> update
+    update --> domain
+    update --> paths
     ui --> app
     ui --> domain
     ui --> search
@@ -1201,6 +1303,7 @@ flowchart TD
 | `ui/...` | `app` (interfaces), `domain`, `search`, `session` (the handle type only), `ui/*` | `secrets`, `store`, `sshclient`, `files`, `x/crypto/ssh`, `github.com/pkg/sftp` |
 | `ui/editor` (M3) | none (stdlib, Bubble Tea) | every `internal/` package |
 | `app` | everything except `ui` | `ui` |
+| `update` (v1) | `domain`, `paths` | every other `internal/` package, Bubble Tea. The only sshelf package that may import `net/http` (ARCH-UPD-001). |
 | `sshconfig`, `search` | `domain` | (no extra rule; not checked by `archtest`) |
 | `paths`, `term` | none | (no extra rule; not checked by `archtest`) |
 | any sshelf package | | `os/exec` (D-008's `/usr/bin/security` call happens inside `zalando/go-keyring`), except `internal/ui/editor` (M3, ADR-019); any clipboard package (SEC-CLIP-005); `github.com/pkg/sftp` outside `internal/files` and `internal/testutil` |
@@ -2274,6 +2377,17 @@ of 0 (unknown) keeps every binding.
 |---|---|---|---|
 | Host list row (no modal) | select row | select row, open the host menu at the pointer | as §9.5 |
 | Host menu | item: choose it; border: nothing; outside: close | inside: nothing; outside: close | ignored |
+
+**Update notice (v1, D-026, FR-UPD-002).** The host list's `Footer(latest)`
+builds the footer when the root model knows a newer release. The notice is
+`update available: vX.Y.Z · run sshelf update` (dim text, the version and
+`update` in the accent colour 212), or `vX.Y.Z available` when that does not
+fit, right-aligned with at least two spaces before it. A form is used only
+if the essential keys (`enter connect`, `/ search`, `a add`, `q quit`) and
+`? help` fit beside it; then `FitHints` fills the rest of the width (minus
+the notice) in the FR-NAV-020 priority, so lower keys give way to the notice.
+If neither form fits, the footer is FR-NAV-020's. The search footer never
+shows it.
 
 ## 10. Testing strategy
 

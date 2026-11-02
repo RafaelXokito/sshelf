@@ -96,6 +96,7 @@ connection" prompt (not achievable from a plain Go binary, see credential-storag
 | T-25 | I | **The edit-locally copy is read or left behind.** | Private 0700 directory, 0600 file, deleted in every path including a crash (SEC-SFTP-005). | `SIGKILL` or power loss leaves the copy in the user's temp dir, readable only by the user. Accepted. |
 | T-26 | E | **Command injection through the editor launch** (a file name with shell metacharacters, a hostile `$EDITOR`). | No shell; the file path is one argv element; `os/exec` exists in one package (SEC-SFTP-006). | `$EDITOR` is set by the user or a same-user process (AC-4). Accepted. |
 | T-27 | I | **File contents or private paths in logs.** | Contents never logged; paths only at debug level; canary harness (SEC-SFTP-007). | None known. |
+| T-28 | T, E | **Malicious update**: a network attacker or a fake server answers the update check or `sshelf update` with a hostile version string or binary; or the GitHub release itself is compromised. | HTTPS only, the version parsed strictly and re-printed (SEC-UPD-001); the binary's SHA-256 checked against `checksums.txt` and swapped atomically (SEC-UPD-002). Opt-out with `SSHELF_NO_UPDATE_CHECK=1`. | **Accepted (D-111):** `checksums.txt` comes from the same release, so a compromised repository or account can replace both. Signed releases are `Later`. |
 | T-21 | E | **Prompt fatigue.** Repeated macOS "allow access" dialogs after each rebuild or update train users to click "Always Allow". | The recommended backend does not trigger per-binary ACL prompts (SEC-CRED-009). | Trade-off against T-3, accepted by D-008. |
 
 ---
@@ -577,6 +578,33 @@ Priority: M3 · Status: Implemented · Threats: T-15
 - AC2: A `realpath(".")` reply with control characters is shown sanitised in the pane title; operations use the
   exact bytes.
 
+### 4.10 Updates (SEC-UPD), v1
+
+**SEC-UPD-001: The update check reveals nothing and trusts nothing it is told.**
+The system shall send the update check only over HTTPS (redirects included) with no data but a
+`sshelf/<version>` User-Agent, cap each response at 1 MiB and the check at 10 seconds, accept only a tag of
+the form `vX.Y.Z`, and show only a version re-printed from the parsed numbers.
+Priority: v1 · Status: Implemented · Threats: T-15, T-28 · Source: D-110
+- AC1: The fake API (a TLS server on 127.0.0.1) sees one plain GET with only `User-Agent: sshelf/v0.1.0`,
+  `Accept` and `Accept-Encoding` (`TestSEC_UPD_001_OnlyUserAgentSent`).
+- AC2: A plain-HTTP base URL is never contacted; a non-JSON, oversized, `v1.2.3-rc1` or escape-sequence tag, an HTTP
+  error and a hung server all report nothing (`TestSEC_UPD_001_FailuresAreSilent`).
+- AC3: The UI ignores an `UpdateAvailableMsg` whose version is not `vX.Y.Z` (OSC 52, CSI, extra words)
+  (`TestSEC_UPD_001_NoticeOnlyShowsAVersion`); errors printed by `sshelf update` go through `domain.Sanitize`
+  (`TestFR_UPD_003_RunUpdate`).
+
+**SEC-UPD-002: An update is verified before it replaces anything.**
+The system shall replace the running binary only with a download whose SHA-256 equals its line in the same
+release's `checksums.txt`, fetched over HTTPS and capped at 64 MiB, written to a new file in the binary's own
+directory and renamed over the binary, and shall leave the installed binary untouched on any failure.
+Priority: v1 · Status: Implemented · Threats: T-28 · Source: D-111
+- AC1: A wrong sum, a missing line, a short or non-hex sum, or a sum for another name keeps the old binary and
+  leaves no temporary file (`TestSEC_UPD_002_ChecksumMismatchKeepsBinary`).
+- AC2: An oversized download, a release without this platform's binary, and a redirect to plain HTTP fail with the
+  binary unchanged (`TestSEC_UPD_002_OversizedDownloadRefused`, `TestSEC_UPD_002_MissingAssetOrPlatform`,
+  `TestSEC_UPD_002_RedirectToHTTPRefused`).
+- AC3: Signing is `Later` (D-111): a release whose binary and `checksums.txt` were both replaced is accepted (T-28).
+
 ---
 
 ## 5. Requirement count
@@ -586,9 +614,9 @@ Priority: M3 · Status: Implemented · Threats: T-15
 | MVP | 30 |
 | M2 | 2 |
 | M3 | 9 (SEC-SFTP-001 … SEC-SFTP-008; SEC-MEM-008 revised from MVP by T-059) |
-| v1 | 4 |
+| v1 | 6 (SEC-UPD-001, SEC-UPD-002 added for D-026) |
 | Later | 2 |
-| **Total** | **47** |
+| **Total** | **49** |
 
 ## 6. Resolved decisions
 

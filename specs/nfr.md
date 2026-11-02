@@ -126,10 +126,10 @@ The system shall build with `CGO_ENABLED=0` for `linux/amd64`, `linux/arm64`, `d
 - **Check:** The CI cross-compile job builds all 4 targets on `ubuntu-latest` with `CGO_ENABLED=0`. `go version -m` on each binary reports `CGO_ENABLED=0`, and `file` reports the Linux binaries as statically linked.
 
 ### NFR-BUILD-002 · Release artefacts
-When a version tag is pushed, the system's release pipeline shall publish one archive per supported target, a SHA-256 checksums file, and binaries whose `--version` output names the tag, commit and build date.
+When a tag `vX.Y.Z` is pushed, the system's release pipeline shall publish a GitHub release with one raw binary per supported target, named `sshelf_<os>_<arch>`, and a SHA-256 `checksums.txt`, from binaries whose `--version` output names the tag, commit and build date.
 
-- **Priority:** v1
-- **Check:** CI runs `goreleaser release --snapshot --clean` on every PR touching the release config and asserts that 4 archives and `checksums.txt` exist, every checksum verifies, and the `linux/amd64` binary's `--version` output contains the snapshot version, the commit SHA and an RFC 3339 date.
+- **Priority:** v1 · **Status:** Implemented · **Source:** D-026, D-027, ADR-021 (no goreleaser, D-007)
+- **Check:** `.github/workflows/release.yml` refuses a tag that is not `vX.Y.Z` and a release without `testdata/compat/<tag>/` (D-027), runs the compatibility, store and update tests, builds the 4 targets of NFR-BUILD-001 with `-X main.version/commit/date`, checks the `linux/amd64` binary's `--version`, writes `checksums.txt` with `sha256sum` and verifies it, and publishes with `gh release create`. `TestNFR_BUILD_002_ReleaseWorkflow` pins those steps and that goreleaser is not used.
 
 ---
 
@@ -191,6 +191,9 @@ The system shall make no network connection other than the SSH connections the u
 
 - **Priority:** MVP · **Status:** Implemented
 - **Check:** `TestNFR_PRIV_001_NoHTTPClient` in `internal/archtest` asserts that `go list -deps ./cmd/sshelf` contains no `net/http`, and that `net.Dial`/`net.Dialer` are referenced only from `internal/sshclient` (checked with `go/packages`).
+- **v1 revision** · Priority: v1 · Status: Implemented · Source: D-026, D-110
+  - *Revised:* The system shall make no network connection other than the SSH connections the user starts and the daily update check (FR-UPD-001) and `sshelf update` (FR-UPD-003), shall send no telemetry, and shall send the update check nothing but a `sshelf/<version>` User-Agent.
+  - *Check:* `TestNFR_PRIV_001_NoHTTPClient`: in `go list -deps ./cmd/sshelf` (Linux and macOS) the only package outside `net/http` itself that imports `net/http` is `internal/update`; `net.Dial`/`net.Dialer` are referenced only from `internal/sshclient`. `TestSEC_UPD_001_OnlyUserAgentSent`; `SSHELF_NO_UPDATE_CHECK=1` turns the check off (`TestFR_UPD_001_Enabled`).
 
 ---
 

@@ -67,5 +67,5 @@ decisions are in [`decisions.md`](decisions.md).
 | **TOFU** (trust on first use) | Accepting a server's host key the first time it is seen, after the user checks its fingerprint in the unknown-host-key prompt (FR-KH-001, SEC-HOSTKEY-004). |
 | **Transfer** | One file or directory being copied between the panes, with a state: queued, running, waiting, paused, done, failed, cancelled or skipped (M3, FR-SFTP-015). |
 | **Transfer queue** | The per-connection list of transfers, run two at a time; shown with `t` as the **transfers view** (M3, ADR-018). |
-| **TUI** | Terminal user interface. sshelf is TUI-only: a full-screen, keyboard-driven interface built with Bubble Tea, with no non-interactive subcommands. |
+| **TUI** | Terminal user interface. sshelf is TUI-only: a full-screen, keyboard-driven interface built with Bubble Tea, with no non-interactive subcommands except `sshelf update` (D-026). |
 | **Tunnel-only mode** | Connecting to a host only to open its forwarding rules, without a remote shell (equivalent to `ssh -N`). |

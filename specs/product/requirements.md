@@ -1589,11 +1589,30 @@ Where the settings define colour overrides, the system shall apply them on top o
 - **Acceptance:**
   - An override of the accent colour changes the accent and leaves the other theme colours unchanged.
 
+### FR-CFG-011 · Unknown fields are kept
+When the system saves `config.json`, it shall write back unchanged every field of the file it replaces that this build does not know, at the top level, in `settings`, and in each group, identity and host by its id.
+
+- **Priority:** v1 · **Status:** Implemented · **Source:** D-027 (an older release must not drop what a newer one wrote)
+- **Acceptance:**
+  - A file with unknown fields at the top level (`snippets`), in `settings`, in a group, an identity and a host is loaded, a host renamed, another deleted and a new one added, and saved: every unknown field is still there with its value, the renamed host keeps its unknown fields, and the deleted host's fields go with it, not to the new one (`TestFR_CFG_011_UnknownFieldsKept`).
+  - A file this build wrote has no unknown fields and is written back byte for byte (`TestFR_CFG_011_NoExtrasSameBytes`, `TestSchemaV1RoundTripGolden`).
+  - The schema version stays 1; unknown setting keys still warn (FR-CFG-003).
+
+### FR-CFG-012 · Files of every earlier release keep working
+The system shall read, and keep working with, everything an earlier release wrote: `config.json`, sshelf's `known_hosts`, `update-check.json` and the credential-store items, with any change automatic and lossless.
+
+- **Priority:** v1 · **Status:** Implemented · **Source:** D-027
+- **Acceptance:**
+  - `TestD027_EveryReleaseFixtureLoads` loads every `testdata/compat/<tag>/` (ARCH-DATA-006): `config.json` loads with no warning and has hosts and identities, a save then a load gives the same data, and no value of the original file is missing from the saved one; `known_hosts` trusts each of its entries; `update-check.json` reads back; every credential-store account name in `keyring.txt` still parses as the same item, and each secret `config.json` says is stored has its name.
+  - Fields are only added, never renamed, retyped or removed; breaking that needs a new decision first (D-027). Key bindings and `sshelf update` keep working (release checklist).
+
 ---
 
 ## 21. Command line (`FR-CLI`)
 
-sshelf is TUI-only (D-001). The binary has no subcommands.
+sshelf is TUI-only (D-001). From v1 the binary has one subcommand, `sshelf update`
+(D-026 amends D-001; FR-UPD-003). Releases are published as GitHub releases
+(NFR-BUILD-002, ADR-021).
 
 ### FR-CLI-001 · Launch, help and version
 When `sshelf` is run with `--help` or `--version`, the system shall print usage or version information and exit with status 0, and otherwise shall start the TUI.
@@ -1603,6 +1622,9 @@ When `sshelf` is run with `--help` or `--version`, the system shall print usage 
   - `--version` prints the version, commit and build date.
   - An unknown argument prints usage and exits with status 2.
   - If stdin or stdout is not a terminal, sshelf exits with status 1 and the message "sshelf needs an interactive terminal".
+- **v1 revision** · Priority: v1 · Status: Implemented · Source: D-026
+  - *Revised:* When `sshelf` is run with `--help` or `--version`, the system shall print usage or version information and exit with status 0; with the single argument `update` it shall run FR-UPD-003; and otherwise it shall start the TUI.
+  - *Acceptance:* as above, and the usage lists `sshelf update` and `SSHELF_NO_UPDATE_CHECK=1`; `update` with another argument, or with `--version`, is an unknown argument (exit 2) (`TestFR_UPD_003_UsageListsUpdate`, `TestFR_UPD_003_E2EDevBuildRefuses`).
 
 ### FR-CLI-002 · Alternative config directory
 When `sshelf` is run with `--config <dir>`, the system shall use `<dir>` as its config directory.
@@ -1610,6 +1632,34 @@ When `sshelf` is run with `--config <dir>`, the system shall use `<dir>` as its 
 - **Priority:** v1 · **Status:** Draft · **Source:** D-001
 - **Acceptance:**
   - Two different directories hold fully independent host lists. Secrets in the OS store are kept separate per directory, as specified in SEC-CRED-002.
+
+### FR-UPD-001 · Daily update check
+While a release build runs the TUI and `SSHELF_NO_UPDATE_CHECK` is not `1`, the system shall find out at most once every 24 hours, in the background, whether a newer release exists, and shall never delay startup or show an error because of the check.
+
+- **Priority:** v1 · **Status:** Implemented · **Source:** D-026, D-110
+- **Acceptance:**
+  - A newer latest release is reported; the answer is kept in `update-check.json` (0600) in the config directory and reused without a request for 24 hours; after 24 hours, or with a clock set back before the stored time, it asks again (`TestFR_UPD_001_NewerReportedAndCached`). The same or an older release is not reported (`TestFR_UPD_001_SameOrOlderNotReported`).
+  - A development build (a version that is not `vX.Y.Z`: `dev`, `v0.0.0-e2e`, a pseudo-version) and `SSHELF_NO_UPDATE_CHECK=1` start no check (`TestFR_UPD_001_Enabled`, `TestFR_UPD_001_CheckOffStartsNothing`). `ParseIsStrict` lists what counts as a release version; the running version is `-X main.version`, else the Go module version, else `dev` (`TestFR_UPD_001_RunningVersion`).
+  - Every failure (no network, HTTP error, timeout, malformed or oversized answer, unreadable state file) shows nothing and is not recorded, so the next start tries again (`TestSEC_UPD_001_FailuresAreSilent`). The TUI starts before the check ends (the check runs in a `term.SafeGo` goroutine).
+
+### FR-UPD-002 · Update notice in the host-list footer
+While a newer release is known and the host list is shown, the system shall show `update available: vX.Y.Z · run sshelf update` right-aligned on the footer line, shortened to `vX.Y.Z available` when that does not fit, and left out before any of the essential keys or `? help` would be.
+
+- **Priority:** v1 · **Status:** Implemented · **Source:** D-026 (design §9.8)
+- **Acceptance:**
+  - At 120 columns the long notice ends the footer, right-aligned, after `enter connect • s sftp • / search • a add …` and `? help`; at 80 columns the short one. From 60 to 130 columns `enter connect`, `/ search`, `a add`, `q quit` and `? help` are always shown; each width shows the long form, the short form or none, never cut with "…" (`TestFR_UPD_002_FooterNotice`). Goldens at 80×24 and 120×40 (`TestFR_UPD_002_NoticeGolden`).
+  - The search footer and every other screen show no notice; with no newer release the footer is FR-NAV-020's (`TestFR_UPD_002_NoNoticeWithoutUpdate`).
+  - Only a version of the form `vX.Y.Z` is shown (`TestSEC_UPD_001_NoticeOnlyShowsAVersion`).
+
+### FR-UPD-003 · `sshelf update`
+When the user runs `sshelf update`, the system shall show the running and the latest version and, if the latest is newer, replace the running binary with that release's binary for this OS and architecture after checking its SHA-256 against the release's `checksums.txt`.
+
+- **Priority:** v1 · **Status:** Implemented · **Source:** D-026, D-111
+- **Acceptance:**
+  - A newer release replaces the binary (through a symlink to it, the target is replaced and the link kept), mode 0755, and prints `Updating sshelf vA → vB` and the path; no temporary file is left (`TestFR_UPD_003_ReplacesBinary`).
+  - Already the latest: `sshelf vX.Y.Z is the latest version.`, exit 0, binary unchanged (`TestFR_UPD_003_AlreadyLatest`).
+  - A binary whose directory is not writable, or that lives under Homebrew's `Cellar` or `/nix/store`, is left alone; sshelf prints how to update it (Homebrew, `go install`, the releases page) and exits 1 (`TestFR_UPD_003_NotWritable`, `TestFR_UPD_003_PackageManagerTree`, `TestFR_UPD_003_RunUpdate`).
+  - A development build refuses with a message naming the releases page and exits 1, without a request (`TestFR_UPD_003_DevBuildRefused`, `TestFR_UPD_003_E2EDevBuildRefuses`). `sshelf update` takes no other argument (exit 2). `--help` lists it (`TestFR_UPD_003_UsageListsUpdate`).
 
 ---
 

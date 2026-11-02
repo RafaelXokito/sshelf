@@ -34,7 +34,7 @@ is available, sshelf works for key-file and agent hosts and refuses to save secr
 Use **`github.com/zalando/go-keyring`**, pinned to an exact version and reviewed on each bump, behind sshelf's own
 `secrets.Store` interface (§5).
 
-Reasons: no cgo (one `go build` and goreleaser matrix for macOS and Linux, amd64 and arm64), no Keychain re-prompts
+Reasons: no cgo (one `go build` and release build matrix for macOS and Linux, amd64 and arm64), no Keychain re-prompts
 after updates (SEC-CRED-009), a tiny API, and a mock that is easy to replace with our fake.
 
 What we accept, stated plainly:
@@ -97,7 +97,8 @@ contains:
 - **YAML rejected:** large parser surface, implicit typing (`no` → false, `0755` → octal), and anchors or aliases
   (billion-laughs). **TOML** is reasonable but adds a dependency for no security gain.
 
-Decoding is tolerant of unknown fields (forward compatibility, FR-CFG-003). The file is capped at
+Decoding is tolerant of unknown fields (forward compatibility, FR-CFG-003), and saving writes them back
+unchanged (FR-CFG-011, D-027), so an older release keeps what a newer one added. The file is capped at
 16 MiB when read.
 
 ### 3.3 Schema (version 1)

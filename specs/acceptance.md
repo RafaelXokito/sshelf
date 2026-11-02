@@ -1,6 +1,6 @@
 # MVP manual acceptance checklist
 
-(The M2 checklist follows the MVP sign-off, and the M3 checklist follows the M2 sign-off, at the end of this file.)
+(The M2 checklist follows the MVP sign-off, the M3 checklist follows the M2 sign-off, and the v1 release and update checklist comes last.)
 
 Status: Ready to run · Owner: product owner · Task: T-030
 
@@ -1445,4 +1445,31 @@ form, add `acc-a` (127.0.0.1, port 2201, user `pi`, password `acc-pw-A`) and
 |---|---|---|
 | All M3 steps pass (or N/A with reason) | [ ] | [ ] |
 | Failures (step numbers, issue links) | | |
+| Signed off by | | |
+
+---
+
+# v1 checklist: releases and updates (D-026, D-027)
+
+Run once per release, on macOS and Linux, with the release's own binary.
+
+## U.1 Release assets
+
+- [ ] The GitHub release for the tag has `sshelf_darwin_amd64`, `sshelf_darwin_arm64`, `sshelf_linux_amd64`, `sshelf_linux_arm64` and `checksums.txt`; `sha256sum -c checksums.txt` (or `shasum -a 256 -c`) passes in a folder holding them (NFR-BUILD-002).
+- [ ] `./sshelf_<os>_<arch> --version` prints the tag, the commit and the build date.
+- [ ] `testdata/compat/<tag>/` is in the tagged commit, and no older directory changed (D-027).
+
+## U.2 Update notice and `sshelf update`
+
+- [ ] Install the previous release into a directory you own (`~/.local/bin/sshelf`). Remove `update-check.json` from the config directory and start it: the host list opens at once; within a few seconds the footer shows `update available: <tag> · run sshelf update` at 120 columns and `<tag> available` at 80 (FR-UPD-001, FR-UPD-002).
+- [ ] Quit and start again with the network off: no error, the notice comes from `update-check.json`. `SSHELF_NO_UPDATE_CHECK=1 sshelf` shows no notice and makes no request (Little Snitch or `nettop`, if available).
+- [ ] `sshelf update` prints `Updating sshelf <old> → <tag>`, downloads, and `sshelf --version` then names the tag; `sshelf update` again prints `is the latest version` (FR-UPD-003).
+- [ ] Copy the binary to a root-owned directory (`/usr/local/bin`, with `sudo`) and run `sshelf update` as yourself: it changes nothing and prints how to update (exit status 1).
+- [ ] Your hosts, identities, stored passwords and trusted host keys from the previous release all work in the new one without a prompt or a re-entry (D-027): connect to a host that uses a stored password.
+
+## U sign-off
+
+| | macOS | Linux |
+|---|---|---|
+| All U steps pass | [ ] | [ ] |
 | Signed off by | | |
