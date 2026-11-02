@@ -30,7 +30,7 @@ go run ./internal/testutil/sshtest/cmd/sshtestd -port 2201 -password demo -sftp 
 
 ## Usage
 
-On first launch, press `I` to import `~/.ssh/config` or `a` to add a host. The footer always lists the available keys.
+On first launch, press `I` to import `~/.ssh/config` or `a` to add a host. The footer lists the main keys that fit; `?` lists them all.
 
 ### Host list
 
@@ -43,7 +43,10 @@ On first launch, press `I` to import `~/.ssh/config` or `a` to add a host. The f
 | `s` | open an SFTP tab |
 | `i` | identities (saved credentials) |
 | `I` | import `~/.ssh/config` |
+| `?` | every host-list key |
 | `q` | quit |
+
+Right-click a host for a menu: Connect (SSH), Open SFTP, Edit, Duplicate, Delete (arrows or `j`/`k`, `enter`, `esc`).
 
 In forms, `tab` moves between fields, `ctrl+s` saves and `esc` cancels. You can also click fields and buttons.
 

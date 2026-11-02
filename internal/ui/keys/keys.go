@@ -52,6 +52,16 @@ var (
 	DeleteHost    = key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "delete"))
 	Identities    = key.NewBinding(key.WithKeys("i"), key.WithHelp("i", "identities"))
 	Import        = key.NewBinding(key.WithKeys("I"), key.WithHelp("I", "import"))
+	// Help opens the overlay of every host-list key; the footer always
+	// ends with it (FR-NAV-020).
+	Help = key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help"))
+)
+
+// Host menu (FR-NAV-019, D-025): the right-click menu of a host row. Up
+// and Down move the highlight.
+var (
+	MenuChoose = key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "choose"))
+	MenuClose  = key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "close"))
 )
 
 // Search field (FR-NAV-002): letters type into the query, so only the
@@ -107,6 +117,9 @@ func MouseActions() []MouseAction {
 		{"host list: double-click a host", []key.Binding{Connect}},
 		{"host list: wheel", []key.Binding{Up, Down}},
 		{"host list: click the search field", []key.Binding{Search}},
+		{"host list: right-click a host", []key.Binding{Up, Down, Connect, OpenSFTP, EditHost, DuplicateHost, DeleteHost}},
+		{"host menu: click an item", []key.Binding{Up, Down, MenuChoose}},
+		{"host menu: click outside", []key.Binding{MenuClose}},
 		{"welcome: click Import", []key.Binding{WelcomeImport}},
 		{"welcome: click Add host", []key.Binding{WelcomeAdd}},
 		{"form: click a field", []key.Binding{NextField, PrevField}},
@@ -147,7 +160,8 @@ var textInput = []key.Binding{CursorLeft, CursorRight, CursorHome, CursorEnd, De
 // v1) is generated from it; footers show a subset.
 func Maps() []Map {
 	return append([]Map{
-		{Name: "host list", Bindings: []key.Binding{Up, Down, First, Last, Search, Connect, OpenSFTP, AddHost, DuplicateHost, EditHost, DeleteHost, Identities, Import, Quit, ForceQuit}},
+		{Name: "host list", Bindings: []key.Binding{Up, Down, First, Last, Search, Connect, OpenSFTP, AddHost, DuplicateHost, EditHost, DeleteHost, Identities, Import, Help, Quit, ForceQuit}},
+		{Name: "host menu", Bindings: []key.Binding{Up, Down, MenuChoose, MenuClose, ForceQuit}},
 		{Name: "search", Bindings: append([]key.Binding{SearchUp, SearchDown, Connect, ClearSearch, ForceQuit}, textInput...)},
 		{Name: "welcome", Bindings: []key.Binding{WelcomeImport, WelcomeAdd, Quit, ForceQuit}},
 		{Name: "form", Bindings: []key.Binding{NextField, PrevField, Save, Cancel, ForceQuit}},

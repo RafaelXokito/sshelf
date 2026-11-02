@@ -1879,6 +1879,8 @@ defined in `ui/keys`. FR-NAV-003 is authoritative for the host list.
 | Scrollback mode (M2) | `↑`/`↓` line · `pgup`/`pgdown` page · `g`/`G` top/bottom · `esc` back |
 | Forms (M2 addition) | `tab` also reaches `[ Save ]` and `[ Cancel ]`; `enter`/`space` press the focused button |
 | Host list (M3 addition) | `s` open an SFTP tab for the selected host (FR-SFTP-002) |
+| Host list (v1 addition) | `?` help, every host-list key (FR-NAV-020); right-click a host: context menu (FR-NAV-019, §9.8) |
+| Host menu (v1) | `↑`/`↓` or `k`/`j` move · `enter` choose · `esc` close |
 | Any tab (M3 addition) | `ctrl+]` `s` SFTP tab on this session's connection (FR-SFTP-003); on an SFTP tab `ctrl+]` `q` closes it |
 | SFTP tab (M3) | `↑`/`↓` or `k`/`j` · `pgup`/`pgdown` · `g`/`G` · `tab` switch pane · `enter` open · `backspace`/`h` parent · `~` home · `space` mark · `c` copy · `r` rename · `d` delete · `m` mkdir · `e` edit locally · `t` transfers · `R` refresh · `.` hidden files · `/` filter · `?` help. Disconnected: `r` reconnect · `x` close (§9.6) |
 | Transfers view (M3) | `↑`/`↓` · `x` cancel · `r` retry · `enter` answer a waiting question · `C` clear finished · `t`/`esc` back |
@@ -2182,6 +2184,50 @@ under its lock, so the UI never holds a copied secret (FR-HOST-011):
    config write fails, `config.json` written last
    (credential-storage §7). The copied secrets are destroyed with the
    rest of the credentials before the call returns.
+
+### 9.8 Host context menu and footer priority (v1, D-025)
+
+**Popup modal.** The host menu is `ui/modals/hostmenu`, an ordinary modal on
+the modal stack (it takes the keyboard and the clicks first, and its
+`Hints` are the footer) that also implements `components.Popup`:
+`Anchor() (x, y)` returns the terminal cell it was opened at. `hostsFrame`
+does not stack a popup below the screen; it draws it over the finished
+frame with its top-left corner at the anchor, moved left and up as far as
+needed to lie wholly on the screen (`x = min(x, width − w)`,
+`y = min(y, height − h)`, never below 0), and records that rectangle in the
+frame layout, so hit-testing (ARCH-UI-007) uses the same place as the
+drawing. A press outside a popup (any button) pops it and does nothing else;
+inside, a left press is sent to it in its own coordinates as every modal's
+is.
+
+**Opening.** On the Hosts tab with no modal open, a right press goes to the
+host list's `RightClick(y)` in the screen's coordinates: on a host row it
+selects the row exactly as a left click does and returns the host; the root
+model then pushes `hostmenu.New(host, x, y)` at the pointer. Elsewhere it
+does nothing.
+
+**Items.** Connect (SSH) `enter`, Open SFTP `s`, Edit `e`, Duplicate `c`,
+Delete `d`, each shown with its key. ↑/↓ or `k`/`j` move the highlight
+(clamped), Enter chooses, Esc closes; a left press on an item chooses it.
+Choosing closes the menu (`components.Closer`) and returns
+`hostmenu.ChosenMsg{Key}`, the item's key press; the root model sends that
+key to the host list, so each item runs the very code its key runs
+(the selected host is the one right-clicked, since the menu held the
+keyboard and the mouse while open).
+
+**Footer priority.** `components.FitHints(width, shown, priority, more)`
+picks bindings for a footer: it walks `priority` and keeps each binding
+whose `key desc` still fits in `width` with those kept so far and `more`
+(joined by " • "), returns the kept ones in `shown`'s order and appends
+`more`. The host list's `Hints` use it with its width, the FR-NAV-020
+priority, and `keys.Help` (`?`) as `more`; `?` opens
+`help.NewList("Host list keys", …)` with every host-list binding. A width
+of 0 (unknown) keeps every binding.
+
+| Where (addition to §9.5) | Press (left) | Right press | Other |
+|---|---|---|---|
+| Host list row (no modal) | select row | select row, open the host menu at the pointer | as §9.5 |
+| Host menu | item: choose it; border: nothing; outside: close | inside: nothing; outside: close | ignored |
 
 ## 10. Testing strategy
 

@@ -220,15 +220,18 @@ func (m Model) forwardMouse(t *sessionTab, msg tea.Msg) {
 // coordinates (ARCH-UI-007, design §9.5).
 func (m Model) mouseClick(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	if ms.Button != tea.MouseLeft {
-		return m, nil
+		return m.otherPress(ms) // the host menu (FR-NAV-019)
 	}
 	double := m.clicks.Press(m.now(), ms.Y)
 	lay := m.layout()
 	if n := len(m.modals); n > 0 {
 		// Only the top modal takes clicks; anywhere else, nothing happens
-		// (FR-NAV-016).
+		// (FR-NAV-016), except that a popup closes (FR-NAV-019).
 		x, y, ok := lay.modals[n-1].local(ms.X, ms.Y)
 		if !ok {
+			if m.outsidePopup(lay, ms) {
+				m.popModal()
+			}
 			return m, nil
 		}
 		return m.updateTopModal(components.ClickMsg{X: x, Y: y, Double: double})

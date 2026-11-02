@@ -23,6 +23,7 @@ import (
 	"github.com/RafaelXokito/sshelf/internal/ui/keys"
 	"github.com/RafaelXokito/sshelf/internal/ui/modals/confirm"
 	"github.com/RafaelXokito/sshelf/internal/ui/modals/connecting"
+	"github.com/RafaelXokito/sshelf/internal/ui/modals/hostmenu"
 	"github.com/RafaelXokito/sshelf/internal/ui/modals/keychanged"
 	"github.com/RafaelXokito/sshelf/internal/ui/modals/prompt"
 	"github.com/RafaelXokito/sshelf/internal/ui/modals/tofu"
@@ -482,6 +483,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case keychanged.CloseMsg:
 		m.popModal()
 		return m, nil
+
+	case hostmenu.ChosenMsg:
+		return m.hostMenuChosen(msg)
 	}
 
 	if m.screen != nil {
@@ -675,25 +679,33 @@ func (m Model) hostsFrame() ([]string, frameLayout) {
 	banner := len(m.withBanner(nil))
 	body = m.withBanner(body)
 	lay.screen = region{Y: hostsFrameTop + banner, W: m.viewWidth(), H: len(body) - banner}
+	var popups [][]string // the lines of each popup, nil for a stacked modal (design §9.8)
 	if n := len(m.modals); n > 0 {
 		var ml []string
 		tops := make([]int, n)
+		popups = make([][]string, n)
 		for i, md := range m.modals {
-			if i > 0 {
+			lines := viewLines(md.View())
+			lay.modals = append(lay.modals, region{W: linesWidth(lines), H: len(lines)})
+			if _, ok := md.(components.Popup); ok {
+				popups[i] = lines
+				continue
+			}
+			if len(ml) > 0 {
 				ml = append(ml, "")
 			}
-			lines := viewLines(md.View())
 			tops[i] = len(ml)
-			lay.modals = append(lay.modals, region{W: linesWidth(lines), H: len(lines)})
 			ml = append(ml, lines...)
 		}
 		if h, ok := m.modals[n-1].(components.Hinter); ok {
 			foot = components.Help(h.Hints()...)
 		}
 		start := len(body) + 1
-		if m.height == 0 || len(body)+1+len(ml) <= m.bodyHeight() {
+		switch {
+		case len(ml) == 0:
+		case m.height == 0 || len(body)+1+len(ml) <= m.bodyHeight():
 			body = append(append(body, ""), ml...)
-		} else {
+		default:
 			// The modals have the keyboard; the screen gives way, and if
 			// the stack is still too tall its bottom, with the top
 			// modal's buttons, stays in view.
@@ -707,6 +719,12 @@ func (m Model) hostsFrame() ([]string, frameLayout) {
 	}
 	if m.height > 0 {
 		lay = lay.clip(hostsFrameTop, hostsFrameTop+m.bodyHeight())
+	}
+	for i, lines := range popups {
+		if lines != nil {
+			x, y := m.modals[i].(components.Popup).Anchor()
+			lay.modals[i] = m.placePopup(x, y, lay.modals[i].W, len(lines))
+		}
 	}
 
 	out := []string{m.header(), ""}
@@ -725,6 +743,11 @@ func (m Model) hostsFrame() ([]string, frameLayout) {
 		}
 	}
 	out = append(out, foot)
+	for i, lines := range popups {
+		if lines != nil {
+			out = overlay(out, lines, lay.modals[i].X, lay.modals[i].Y)
+		}
+	}
 	return out, lay
 }
 

@@ -18,6 +18,7 @@ import (
 	"github.com/RafaelXokito/sshelf/internal/ui/components"
 	"github.com/RafaelXokito/sshelf/internal/ui/keys"
 	"github.com/RafaelXokito/sshelf/internal/ui/modals/confirm"
+	"github.com/RafaelXokito/sshelf/internal/ui/modals/help"
 )
 
 // LabelWidth is the column the address starts after, unless a label is
@@ -197,9 +198,26 @@ func (m Model) Hints() []key.Binding {
 	if m.searching {
 		return []key.Binding{keys.Connect, keys.ClearSearch, keys.SearchUp, keys.SearchDown}
 	}
-	// I import is bound but left out, so that the footer fits 80
-	// columns (FR-NAV-003 v1 revision).
-	return []key.Binding{keys.Connect, keys.Search, keys.AddHost, keys.DuplicateHost, keys.EditHost, keys.DeleteHost, keys.Quit}
+	return components.FitHints(m.width, footerOrder, footerPriority, keys.Help)
+}
+
+// footerOrder is the order of the host list's footer, and footerPriority
+// the order in which its keys are kept when the footer does not fit the
+// width; it always ends with ? help (FR-NAV-020).
+var (
+	footerOrder    = []key.Binding{keys.Connect, keys.OpenSFTP, keys.Search, keys.AddHost, keys.DuplicateHost, keys.EditHost, keys.DeleteHost, keys.Identities, keys.Import, keys.Quit}
+	footerPriority = []key.Binding{keys.Connect, keys.Search, keys.AddHost, keys.Quit, keys.OpenSFTP, keys.EditHost, keys.DeleteHost, keys.DuplicateHost, keys.Identities, keys.Import}
+)
+
+// HelpKeys are the bindings the help overlay lists: every host-list key
+// (FR-NAV-020).
+func HelpKeys() []key.Binding {
+	for _, m := range keys.Maps() {
+		if m.Name == "host list" {
+			return m.Bindings
+		}
+	}
+	return nil
 }
 
 // Update implements components.Screen.
@@ -262,6 +280,19 @@ func (m Model) click(c components.ClickMsg) (components.Screen, tea.Cmd) {
 		return m, m.connect()
 	}
 	return m, nil
+}
+
+// RightClick handles a right press at line y of View (FR-NAV-019): on a
+// host row it selects that host as a left click does and returns it, for
+// the root model to open the host menu; anywhere else it does nothing.
+func (m Model) RightClick(y int) (Model, domain.Host, bool) {
+	if row, _ := m.rowAt(y); row < 0 {
+		return m, domain.Host{}, false
+	}
+	next, _ := m.click(components.ClickMsg{Y: y})
+	m = next.(Model)
+	h, ok := m.Selected()
+	return m, h, ok
 }
 
 // rowAt returns what is at line y of View: the index of a shown host
@@ -328,6 +359,9 @@ func (m Model) updateList(k tea.KeyPressMsg) (components.Screen, tea.Cmd) {
 		return m, func() tea.Msg { return IdentitiesMsg{} }
 	case key.Matches(k, keys.Import):
 		return m, func() tea.Msg { return ImportMsg{} }
+	case key.Matches(k, keys.Help):
+		modal := help.NewList("Host list keys", HelpKeys())
+		return m, func() tea.Msg { return components.ShowModalMsg{Modal: modal} }
 	case key.Matches(k, keys.Quit):
 		return m, tea.Quit
 	}

@@ -779,6 +779,27 @@ The system shall order the host list by the time each host's last session was es
   - `last_connected_at` is optional (credential-storage §3.3): a `config.json` without it loads with every host never connected, the field round-trips, and the schema version stays 1. A value that is not an RFC 3339 time is ignored with a one-line warning, like an unknown setting (FR-CFG-003).
   - Imported hosts (FR-IMPORT-001) have no time. Editing a host (FR-HOST-001) keeps its time.
 
+### FR-NAV-019 · Host context menu
+While the Hosts tab shows the host list and no modal is open, when the user right-clicks a host row, the system shall select that host and open a context menu at the pointer with the items Connect (SSH), Open SFTP, Edit, Duplicate and Delete, each acting exactly as its key (`enter`, `s`, `e`, `c`, `d`) does on the host list.
+
+- **Priority:** v1 · **Status:** Implemented · **Source:** D-025
+- **Acceptance:**
+  - A right-click on a host row selects it (moving the keyboard back to the list and keeping the query, as a left click does, FR-NAV-012) and opens the menu with its top-left corner at the pointer cell. The menu is moved left or up as far as needed to lie wholly on the screen. A right-click on a blank row, the search line, the header, the status line or the footer opens nothing.
+  - The menu has the keyboard: ↑/↓ or `k`/`j` move the highlight (clamped to the first and last item), Enter chooses the highlighted item, Esc closes the menu. Connect (SSH) is highlighted when it opens. The footer shows the menu's keys.
+  - Choosing an item closes the menu and then acts exactly as its key on the host list: Connect (SSH) connects (`enter`), Open SFTP opens an SFTP tab (`s`, FR-SFTP-002), Edit opens the host form (`e`), Duplicate opens the duplicate form (`c`, FR-HOST-004), Delete asks "Delete host `<label>`?" (`d`, FR-HOST-002).
+  - A left click on an item chooses it; a click on the menu's border does nothing; a press anywhere outside the menu (any button) closes it and does nothing else.
+  - Every item shows its key, so the keyboard way to each action is visible (NFR-UX-001). Goldens at 80×24 and 120×40.
+
+### FR-NAV-020 · Host list footer fits the width
+The system shall fill the host list footer with the host-list keys in priority order, leaving out each key that no longer fits the width, and end it with `? help`; `?` shall open an overlay listing every host-list key.
+
+- **Priority:** v1 · **Status:** Implemented · **Source:** D-025 (partly delivers FR-NAV-006 for the host list)
+- **Acceptance:**
+  - Priority order: `enter connect`, `/ search`, `a add`, `q quit`, `s sftp`, `e edit`, `d delete`, `c duplicate`, `i identities`, `I import`. Each is kept if it still fits together with the keys kept before it and `? help`; a key left out does not stop a later, shorter one. The keys kept are shown in the host list's usual order (connect, sftp, search, add, duplicate, edit, delete, identities, import, quit), then `? help`.
+  - At 80 columns the footer is `enter connect • s sftp • / search • a add • e edit • d delete • q quit • ? help`; at 120 columns every key is shown. No footer is cut with "…".
+  - `?` on the host list (not while the search field has the keyboard, where it types) opens the help overlay listing every binding of the host-list keymap, `?` included; `?` or Esc closes it. This revises FR-NAV-003 (v1 revision)'s "the footer shows `c duplicate`": `c` is in the footer when it fits, and always in the overlay.
+  - While the search field has the keyboard, the footer is the search one (FR-NAV-002), unchanged.
+
 ---
 
 ## 13. Snippets (`FR-SNIP`)

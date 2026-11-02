@@ -51,3 +51,13 @@ func ErrorText(err error) string {
 	}
 	return err.Error()
 }
+
+// Popup is a modal drawn over the frame at a terminal cell instead of
+// stacked below the screen, such as the host menu (FR-NAV-019, design
+// §9.8). Anchor returns the cell it was opened at; the root model moves
+// it left and up as needed to keep it on the screen. A press outside a
+// popup closes it.
+type Popup interface {
+	Modal
+	Anchor() (x, y int)
+}

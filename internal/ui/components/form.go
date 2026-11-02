@@ -467,7 +467,7 @@ func Help(bindings ...key.Binding) string {
 		h := kb.Help()
 		parts = append(parts, h.Key+" "+h.Desc)
 	}
-	return helpStyle.Render(strings.Join(parts, " • "))
+	return helpStyle.Render(strings.Join(parts, helpSep))
 }
 
 // Option is one choice of a Choice field.

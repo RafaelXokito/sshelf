@@ -266,10 +266,9 @@ func TestARCH_UI_007_ReleaseAndMotionIgnored(t *testing.T) {
 	d.send(tea.MouseReleaseMsg{X: x, Y: y, Button: tea.MouseLeft})
 	d.send(tea.MouseMotionMsg{X: x, Y: y, Button: tea.MouseLeft})
 	d.send(tea.MouseMotionMsg{X: x, Y: y})
-	d.send(tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseRight})
 	d.send(tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseMiddle})
 	if d.view() != before || selected(t, d).ID != "h1" {
-		t.Fatalf("a release, motion or another button changed the list:\n%s", plain(d.view()))
+		t.Fatalf("a release, motion or the middle button changed the list (right: FR-NAV-019):\n%s", plain(d.view()))
 	}
 	// Releases between the presses of a double-click do not break it.
 	d.clickAt(x, y)

@@ -122,7 +122,9 @@ func TestFR_HOST_004_SaveSelectsCopy(t *testing.T) {
 
 func TestFR_HOST_004_FooterAndKeymap(t *testing.T) {
 	d := newDriver(t, formService())
-	d.resize(80, 24)
+	// c duplicate is in the footer when it fits (FR-NAV-020): at 120
+	// columns, not at 80.
+	d.resize(120, 40)
 	foot := plain(d.root().footer())
 	for _, want := range []string{"enter connect", "/ search", "a add", "c duplicate", "e edit", "d delete", "q quit"} {
 		if !strings.Contains(foot, want) {

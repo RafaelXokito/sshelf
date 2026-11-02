@@ -761,6 +761,15 @@ conventions above. v1 requirements are not yet checked by
 - **Done when:** the tests pass with `-race`, lint is clean, `go run ./scripts/tracecheck` is green, and FR-HOST-004, FR-HOST-011 and the FR-NAV-003 v1 revision are `Implemented`.
 - **Estimate:** 1 d
 
+### T-062 · Host context menu and footer priority
+
+- **Delivers:** D-025 (design §9.8). `components.Popup`: a modal drawn over the frame at its anchor, clamped to the screen, with its rectangle in the frame layout for hit-testing, closed by a press outside it. `ui/modals/hostmenu`: Connect (SSH), Open SFTP, Edit, Duplicate, Delete with their keys, ↑/↓/`k`/`j`, Enter, Esc, clicks on items; choosing sends the item's key to the host list. A right press on a host row selects it (`hostlist.RightClick`) and opens the menu at the pointer. `components.FitHints` and the host list's priority footer ending with `? help` (`keys.Help`); `?` on the host list opens the help overlay with every host-list key. `keys.MouseActions` and `keys.Maps` list the menu. The README host-list keys list `?` and the right-click menu.
+- **Satisfies:** FR-NAV-019, FR-NAV-020
+- **Depends on:** T-061
+- **Tests:** `TestFR_NAV_019_RightClickOpensAtPointer` (selected row, menu corner at the pointer, clamped at the right and bottom edges), `TestFR_NAV_019_RightClickElsewhere` (blank row, search line, header, footer), `TestFR_NAV_019_ItemsAct` (each item by Enter and by click: connect, SFTP request, edit form, duplicate form, delete confirmation), `TestFR_NAV_019_KeyboardNavigation` (↑/↓/`k`/`j` clamped, Esc closes), `TestFR_NAV_019_ClickOutsideCloses` (left and right press outside; border does nothing), `TestFR_NAV_019_MenuGolden` (80×24 and 120×40), `TestFR_NAV_020_FooterFits` (80, 120 and 60 columns, no "…"), `TestFR_NAV_020_FitHints` (table), `TestFR_NAV_020_HelpListsEveryKey`; the host list goldens re-recorded with the new footer.
+- **Done when:** the tests pass with `-race`, lint is clean, `go run ./scripts/tracecheck` is green, and FR-NAV-019 and FR-NAV-020 are `Implemented`.
+- **Estimate:** 1 d
+
 ---
 
 ## v1 milestones (outline)
