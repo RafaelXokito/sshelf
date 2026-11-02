@@ -815,6 +815,15 @@ conventions above. v1 requirements are not yet checked by
 - **Done when:** the tests pass with `-race`, lint is clean, `go run ./scripts/tracecheck` is green, and both D-028 revisions are `Implemented`.
 - **Estimate:** 0.5 d
 
+### T-068 · Source builds never check for updates
+
+- **Delivers:** D-029. `cmd/sshelf`: `checkVersion` decides whether the startup update check runs from the `-X main.version` stamp, not from the running version: an empty stamp (a `go build` or `go install`, even at a release tag whose module version is `vX.Y.Z`) starts no check and so never shows the notice; a release binary checks as before. `sshelf update` keeps using the running version (FR-UPD-003 unchanged). README "Updating".
+- **Satisfies:** the D-029 revision of FR-UPD-001
+- **Depends on:** T-065
+- **Tests:** `TestFR_UPD_001_D029_SourceBuildNeverChecks` (empty stamp with a clean `v0.1.1` module version: no check; stamp set: check), `TestFR_UPD_001_CheckOffStartsNothing` (a tagged source build starts nothing).
+- **Done when:** the tests pass with `-race`, lint is clean, `go run ./scripts/tracecheck` is green, and the D-029 revision is `Implemented`.
+- **Estimate:** 0.25 d
+
 ---
 
 ## v1 milestones (outline)
@@ -1242,3 +1251,14 @@ Totals: 29 FR + 9 SEC + 15 ARCH + 4 NFR = **57 M3 requirements**: 46 new or
 promoted and 11 revised (FR-TAB-003, FR-TAB-005, FR-TAB-009, FR-CONN-014,
 SEC-MEM-008, ARCH-SESS-001, ARCH-SESS-008, ARCH-UI-001, ARCH-UI-005,
 ARCH-UI-006, ARCH-UI-007; folded in by T-059), all covered by T-045 … T-059.
+
+## v1 traceability matrix
+
+The `v1` update requirements and the tasks that cover them (the rest of v1 is
+traced when its milestones are planned as tasks).
+
+| ID | Tasks |
+|---|---|
+| FR-UPD-001 | T-065, T-068 |
+| FR-UPD-002 | T-065 |
+| FR-UPD-003 | T-066 |

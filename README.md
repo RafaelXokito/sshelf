@@ -118,7 +118,7 @@ sshelf update
 
 It downloads the release for your system, checks its SHA-256 against the release's `checksums.txt` and replaces the binary in place. If sshelf cannot write its own binary (a system path, Homebrew), it tells you how to update instead.
 
-sshelf checks for a new release at most once a day, in the background, by asking the GitHub releases API; it sends nothing but `sshelf/<version>` as its User-Agent. Set `SSHELF_NO_UPDATE_CHECK=1` to turn the check off. Builds from source without a release version never check.
+sshelf checks for a new release at most once a day, in the background, by asking the GitHub releases API; it sends nothing but `sshelf/<version>` as its User-Agent. Set `SSHELF_NO_UPDATE_CHECK=1` to turn the check off. Builds from source (`go build`, `go install`) never check, even at a release tag; only release binaries do.
 
 Every release reads what earlier releases wrote: your hosts, identities, stored secrets and trusted host keys keep working after an update, and an older sshelf keeps fields a newer one added to `config.json`.
 

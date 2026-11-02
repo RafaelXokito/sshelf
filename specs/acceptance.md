@@ -1463,6 +1463,7 @@ Run once per release, on macOS and Linux, with the release's own binary.
 
 - [ ] Install the previous release into a directory you own (`~/.local/bin/sshelf`). Remove `update-check.json` from the config directory and start it: the host list opens at once; within a few seconds the footer shows `update available: <tag> · run sshelf update` at 120 columns and `<tag> available` at 80 (FR-UPD-001, FR-UPD-002).
 - [ ] Quit and start again with the network off: no error, the notice comes from `update-check.json`. `SSHELF_NO_UPDATE_CHECK=1 sshelf` shows no notice and makes no request (Little Snitch or `nettop`, if available).
+- [ ] Build from source at the release tag (`git checkout <tag> && go build ./cmd/sshelf`), remove `update-check.json` and start it with the network on: no notice ever appears and no request is made, although `--version` names the tag (FR-UPD-001 D-029 revision).
 - [ ] `sshelf update` prints `Updating sshelf <old> → <tag>`, downloads, and `sshelf --version` then names the tag; `sshelf update` again prints `is the latest version` (FR-UPD-003).
 - [ ] Copy the binary to a root-owned directory (`/usr/local/bin`, with `sudo`) and run `sshelf update` as yourself: it changes nothing and prints how to update (exit status 1).
 - [ ] Your hosts, identities, stored passwords and trusted host keys from the previous release all work in the new one without a prompt or a re-entry (D-027): connect to a host that uses a stored password.

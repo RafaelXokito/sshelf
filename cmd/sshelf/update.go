@@ -67,11 +67,24 @@ func runUpdate(current string, exe func() (string, error), apply applyFunc, stdo
 	return 1
 }
 
+// checkVersion is the version the startup update check uses and whether
+// the check runs (FR-UPD-001, D-029): only a release binary, whose version
+// the release workflow sets with -X main.version (stamp), checks. A source
+// build (go build, go install) never does, even when the Go toolchain
+// recorded a release version such as v0.1.1 for it.
+func checkVersion(getenv func(string) string, stamp string, info *debug.BuildInfo) (current string, ok bool) {
+	current = versionOf(stamp, info)
+	return current, stamp != "" && update.Enabled(getenv, current)
+}
+
 // checkForUpdate starts the background update check (FR-UPD-001): when a
-// newer release exists, send gets ui.UpdateAvailableMsg. It never blocks
-// the caller and never reports a failure; the returned func stops it.
-func checkForUpdate(getenv func(string) string, current, configDir string, send func(any)) (cancel func()) {
-	if !update.Enabled(getenv, current) {
+// newer release exists, send gets ui.UpdateAvailableMsg. stamp is
+// main.version and info the binary's build info (see checkVersion). It
+// never blocks the caller and never reports a failure; the returned func
+// stops it.
+func checkForUpdate(getenv func(string) string, stamp string, info *debug.BuildInfo, configDir string, send func(any)) (cancel func()) {
+	current, ok := checkVersion(getenv, stamp, info)
+	if !ok {
 		return func() {}
 	}
 	ctx, cancel := context.WithCancel(context.Background())

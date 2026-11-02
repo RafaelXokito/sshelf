@@ -118,9 +118,34 @@ func TestFR_UPD_001_CheckOffStartsNothing(t *testing.T) {
 		return ""
 	}
 	// Neither starts a check, so nothing reaches the network.
-	checkForUpdate(off, "v0.1.0", t.TempDir(), send)()
-	checkForUpdate(func(string) string { return "" }, "dev", t.TempDir(), send)()
+	checkForUpdate(off, "v0.1.0", nil, t.TempDir(), send)()
+	checkForUpdate(func(string) string { return "" }, "", nil, t.TempDir(), send)()
+	// A source build at a release tag (D-029).
+	tagged := &debug.BuildInfo{Main: debug.Module{Version: "v0.1.1"}}
+	checkForUpdate(func(string) string { return "" }, "", tagged, t.TempDir(), send)()
 	if sent.Load() != 0 {
 		t.Fatal("a disabled check sent a message")
+	}
+}
+
+// TestFR_UPD_001_D029_SourceBuildNeverChecks: without the -X main.version
+// stamp nothing checks, even when the module version is a clean release
+// version; with the stamp the check runs.
+func TestFR_UPD_001_D029_SourceBuildNeverChecks(t *testing.T) {
+	env := func(string) string { return "" }
+	tagged := &debug.BuildInfo{Main: debug.Module{Version: "v0.1.1"}}
+	if cur, ok := checkVersion(env, "", tagged); ok || cur != "v0.1.1" {
+		t.Errorf("source build at v0.1.1: (%q, %v), want (v0.1.1, false)", cur, ok)
+	}
+	if _, ok := checkVersion(env, "", nil); ok {
+		t.Error("source build without build info checks")
+	}
+	for _, info := range []*debug.BuildInfo{nil, tagged} {
+		if cur, ok := checkVersion(env, "v0.1.1", info); !ok || cur != "v0.1.1" {
+			t.Errorf("release binary (info %+v): (%q, %v), want (v0.1.1, true)", info, cur, ok)
+		}
+	}
+	if _, ok := checkVersion(env, "dev", nil); ok {
+		t.Error("a dev stamp checks")
 	}
 }

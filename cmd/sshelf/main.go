@@ -125,7 +125,9 @@ func run(args []string) (code int) {
 	// the same way instead of killing the process.
 	stopHangup := quitOnHangup(p)
 	// FR-UPD-001: in the background; the footer shows a newer release.
-	stopCheck := checkForUpdate(os.Getenv, runningVersion(), dirs.Config, func(msg any) { p.Send(msg) })
+	// Release binaries only (D-029).
+	info, _ := debug.ReadBuildInfo()
+	stopCheck := checkForUpdate(os.Getenv, version, info, dirs.Config, func(msg any) { p.Send(msg) })
 	final, err := p.Run()
 	stopCheck()
 	stopHangup()
