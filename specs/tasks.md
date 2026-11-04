@@ -835,6 +835,15 @@ conventions above. v1 requirements are not yet checked by
 - **Done when:** the tests pass with `-race`, lint is clean, `go run ./scripts/tracecheck` is green, and both D-030 revisions are `Implemented`.
 - **Estimate:** 0.5 d
 
+### T-070 · `.local` names over mDNS
+
+- **Delivers:** D-031 (design §8.2 step 4). `sshclient.defaultDial(runtime.GOOS, …)` returns the plain `net.Dialer` on darwin (Go resolves through libSystem there, so mDNSResponder already answers `.local`) and `dialWithMDNS` elsewhere. For a `.local` name, `dialWithMDNS` races the normal dial against `mdnsResolver.lookup` plus a dial of the answered IPv4 address with the same port, each in a `term.SafeGo` goroutine; the first connection wins, the other side is cancelled and awaited, and a connection it made anyway is closed. Other names go straight to the dial. If both fail, a failed dial of the mDNS address is returned; otherwise the normal error, and a `*net.DNSError` gets the mDNS failure appended (so it is still `ErrNameResolution`). `mdnsResolver` builds the query and parses answers with `golang.org/x/net/dns/dnsmessage`, sends a legacy unicast query with a random ID (`crypto/rand`) from an ephemeral UDP port to `224.0.0.251:5353` on each multicast interface (`golang.org/x/net/ipv4`, TTL 255), accepts only replies with that ID from an address on a local IPv4 subnet and only dialable addresses (not unspecified, loopback, broadcast or multicast), resends once after half its 2 s timeout, and closes its socket when the context ends. `Config.Dial`, when set, is used as before.
+- **Satisfies:** FR-CONN-018
+- **Depends on:** T-069
+- **Tests:** `TestFR_CONN_018_ResolvesLocalName`, `TestFR_CONN_018_IgnoresOtherPackets` (garbage, a query, another ID, another name, AAAA, 0.0.0.0, 127.0.0.1, a multicast address, upper-case name), `TestFR_CONN_018_ResendsOnce`, `TestFR_CONN_018_NoAnswerFailsWithinTimeout`, `TestFR_CONN_018_ContextDeadlineBoundsLookup`, `TestFR_CONN_018_RepliesOnlyFromLink` (table), `TestFR_CONN_018_QueryIDIsRandom`, `TestFR_CONN_018_CancelStopsLookup`, `TestFR_CONN_018_IsLocalName` (table), `TestFR_CONN_018_RacesLocalNames` (table with fake dial and lookup: other name, resolved normally, not in DNS, DNS unreachable, both answer, refused hosts entry, refused mDNS host, nobody answers; loser closed, goleak), `TestFR_CONN_018_CancelStopsRace`, `TestFR_CONN_018_DarwinUsesSystemResolver`, `TestFR_CONN_018_IsDialable` (table), `TestFR_CONN_018_LookupFailureIsNameResolution`, `TestFR_CONN_018_ConnectByLocalName` (sshtest with a hanging DNS lookup, connects within 2 s, host-key prompt for the name), `TestFR_CONN_018_ConnectUnknownLocalName`. The responder is a fake on 127.0.0.1; the per-interface multicast send is checked by hand against a real host.
+- **Done when:** the tests pass with `-race`, lint is clean, `go run ./scripts/tracecheck` is green, and FR-CONN-018 is `Implemented`.
+- **Estimate:** 0.5 d
+
 ---
 
 ## v1 milestones (outline)

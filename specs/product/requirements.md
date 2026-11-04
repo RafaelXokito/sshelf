@@ -554,6 +554,20 @@ Where a host defines environment variables, the system shall send them in the se
 - **Acceptance:**
   - With `LANG=C.UTF-8` defined on a host, the test server receives an `env` request for `LANG`. A server rejection does not fail the session.
 
+### FR-CONN-018 · Resolve `.local` names over mDNS
+When connecting to a host name under `.local`, except on macOS, the system shall resolve it with an IPv4 mDNS query at the same time as the normal lookup, and connect through whichever gives a connection first.
+
+- **Priority:** v1 · **Status:** Implemented · **Source:** D-031
+- **Acceptance:**
+  - A host whose hostname is `pi.local`, answered only by an mDNS responder, connects; the host-key prompt and `known_hosts` use `pi.local:<port>`, not the address.
+  - With no DNS server reachable (the normal lookup hangs), an mDNS-answered `pi.local` connects as soon as mDNS answers, without waiting for the DNS lookup.
+  - A `.local` name that resolves normally (e.g. `/etc/hosts`) still connects; the side that loses the race is cancelled, and a connection it made anyway is closed. No goroutine outlives the dial.
+  - The query is a legacy unicast query (RFC 6762 §6.7) with a random ID, from an ephemeral port, sent on every up, multicast-capable, non-loopback interface, and sent once more after half the timeout if nothing answered.
+  - A reply counts only if it carries the query's ID and comes from an address on one of the machine's IPv4 subnets. Answers for other names, other record types, unspecified, loopback, broadcast or multicast addresses, queries and malformed packets are ignored.
+  - Names not under `.local` never send an mDNS query. On macOS (where Go resolves through libSystem, so mDNSResponder answers `.local`) no mDNS query is sent.
+  - The mDNS lookup gives up after 2 s, or at the connect timeout if less remains. If both sides fail, the error is the failed connect to the mDNS address if mDNS answered; otherwise the normal lookup's error, and if that is a name-resolution failure, it says mDNS got no answer. Esc cancels both immediately.
+  - Against a real mDNS host on the LAN, a Linux `CGO_ENABLED=0` build connects to `<name>.local` (manual).
+
 ---
 
 ## 11. Known hosts (`FR-KH`)
