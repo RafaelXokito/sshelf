@@ -835,6 +835,15 @@ conventions above. v1 requirements are not yet checked by
 - **Done when:** the tests pass with `-race`, lint is clean, `go run ./scripts/tracecheck` is green, and both D-030 revisions are `Implemented`.
 - **Estimate:** 0.5 d
 
+### T-070 · `.local` names over mDNS
+
+- **Delivers:** D-031 (design §8.2 step 4). `sshclient.dialWithMDNS` wraps the default `net.Dialer`: when dialling a `.local` name fails with a `*net.DNSError`, it runs `mdnsResolver.lookup` and dials the answered IPv4 address with the same port; every other result is returned unchanged, and a failed lookup keeps the `*net.DNSError` (so it is still `ErrNameResolution`) with the mDNS failure appended. `mdnsResolver` builds the query and parses answers with `golang.org/x/net/dns/dnsmessage`, sends a legacy unicast query with a random ID (`crypto/rand`) from an ephemeral UDP port to `224.0.0.251:5353` on each multicast interface (`golang.org/x/net/ipv4`, TTL 255), accepts only replies with that ID from an address on a local IPv4 subnet and only dialable addresses, resends once after half its 2 s timeout, and closes its socket when the context ends. A lookup that timed out or ran out of context never falls back. `Config.Dial`, when set, is used as before.
+- **Satisfies:** FR-CONN-018
+- **Depends on:** T-069
+- **Tests:** `TestFR_CONN_018_ResolvesLocalName`, `TestFR_CONN_018_IgnoresOtherPackets` (garbage, a query, another ID, another name, AAAA, 0.0.0.0, a multicast address, upper-case name), `TestFR_CONN_018_ResendsOnce`, `TestFR_CONN_018_NoAnswerFailsWithinTimeout`, `TestFR_CONN_018_ContextDeadlineBoundsLookup`, `TestFR_CONN_018_RepliesOnlyFromLink` (table), `TestFR_CONN_018_QueryIDIsRandom`, `TestFR_CONN_018_CancelStopsLookup`, `TestFR_CONN_018_IsLocalName` (table), `TestFR_CONN_018_FallbackOnlyForLocalNameNotFound` (table, including a timed-out lookup), `TestFR_CONN_018_LookupFailureIsNameResolution`, `TestFR_CONN_018_ConnectByLocalName` (sshtest, host-key prompt for the name), `TestFR_CONN_018_ConnectUnknownLocalName`. The responder is a fake on 127.0.0.1; the per-interface multicast send is checked by hand against a real host.
+- **Done when:** the tests pass with `-race`, lint is clean, `go run ./scripts/tracecheck` is green, and FR-CONN-018 is `Implemented`.
+- **Estimate:** 0.5 d
+
 ---
 
 ## v1 milestones (outline)

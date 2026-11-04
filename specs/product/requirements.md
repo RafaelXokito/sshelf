@@ -554,6 +554,18 @@ Where a host defines environment variables, the system shall send them in the se
 - **Acceptance:**
   - With `LANG=C.UTF-8` defined on a host, the test server receives an `env` request for `LANG`. A server rejection does not fail the session.
 
+### FR-CONN-018 · Resolve `.local` names over mDNS
+If the normal lookup of a host name under `.local` fails, then the system shall resolve it with an IPv4 mDNS query and connect to the address answered.
+
+- **Priority:** v1 · **Status:** Implemented · **Source:** D-031
+- **Acceptance:**
+  - A host whose hostname is `pi.local`, answered only by an mDNS responder, connects; the host-key prompt and `known_hosts` use `pi.local:<port>`, not the address.
+  - The query is a legacy unicast query (RFC 6762 §6.7) with a random ID, from an ephemeral port, sent on every up, multicast-capable, non-loopback interface, and sent once more after half the timeout if nothing answered.
+  - A reply counts only if it carries the query's ID and comes from an address on one of the machine's IPv4 subnets. Answers for other names, other record types, unspecified, broadcast or multicast addresses, queries and malformed packets are ignored.
+  - Names not under `.local`, and `.local` names that resolve normally or fail for another reason (refused, the lookup timed out), never send an mDNS query.
+  - With no answer within 2 s, or within the connect timeout if less remains, the connection fails with "name resolution failed", and the message says mDNS got no answer. Esc cancels the lookup immediately.
+  - Against a real mDNS host on the LAN, a `CGO_ENABLED=0` build connects to `<name>.local` (manual).
+
 ---
 
 ## 11. Known hosts (`FR-KH`)
