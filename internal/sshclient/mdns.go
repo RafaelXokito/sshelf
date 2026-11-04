@@ -15,16 +15,24 @@ import (
 
 	"golang.org/x/net/dns/dnsmessage"
 	"golang.org/x/net/ipv4"
+
+	"github.com/RafaelXokito/sshelf/internal/term"
 )
 
-// mDNS fallback for ".local" names (FR-CONN-018, D-031).
+// mDNS for ".local" names (FR-CONN-018, D-031).
 //
-// Releases are built with CGO_ENABLED=0, so Go's own resolver does every
-// lookup. It reads /etc/hosts and asks DNS, but unlike the system resolver
-// it never asks mDNS (nss-mdns on Linux, mDNSResponder on macOS), so a name
-// such as "raspberrypi.local" fails in sshelf although `ssh` reaches it.
-// When that happens sshclient asks the link itself: one IPv4 mDNS query
-// (RFC 6762) for the name's A record.
+// Releases are built with CGO_ENABLED=0. On Linux that leaves Go's own
+// resolver doing every lookup: it reads /etc/hosts and asks DNS, but unlike
+// the system resolver it never asks mDNS (nss-mdns), so a name such as
+// "raspberrypi.local" fails in sshelf although `ssh` reaches it. On darwin
+// Go hands lookups to libSystem even without cgo, so mDNSResponder already
+// answers ".local" names and sshelf adds nothing there.
+//
+// Elsewhere a ".local" name is link-local and belongs to mDNS (RFC 6762
+// §3), so sshclient asks the link itself, one IPv4 mDNS query for the
+// name's A record, at the same time as the normal lookup. Racing the two
+// keeps /etc/hosts working and never waits on a DNS server that is not
+// there (a Pi on a direct cable, an offline LAN).
 
 const (
 	// mdnsGroup is the IPv4 mDNS multicast group and port.
@@ -49,37 +57,93 @@ type dialFunc func(ctx context.Context, network, addr string) (net.Conn, error)
 // lookupFunc returns an IPv4 address for host.
 type lookupFunc func(ctx context.Context, host string) (netip.Addr, error)
 
-// dialWithMDNS wraps dial: when dialling a ".local" name fails because the
-// name could not be resolved, it asks lookup for the address and dials
-// that instead, keeping the port. Every other result of dial, including a
-// lookup that timed out or ran out of ctx, is returned unchanged. If lookup
-// fails too, the original *net.DNSError is returned with the mDNS failure
-// appended, so it is still classified as ErrNameResolution.
+// defaultDial returns the dial sshclient uses on goos when Config.Dial is
+// nil: dial itself on darwin, whose resolver already asks mDNS, and dial
+// with mDNS for ".local" names everywhere else.
+func defaultDial(goos string, dial dialFunc, lookup lookupFunc) dialFunc {
+	if goos == "darwin" {
+		return dial
+	}
+	return dialWithMDNS(dial, lookup)
+}
+
+// dialWithMDNS wraps dial. Names not under ".local" go to dial unchanged.
+// For a ".local" name it runs dial and an mDNS lookup at once, the lookup
+// followed by a dial of the answered address with the same port. The first
+// connection made wins; the other attempt is cancelled and waited for, and
+// a connection it made anyway is closed, so nothing outlives the call. ctx
+// bounds and cancels both.
+//
+// If both fail and mDNS answered, the failed dial of that address is
+// returned: the host was found. Otherwise the normal dial's error is
+// returned, with the mDNS failure appended when it is a *net.DNSError, so
+// it is still classified as ErrNameResolution.
 func dialWithMDNS(dial dialFunc, lookup lookupFunc) dialFunc {
 	return func(ctx context.Context, network, addr string) (net.Conn, error) {
-		conn, err := dial(ctx, network, addr)
-		if err == nil || ctx.Err() != nil || !isNameNotFound(err) {
-			return conn, err
+		host, port, err := net.SplitHostPort(addr)
+		if err != nil || !isLocalName(host) {
+			return dial(ctx, network, addr)
 		}
-		host, port, splitErr := net.SplitHostPort(addr)
-		if splitErr != nil || !isLocalName(host) {
-			return nil, err
+		rctx, cancel := context.WithCancel(ctx)
+		defer cancel()
+
+		results := make(chan raceResult, 2)
+		race := func(mdns bool, fn func() raceResult) {
+			term.SafeGo(func() { results <- fn() }, func(r any) {
+				results <- raceResult{err: fmt.Errorf("panic: %v", r), mdns: mdns}
+			})
 		}
-		ip, lerr := lookup(ctx, host)
-		if lerr != nil {
-			slog.Debug("connect: mDNS lookup failed", "host", host, "err", lerr)
-			return nil, fmt.Errorf("%w (mDNS: %v)", err, lerr)
+		race(false, func() raceResult {
+			c, err := dial(rctx, network, addr)
+			return raceResult{conn: c, err: err}
+		})
+		race(true, func() raceResult {
+			ip, err := lookup(rctx, host)
+			if err != nil {
+				return raceResult{err: err, mdns: true}
+			}
+			slog.Debug("connect: resolved over mDNS", "host", host, "ip", ip)
+			c, err := dial(rctx, network, net.JoinHostPort(ip.String(), port))
+			return raceResult{conn: c, err: err, mdns: true, answered: true}
+		})
+
+		var won net.Conn
+		var sys, md raceResult
+		for range 2 {
+			r := <-results
+			switch {
+			case r.err == nil && won == nil:
+				won = r.conn
+				cancel()
+			case r.err == nil:
+				_ = r.conn.Close()
+			case r.mdns:
+				md = r
+			default:
+				sys = r
+			}
 		}
-		slog.Debug("connect: resolved over mDNS", "host", host, "ip", ip)
-		return dial(ctx, network, net.JoinHostPort(ip.String(), port))
+		if won != nil {
+			return won, nil
+		}
+		slog.Debug("connect: mDNS did not help", "host", host, "err", md.err)
+		if md.answered {
+			return nil, md.err
+		}
+		if _, ok := errors.AsType[*net.DNSError](sys.err); ok {
+			return nil, fmt.Errorf("%w (mDNS: %v)", sys.err, md.err)
+		}
+		return nil, sys.err
 	}
 }
 
-// isNameNotFound reports whether err is a failed name lookup that did not
-// time out.
-func isNameNotFound(err error) bool {
-	de, ok := errors.AsType[*net.DNSError](err)
-	return ok && !de.IsTimeout
+// raceResult is how one side of dialWithMDNS's race ended.
+type raceResult struct {
+	conn net.Conn
+	err  error
+	// mdns is set for the mDNS side, and answered when its lookup gave an
+	// address.
+	mdns, answered bool
 }
 
 // isLocalName reports whether host is a name under ".local", the mDNS
@@ -279,7 +343,7 @@ func fromLink(link []netip.Prefix, from netip.Addr) bool {
 // mdnsAnswer returns the first usable IPv4 address msg, a response with
 // the given ID, gives for name. Anything else (a query, another ID, a
 // malformed packet, records for other names or types, an unspecified,
-// broadcast or multicast address) yields false. Names compare
+// loopback, broadcast or multicast address) yields false. Names compare
 // case-insensitively, and the cache-flush bit of the class is ignored.
 func mdnsAnswer(msg []byte, id uint16, name dnsmessage.Name) (netip.Addr, bool) {
 	var p dnsmessage.Parser
@@ -311,10 +375,10 @@ func mdnsAnswer(msg []byte, id uint16, name dnsmessage.Name) (netip.Addr, bool) 
 	}
 }
 
-// isDialable reports whether ip can be a host's address: not unspecified,
-// broadcast or multicast.
+// isDialable reports whether ip can be another host's address on the
+// link: not unspecified, loopback, broadcast or multicast.
 func isDialable(ip netip.Addr) bool {
-	return !ip.IsUnspecified() && !ip.IsMulticast() && ip != netip.AddrFrom4([4]byte{255, 255, 255, 255})
+	return !ip.IsUnspecified() && !ip.IsLoopback() && !ip.IsMulticast() && ip != netip.AddrFrom4([4]byte{255, 255, 255, 255})
 }
 
 // isAnswerFor reports whether h is an IN A record for name.

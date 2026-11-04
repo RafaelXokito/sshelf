@@ -1579,10 +1579,13 @@ sequenceDiagram
 3. **Jump chain (v1).** `ssh.NewClientConn(prev.Dial("tcp", hop))`, with its
    own `Target`, identity and host-key check per hop.
 4. **Dial.** `net.Dialer.DialContext` with `ConnectTimeout`. Cancelling the
-   context closes the connection, which also unblocks the handshake. If a
-   `.local` name does not resolve, `sshclient/mdns.go` asks mDNS for it and
-   dials the address answered, keeping the name for the host-key check
-   (FR-CONN-018, D-031).
+   context closes the connection, which also unblocks the handshake. For a
+   `.local` name (not on darwin, whose resolver already asks mDNSResponder),
+   `sshclient/mdns.go` races the normal dial against an mDNS lookup plus a
+   dial of the address answered, both started through `term.SafeGo` under
+   the connect context. The first connection wins; the loser is cancelled,
+   awaited and its connection, if any, closed. The name is kept for the
+   host-key check (FR-CONN-018, D-031).
 5. **Host key.** `HostKeyAlgorithms` is set to the key types already known for
    that host, the same trick OpenSSH uses, so a host with a known ed25519 key
    is not reported as unknown when it offers RSA first. The list is taken from

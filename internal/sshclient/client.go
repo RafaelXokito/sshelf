@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"runtime"
 	"strconv"
 	"time"
 
@@ -76,8 +77,8 @@ type Config struct {
 	// KnownHostsFiles are read, in order, to verify host keys. Missing files
 	// are skipped. sshclient never writes them.
 	KnownHostsFiles []string
-	// Dial opens the TCP connection; nil means a net.Dialer that falls
-	// back to mDNS for ".local" names (FR-CONN-018). Tests use it to stall
+	// Dial opens the TCP connection; nil means a net.Dialer that, except
+	// on darwin, also asks mDNS for ".local" names (FR-CONN-018). Tests use it to stall
 	// or fail the dial.
 	Dial func(ctx context.Context, network, addr string) (net.Conn, error)
 	// Progress, if set, is told each stage the attempt reaches.
@@ -200,7 +201,7 @@ func (c Config) dial(ctx context.Context, addr string, timeout time.Duration) (n
 	dial := c.Dial
 	if dial == nil {
 		var d net.Dialer
-		dial = dialWithMDNS(d.DialContext, defaultMDNS.lookup)
+		dial = defaultDial(runtime.GOOS, d.DialContext, defaultMDNS.lookup)
 	}
 	return dial(dctx, "tcp", addr)
 }

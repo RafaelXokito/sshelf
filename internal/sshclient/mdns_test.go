@@ -7,10 +7,12 @@ import (
 	"net/netip"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"go.uber.org/goleak"
 	"golang.org/x/net/dns/dnsmessage"
 )
 
@@ -132,6 +134,7 @@ func TestFR_CONN_018_IgnoresOtherPackets(t *testing.T) {
 			aAnswer(t, q.id, "other.local.", netip.MustParseAddr("10.0.0.2")),
 			aaaa,
 			aAnswer(t, q.id, name, netip.MustParseAddr("0.0.0.0")),
+			aAnswer(t, q.id, name, netip.MustParseAddr("127.0.0.1")),
 			aAnswer(t, q.id, name, netip.MustParseAddr("224.0.0.251")),
 			aAnswer(t, q.id, strings.ToUpper(name), piAddr),
 		}
@@ -284,61 +287,195 @@ func dnsFailure(addr string) error {
 	return &net.OpError{Op: "dial", Net: "tcp", Err: &net.DNSError{Err: "server misbehaving", Name: host, Server: "127.0.0.53:53"}}
 }
 
-func TestFR_CONN_018_FallbackOnlyForLocalNameNotFound(t *testing.T) {
-	refused := &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("connect: connection refused")}
+// dnsTimeout is what net.Dialer returns when no DNS server answers.
+func dnsTimeout(addr string) error {
+	host, _, _ := net.SplitHostPort(addr)
+	return &net.OpError{Op: "dial", Net: "tcp", Err: &net.DNSError{Err: "i/o timeout", Name: host, IsTimeout: true}}
+}
+
+var errRefused = &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("connect: connection refused")}
+
+// trackedConn records whether it was closed.
+type trackedConn struct {
+	net.Conn
+	closed atomic.Bool
+}
+
+func (c *trackedConn) Close() error {
+	c.closed.Store(true)
+	return c.Conn.Close()
+}
+
+func newTrackedConn() *trackedConn {
+	c1, c2 := net.Pipe()
+	_ = c2.Close()
+	return &trackedConn{Conn: c1}
+}
+
+func TestFR_CONN_018_RacesLocalNames(t *testing.T) {
+	// How a fake dial or lookup behaves: "ok" succeeds at once, "hang"
+	// blocks until its context ends (an unreachable DNS server, a silent
+	// link); anything else fails at once.
 	cases := []struct {
 		name       string
 		addr       string
-		first      error // what the first dial returns
+		sys        string // the normal dial: ok, hang, nxdomain, refused
+		mdns       string // the lookup: ok, hang, none
+		mdnsDial   string // the dial of the mDNS address: ok, refused
 		wantLookup bool
-		wantDial   string // the second dial's address, if any
+		wantFrom   string // which dial's connection is returned: sys, mdns
+		wantErr    string // dns: a *net.DNSError; refused: errRefused
+		wantMDNS   bool   // the error mentions mDNS
 	}{
-		{name: "local name not found", addr: "pi.local:2222", first: dnsFailure("pi.local:2222"), wantLookup: true, wantDial: "192.168.1.204:2222"},
-		{name: "local name resolved normally", addr: "pi.local:22", first: nil},
-		{name: "local name refused", addr: "pi.local:22", first: refused},
-		{name: "other name not found", addr: "pi.example.com:22", first: dnsFailure("pi.example.com:22")},
-		{name: "local name lookup timed out", addr: "pi.local:22", first: &net.OpError{Op: "dial", Net: "tcp", Err: &net.DNSError{Err: "i/o timeout", Name: "pi.local", IsTimeout: true}}},
+		{name: "other name", addr: "pi.example.com:22", sys: "nxdomain", mdns: "ok", wantErr: "dns"},
+		{name: "local name resolved normally", addr: "pi.local:22", sys: "ok", mdns: "hang", wantLookup: true, wantFrom: "sys"},
+		{name: "local name not in DNS", addr: "pi.local:2222", sys: "nxdomain", mdns: "ok", mdnsDial: "ok", wantLookup: true, wantFrom: "mdns"},
+		{name: "DNS unreachable", addr: "pi.local:22", sys: "hang", mdns: "ok", mdnsDial: "ok", wantLookup: true, wantFrom: "mdns"},
+		{name: "both answer", addr: "pi.local:22", sys: "ok", mdns: "ok", mdnsDial: "ok", wantLookup: true},
+		{name: "hosts entry refused, no mDNS", addr: "pi.local:22", sys: "refused", mdns: "none", wantLookup: true, wantErr: "refused"},
+		{name: "mDNS host refused", addr: "pi.local:22", sys: "nxdomain", mdns: "ok", mdnsDial: "refused", wantLookup: true, wantErr: "refused"},
+		{name: "nobody answers", addr: "pi.local:22", sys: "nxdomain", mdns: "none", wantLookup: true, wantErr: "dns", wantMDNS: true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			var dials []string
-			dial := func(_ context.Context, _, addr string) (net.Conn, error) {
-				dials = append(dials, addr)
-				if len(dials) == 1 {
-					if tc.first != nil {
-						return nil, tc.first
-					}
+			before := goleak.IgnoreCurrent()
+			var mu sync.Mutex
+			conns := map[string]*trackedConn{}
+			mdnsAddr := net.JoinHostPort(piAddr.String(), portOf(tc.addr))
+			dial := func(ctx context.Context, _, addr string) (net.Conn, error) {
+				who, how := "sys", tc.sys
+				if addr == mdnsAddr {
+					who, how = "mdns", tc.mdnsDial
 				}
-				c1, c2 := net.Pipe()
-				_ = c2.Close()
-				return c1, nil
+				switch how {
+				case "ok":
+					c := newTrackedConn()
+					mu.Lock()
+					conns[who] = c
+					mu.Unlock()
+					return c, nil
+				case "hang":
+					<-ctx.Done()
+					return nil, dnsTimeout(addr)
+				case "nxdomain":
+					return nil, dnsFailure(addr)
+				default:
+					return nil, errRefused
+				}
 			}
-			looked := false
-			lookup := func(_ context.Context, host string) (netip.Addr, error) {
-				looked = true
+			var looked atomic.Bool
+			lookup := func(ctx context.Context, host string) (netip.Addr, error) {
+				looked.Store(true)
 				if host != "pi.local" {
 					t.Errorf("lookup(%q), want pi.local", host)
 				}
-				return piAddr, nil
+				switch tc.mdns {
+				case "ok":
+					return piAddr, nil
+				case "hang":
+					<-ctx.Done()
+					return netip.Addr{}, ctx.Err()
+				default:
+					return netip.Addr{}, errNoMDNSAnswer
+				}
 			}
 
-			conn, err := dialWithMDNS(dial, lookup)(context.Background(), "tcp", tc.addr)
-			if conn != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			start := time.Now()
+			conn, err := dialWithMDNS(dial, lookup)(ctx, "tcp", tc.addr)
+			if elapsed := time.Since(start); elapsed > 2*time.Second {
+				t.Fatalf("dial took %v, want no wait for the losing side", elapsed)
+			}
+			if looked.Load() != tc.wantLookup {
+				t.Fatalf("mDNS lookup = %v, want %v", looked.Load(), tc.wantLookup)
+			}
+			if tc.wantErr != "" {
+				if conn != nil || !isErr(err, tc.wantErr) {
+					t.Fatalf("conn = %v, err = %v; want %s", conn, err, tc.wantErr)
+				}
+				if got := strings.Contains(err.Error(), "mDNS: no answer"); got != tc.wantMDNS {
+					t.Fatalf("err = %q, mentions mDNS = %v, want %v", err, got, tc.wantMDNS)
+				}
+			} else {
+				if err != nil {
+					t.Fatal(err)
+				}
+				if tc.wantFrom != "" && conn != net.Conn(conns[tc.wantFrom]) {
+					t.Fatalf("got a connection from the wrong dial, want %s", tc.wantFrom)
+				}
+				// A connection that lost the race is closed; the winner
+				// is not.
+				for who, c := range conns {
+					if winner := net.Conn(c) == conn; c.closed.Load() == winner {
+						t.Errorf("%s connection closed = %v, winner = %v", who, c.closed.Load(), winner)
+					}
+				}
 				_ = conn.Close()
 			}
-			if looked != tc.wantLookup {
-				t.Fatalf("mDNS lookup = %v, want %v", looked, tc.wantLookup)
-			}
-			if tc.wantDial == "" {
-				if len(dials) != 1 || !errors.Is(err, tc.first) {
-					t.Fatalf("dials = %v, err = %v; want one dial returning %v", dials, err, tc.first)
-				}
-				return
-			}
-			if err != nil || len(dials) != 2 || dials[1] != tc.wantDial {
-				t.Fatalf("dials = %v, err = %v; want a second dial to %s", dials, err, tc.wantDial)
-			}
+			goleak.VerifyNone(t, before)
 		})
+	}
+}
+
+func portOf(addr string) string {
+	_, port, _ := net.SplitHostPort(addr)
+	return port
+}
+
+func TestFR_CONN_018_CancelStopsRace(t *testing.T) {
+	before := goleak.IgnoreCurrent()
+	hang := func(ctx context.Context, _, addr string) (net.Conn, error) {
+		<-ctx.Done()
+		return nil, dnsTimeout(addr)
+	}
+	lookup := func(ctx context.Context, _ string) (netip.Addr, error) {
+		<-ctx.Done()
+		return netip.Addr{}, ctx.Err()
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	time.AfterFunc(50*time.Millisecond, cancel)
+
+	start := time.Now()
+	if _, err := dialWithMDNS(hang, lookup)(ctx, "tcp", "pi.local:22"); err == nil {
+		t.Fatal("dial succeeded after cancel")
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("cancel took %v", elapsed)
+	}
+	goleak.VerifyNone(t, before)
+}
+
+func TestFR_CONN_018_DarwinUsesSystemResolver(t *testing.T) {
+	for goos, want := range map[string]bool{"darwin": false, "linux": true, "freebsd": true} {
+		dial := func(_ context.Context, _, addr string) (net.Conn, error) { return nil, dnsFailure(addr) }
+		var looked atomic.Bool
+		lookup := func(context.Context, string) (netip.Addr, error) {
+			looked.Store(true)
+			return netip.Addr{}, errNoMDNSAnswer
+		}
+		_, _ = defaultDial(goos, dial, lookup)(context.Background(), "tcp", "pi.local:22")
+		if looked.Load() != want {
+			t.Errorf("%s: mDNS lookup = %v, want %v", goos, looked.Load(), want)
+		}
+	}
+}
+
+func TestFR_CONN_018_IsDialable(t *testing.T) {
+	for ip, want := range map[string]bool{
+		"192.168.1.204":   true,
+		"10.0.0.1":        true,
+		"169.254.10.20":   true,
+		"0.0.0.0":         false,
+		"127.0.0.1":       false,
+		"127.1.2.3":       false,
+		"224.0.0.251":     false,
+		"239.255.255.250": false,
+		"255.255.255.255": false,
+	} {
+		if got := isDialable(netip.MustParseAddr(ip)); got != want {
+			t.Errorf("isDialable(%s) = %v, want %v", ip, got, want)
+		}
 	}
 }
 
@@ -356,33 +493,45 @@ func TestFR_CONN_018_LookupFailureIsNameResolution(t *testing.T) {
 	}
 }
 
-// localNameDial fails ".local" names as Go's resolver does in a
-// CGO_ENABLED=0 build and dials everything else.
-func localNameDial(ctx context.Context, network, addr string) (net.Conn, error) {
-	host, _, _ := net.SplitHostPort(addr)
-	if isLocalName(host) {
-		return nil, dnsFailure(addr)
+// lanDial stands in for a LAN without DNS, as a CGO_ENABLED=0 build sees
+// it: a ".local" name never resolves (the lookup hangs until ctx ends),
+// and piAddr is the test server.
+func lanDial(srv string) dialFunc {
+	return func(ctx context.Context, network, addr string) (net.Conn, error) {
+		host, port, _ := net.SplitHostPort(addr)
+		if isLocalName(host) {
+			<-ctx.Done()
+			return nil, dnsTimeout(addr)
+		}
+		if host == piAddr.String() {
+			addr = net.JoinHostPort(srv, port)
+		}
+		var d net.Dialer
+		return d.DialContext(ctx, network, addr)
 	}
-	var d net.Dialer
-	return d.DialContext(ctx, network, addr)
 }
 
 func TestFR_CONN_018_ConnectByLocalName(t *testing.T) {
 	f := newFixture(t, false)
 	r := startResponder(t, func(_ int, q query) [][]byte {
-		return [][]byte{aAnswer(t, q.id, q.q.Name.String(), netip.MustParseAddr(f.srv.Host()))}
+		return [][]byte{aAnswer(t, q.id, q.q.Name.String(), piAddr)}
 	})
 	cfg := f.config()
-	cfg.Dial = dialWithMDNS(localNameDial, r.resolver(time.Second).lookup)
+	cfg.Dial = dialWithMDNS(lanDial(f.srv.Host()), r.resolver(time.Second).lookup)
 	target := f.target
 	target.Hostname = "pi.local"
+	target.ConnectTimeout = 5 * time.Second
 	p := &recordingPrompter{trust: true}
 
+	start := time.Now()
 	c, err := cfg.Connect(context.Background(), target, f.creds, p)
 	if err != nil {
 		t.Fatal(err)
 	}
 	_ = c.Close()
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("connect took %v, want it not to wait for DNS", elapsed)
+	}
 	// The host key is checked against the name the user typed, not the
 	// address mDNS gave.
 	want := net.JoinHostPort("pi.local", strconv.Itoa(f.srv.Port()))
@@ -395,7 +544,9 @@ func TestFR_CONN_018_ConnectUnknownLocalName(t *testing.T) {
 	f := newFixture(t, true)
 	r := startResponder(t, func(int, query) [][]byte { return nil })
 	cfg := f.config()
-	cfg.Dial = dialWithMDNS(localNameDial, r.resolver(200*time.Millisecond).lookup)
+	cfg.Dial = dialWithMDNS(func(_ context.Context, _, addr string) (net.Conn, error) {
+		return nil, dnsFailure(addr)
+	}, r.resolver(200*time.Millisecond).lookup)
 	target := f.target
 	target.Hostname = "missing.local"
 
@@ -407,4 +558,14 @@ func TestFR_CONN_018_ConnectUnknownLocalName(t *testing.T) {
 	if !errors.Is(err, ErrNameResolution) {
 		t.Fatalf("err = %v, want ErrNameResolution", err)
 	}
+}
+
+// isErr reports whether err is of kind: "dns" for a *net.DNSError,
+// "refused" for errRefused.
+func isErr(err error, kind string) bool {
+	if kind == "dns" {
+		_, ok := errors.AsType[*net.DNSError](err)
+		return ok
+	}
+	return errors.Is(err, errRefused)
 }
